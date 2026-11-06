@@ -98,3 +98,19 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - EXIT: ./scripts/test-unit.sh exit 0 — "discovered tests: 74" PASS.
   DSP exit criteria: synthetic targets met, edges reject, no caller-buffer
   mutation, no octave-error shortcut.
+
+## Tuner state machine (COMPLETE)
+- Tests: TunerStateMachineTest (8): first-pitch hysteresis, consecutive-agreement
+  target switch, smoothing reset on discontinuity, stale window + recovery,
+  in-tune enter(+5c)/exit(+8c) bands, signed out-of-meter cents, low-confidence
+  rejection, manual target semantics (changes cents, not measurement).
+- RED: exit 1 — 8/8 NotImplementedError on stub; 82 tests total, prior 74 green.
+- Test corrections (own fixtures, asserted on failing runs, strict kept):
+  (a) "+6c exactly" fixture hits the Int-truncation boundary (round-trips to 5c)
+      -> moved to +7c/+10c, away from band edges; (b) in-tune sequence: machine
+      legitimately STARTS in-tune after 0c stabilization, so an explicit +10c
+      exit step precedes the enter-band check; (c) 452Hz is +47c not +55c.
+- GREEN: exit 0 — 82/82. ./scripts/test-unit.sh "discovered tests: 82" PASS.
+- Design: virtual clock (nowMs) injected per frame; median-of-5 smoothing;
+  PitchEstimate(0,0) or conf < minConfidence = discontinuity (resets candidate
+  + smoothing); manual target bypasses chromatic matching.
