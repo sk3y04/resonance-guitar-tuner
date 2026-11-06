@@ -195,3 +195,51 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   remain blocked — CMP 1.12.2 desktop test API has NO capture method (verified
   via javap of ui-test-desktop-1.12.2.jar: no capture/screenshot symbols).
 - FULL SUITE: ./scripts/test-unit.sh PASS — "discovered tests: 119" exit 0.
+
+## Settings model + repository (COMPLETE)
+- Code: persistence/Settings.kt (Settings data class, 400..480 Hz validation,
+  DEFAULTS; suspend SettingsRepository contract; InMemorySettingsRepository).
+- Tests: SettingsTest (4): defaults, boundary validation (400/480 ok,
+  399.9/480.1/0 rejected), repository round trip + failed update leaves state
+  intact, favorites toggle by stable ID. GREEN.
+- 3 test-fixture self-bugs fixed during GREEN (documented, no weakening):
+  asserted 440 against a 400-boundary construct; "No name" was not blank;
+  expected G3 at the index that the fixture itself set to G2.
+
+## PresetStore (COMPLETE)
+- Code: PresetStore (built-ins immutable, stable "custom-N" IDs, create/edit/
+  delete with validation: non-blank name, 1..12 strings, built-in id guard,
+  favorites cleared on delete, unknown-id favorite toggle rejected).
+- Tests: PresetStoreTest (8): built-ins immutable, stable unique IDs for
+  same-name presets, create validation, edit keeps ID + replaces strings,
+  delete semantics, favorites survive/clear by ID. GREEN.
+- Type note: TuningPreset carries List<TuningString> (id + note), not raw
+  Notes — the editor API takes TuningString.
+
+## DataStore-backed repository (COMPLETE, JVM host)
+- Code: jvmMain persistence/DataStoreSettingsRepository.kt — REAL
+  androidx DataStore 1.3.0 (KMP artifact, jvm target), concert stored as
+  milli-hertz double; replace-file corruption handler; read-side decode guard
+  rejects out-of-range concert + unknown enum names (fallback to defaults);
+  update() uses updateData (suspend, durable) not fire-and-forget edit.
+- Tests: DataStoreSettingsRepositoryTest (4, jvmTest, real temp files under
+  build/tmp): fresh file -> DEFAULTS; round trip across two instances with
+  on-disk byte verification (442000.0 mHz little-endian double); corrupt
+  bytes -> defaults AND store remains usable; decode() guard on
+  out-of-range stored value. GREEN.
+- 2026 DataStore 1.3.0 API facts (verified by jar/klib inspection, the
+  androidx/datastore GitHub repo 404s): keys are top-level
+  doublePreferencesKey/stringPreferencesKey (bytecode names doubleKey/stringKey
+  via @JvmName — the Kotlin names differ); Preferences.Key ctor is internal;
+  keys factory class PreferencesKeys is not visible to Kotlin consumers;
+  File-based PreferenceDataStoreFactory.create(produceFile = { File }) is the
+  jvmAndAndroid API; no public flush — updateData is the durable variant.
+- Test infra pitfalls (verified empirically): (1) never give the repository a
+  TestScope — DataStore keeps long-lived jobs and runTest hangs forever;
+  (2) a trailing lambda binds to the LAST parameter — put the lambda-typed
+  param last in public APIs; (3) the round-trip bug was my own helper deleting
+  the file between phases (keepFile flag added); (4) ByteArray has no
+  containsSequence.
+- Catalog: added androidx.datastore:datastore-preferences:1.3.0 (Google
+  Maven; jvm+android variants verified in .module metadata).
+- FULL SUITE: ./scripts/test-unit.sh PASS — "discovered tests: 133", exit 0.

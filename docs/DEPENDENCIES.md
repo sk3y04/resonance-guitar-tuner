@@ -21,3 +21,5 @@ Pins are in gradle/libs.versions.toml. Verification = live metadata/docs read to
 Not used (research alternatives — deliberately not installed): AudioCapture,
 Klarinet, KaudioAnalyser, TarsosDSP (GPL), thetwom/Tuner (GPLv3, concepts only).
 No JCenter, no dynamic versions, no resolution overrides.
+
+- androidx.datastore:datastore-preferences:1.3.0 — Google Maven (404 on Central); jvm+android+jvmAndAndroid File factory; key APIs are doublePreferencesKey/stringPreferencesKey top-level in androidx.datastore.preferences.core (1.3.0 rename; @JvmName maps to doubleKey/stringKey in bytecode). DataStoreSettingsRepository lives in jvmMain (Android twin pending the SDK).
