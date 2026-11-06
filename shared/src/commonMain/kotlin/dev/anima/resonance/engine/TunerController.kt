@@ -37,6 +37,9 @@ class TunerController(
         },
     )
 
+    /** Live capture state (mirrors the engine; the Android pump thread uses it). */
+    val captureState: CaptureState get() = engine.captureState
+
     /** Records the permission result from the platform layer. */
     fun onPermissionResult(state: MicPermissionState) {
         permission = state

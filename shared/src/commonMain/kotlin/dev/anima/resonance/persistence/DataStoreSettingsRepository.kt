@@ -1,7 +1,6 @@
 package dev.anima.resonance.persistence
 
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
@@ -11,8 +10,6 @@ import dev.anima.resonance.music.Spelling
 import dev.anima.resonance.music.TuningPreset
 import dev.anima.resonance.music.TuningPresetJson
 import dev.anima.resonance.presentation.TunerMode
-import java.io.File
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 
 private val CONCERT_MHZ = doublePreferencesKey("concert_mhz")
@@ -23,26 +20,21 @@ private val FAVORITES = stringPreferencesKey("favorites")
 private val CUSTOMS = stringPreferencesKey("customs")
 
 /**
- * Real persisted settings backed by androidx DataStore (JVM host).
- * The Android twin (same API surface — DataStore's File-based factory is
- * shared by the jvmAndAndroid actuals) lands when the Android SDK is available; the shared
- * contract [SettingsRepository] and [Settings] live in commonMain.
+ * Real persisted settings backed by androidx DataStore.
  *
- * Recovery contract: a corrupt file yields [Settings.DEFAULTS] (via
- * ReplaceFileCorruptionHandler); stored values outside the product range are
- * ignored on read and a valid update overwrites them.
+ * The repository now lives in commonMain — its only platform
+ * dependency is the INJECTED [DataStore] (the DataStore API itself is
+ * KMP). Platform source sets provide the factory: JVM creates it from a
+ * File, Android from a Context. The shared contract [SettingsRepository]
+ * and [Settings] live here too.
+ *
+ * Recovery contract: a corrupt file yields [Settings.DEFAULTS] (the
+ * factory installs a ReplaceFileCorruptionHandler); stored values outside
+ * the product range are ignored on read and a valid update overwrites them.
  */
 class DataStoreSettingsRepository(
-    scope: CoroutineScope,
-    /** Relative or absolute path of the preferences file. */
-    fileName: String,
+    private val dataStore: DataStore<Preferences>,
 ) : SettingsRepository {
-
-    private val dataStore = PreferenceDataStoreFactory.create(
-        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-        scope = scope,
-        produceFile = { File(fileName) },
-    )
 
     @Suppress("UnsafeOptInUsageError")
     override suspend fun get(): Settings = decode(dataStore.data.first())

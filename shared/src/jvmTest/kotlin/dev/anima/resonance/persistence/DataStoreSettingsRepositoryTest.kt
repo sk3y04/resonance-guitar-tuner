@@ -39,7 +39,7 @@ class DataStoreSettingsRepositoryTest {
         block: suspend (DataStoreSettingsRepository) -> Unit,
     ) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val repo = DataStoreSettingsRepository(scope, fileName)
+        val repo = createDataStoreSettingsRepository(scope, fileName)
         try {
             runBlocking { block(repo) }
         } finally {

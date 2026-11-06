@@ -53,6 +53,8 @@ fun TunerScreen(
     onPermissionCta: () -> Unit,
     onRetryCapture: () -> Unit,
     onPresetSelect: (String) -> Unit = {},
+    showSettingsButton: Boolean = true,
+    showPresetsButton: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -74,12 +76,14 @@ fun TunerScreen(
                     .weight(1f)
                     .testTag("resonance.preset"),
             )
-            OutlinedButton(
-                onClick = onOpenSettings,
-                modifier = Modifier.testTag("resonance.settings"),
-                contentPadding = PaddingValues(12.dp),
-            ) { Text("Settings") }
-            Spacer(Modifier.size(12.dp))
+            if (showSettingsButton) {
+                OutlinedButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag("resonance.settings"),
+                    contentPadding = PaddingValues(12.dp),
+                ) { Text("Settings") }
+                Spacer(Modifier.size(12.dp))
+            }
             Text(
                 text = "A4 ${state.concertPitchHz.toIntIfWholeOrOneDecimal()} Hz",
                 style = ResonanceType.labelSmall,
@@ -327,12 +331,14 @@ fun TunerScreen(
             }
         }
 
-        OutlinedButton(
-            onClick = onOpenPresets,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("resonance.presets"),
-        ) { Text("Tunings") }
+        if (showPresetsButton) {
+            OutlinedButton(
+                onClick = onOpenPresets,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("resonance.presets"),
+            ) { Text("Tunings") }
+        }
     }
 }
 
