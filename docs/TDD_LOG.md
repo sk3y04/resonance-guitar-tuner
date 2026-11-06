@@ -59,3 +59,42 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - BUG FIXED during GREEN: fromLabel used octave offset 2 for naturals ("E2" →
   empty octave part); corrected to offset 1 for naturals / 2 for accidentals.
 - GREEN: test-unit → "discovered tests: 47", PASS, exit 0.
+
+## Conditioning + FrameAssembler + YIN (COMPLETE)
+- Tests: ConditioningTest (6), FrameAssemblerTest (7), YinTest (11).
+- RED: ./gradlew :shared:jvmTest exit 1 — 23/24 new tests failed
+  (NotImplementedError stubs; 1 pass = constructor guard by design).
+  Total at RED: 71 tests / 23 failures; all 47 music tests still green.
+- Test corrections (test-side bugs, asserted on the failing run, kept strict):
+  FloatArray assertEquals is reference equality in kotlin.test — 6 assertions
+  corrected to contentEquals. Assertions NOT weakened.
+- REAL ALGORITHM FIX found by RED→GREEN: a 3000 Hz tone (out of band) was
+  reported as 1000 Hz conf=1.0 — a 3x-period subharmonic lag inside the search
+  band. Added step-5 spectral-energy guard to Yin.detect: the candidate must
+  carry >=25% relative energy AT its own frequency, else PitchEstimate(0,0).
+  This is the octave/subharmonic-error shortcut the contract forbids.
+- GREEN: ./gradlew :shared:jvmTest exit 0 — 71/71.
+- Policy: no lag below absoluteThreshold => no pitch (freq 0, conf 0) —
+  strict, deterministic, no best-guess low-quality output. Threshold range
+  0.001..0.6 is the sensitivity knob (tested: 0.001 rejects, 0.5 accepts).
+
+## Streaming equivalence + reset-signal contract (COMPLETE)
+- Streaming equivalence: FrameAssemblerTest.streamingEquivalenceSampleBySampleVsBulk
+  (1..12 pushed one-by-one == bulk push) — GREEN in the DSP run.
+- Discontinuity reset: detector is stateless; a discontinuity is signaled as
+  PitchEstimate(0.0, 0.0) (silence/noise/out-of-band/threshold-fail). The
+  time-aware SMOOTHING that must reset on that signal is state-machine
+  behavior and is TDD'd in the state-machine layer (smoothing/staleness), not here.
+
+## Synthetic acceptance matrix + benchmark (COMPLETE)
+- Tests: YinMatrixTest (3): full-band sine scan 55..1199 Hz step 2 (573 cases,
+  1% relative tolerance, conf>0.5 — octave-error guard), sawtooth fundamentals
+  at 9 guitar frequencies (1% tolerance), benchmark.
+- RED→GREEN: written as new acceptance criteria for the existing streaming DSP detector;
+  run green on first compile fix (test-file type errors only).
+- Benchmark (host measurement, NOT an Android latency claim):
+  yin.detect median=949us p95=959us, n=300, frame=2048, sr=48000,
+  AMD Ryzen Threadripper PRO 5955WX @ ~3.3 GHz, JDK 21, 32 cores.
+- EXIT: ./scripts/test-unit.sh exit 0 — "discovered tests: 74" PASS.
+  DSP exit criteria: synthetic targets met, edges reject, no caller-buffer
+  mutation, no octave-error shortcut.
