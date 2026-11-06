@@ -7,8 +7,8 @@ Pins are in gradle/libs.versions.toml. Verification = live metadata/docs read to
 | Kotlin / KMP | 2.4.21 | repo.maven.apache.org/.../kotlin-stdlib/maven-metadata.xml | latest stable |
 | AGP (app + KMP lib) | 9.3.1 | dl.google.com .../com.android.application.gradle.plugin/maven-metadata.xml; KMP compat guide | matrix ceiling for K 2.4.21 (9.5.1 exists, out of matrix) |
 | Gradle wrapper | 9.7.0 | services.gradle.org/versions/current (9.8.2 latest; 9.7.0 = matrix ceiling) | sha256 84fbba45… (official .sha256 file) |
-| Compose Multiplatform | 1.12.2 | repo.maven.apache.org .../compose-gradle-plugin/maven-metadata.xml | unified plugin `org.jetbrains.compose`; no separate compiler plugin |
-| CMP Material3 | 1.9.0 | repo.maven.apache.org .../org/jetbrains/compose/material3/maven-metadata.xml | pinned explicitly, independent cycle |
+| Compose Multiplatform | 1.12.2 | repo.maven.apache.org .../compose-gradle-plugin/maven-metadata.xml | plugin `org.jetbrains.compose`; compose-compiler plugin 2.4.21 applied separately (same version as Kotlin) |
+| CMP Material3 | 1.9.0 | repo.maven.apache.org org/jetbrains/compose/material3/material3/maven-metadata.xml | group org.jetbrains.compose.material3; pinned explicitly, independent cycle |
 | Coroutines (+test) | 1.11.0 | repo.maven.apache.org kotlinx-coroutines-core metadata | |
 | kotlinx-serialization runtime | 1.12.0 | repo.maven.apache.org kotlinx-serialization-core metadata | compiler plugin ships with Kotlin 2.4.21 |
 | lifecycle (viewmodel, runtime, runtime-compose) | 2.11.0 | dl.google.com androidx/lifecycle metadata + .module (KMP: common/jvm/androidJvm) | |
