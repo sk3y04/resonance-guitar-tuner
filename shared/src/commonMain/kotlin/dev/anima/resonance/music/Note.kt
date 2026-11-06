@@ -85,4 +85,37 @@ data class Note(
             }
             append(octave)
         }
+
+    companion object {
+        /** Parses an unambiguous label like "E2", "F#3", "Eb2" (octave 0..8). */
+        fun fromLabel(label: String): Note {
+            require(label.isNotEmpty()) { "empty note label" }
+            val letter = label.substring(0, 1)
+            require(letter in "CDEFGAB") { "unknown note letter in '$label'" }
+            require(label.length >= 2) { "note label needs an octave: '$label'" }
+            val spelling: Spelling
+            val octStart: Int
+            when (label[1]) {
+                '#' -> {
+                    spelling = Spelling.SHARP
+                    octStart = 2
+                }
+                'b' -> {
+                    spelling = Spelling.FLAT
+                    octStart = 2
+                }
+                else -> {
+                    spelling = Spelling.NATURAL
+                    octStart = 1
+                }
+            }
+            val octPart = label.substring(octStart)
+            require(octPart.isNotEmpty() && octPart.length <= 2 && octPart.all { it.isDigit() }) {
+                "bad octave in note label '$label'"
+            }
+            val octave = octPart.toInt()
+            require(octave in 0..8) { "octave out of range (0..8) in '$label'" }
+            return Note(letter, spelling, octave)
+        }
+    }
 }
