@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.anima.resonance.music.Spelling
+import dev.anima.resonance.music.TuningPreset
+import dev.anima.resonance.music.TuningPresetJson
 import dev.anima.resonance.presentation.TunerMode
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ private val MODE = stringPreferencesKey("mode")
 private val SELECTED_PRESET = stringPreferencesKey("selected_preset_id")
 private val SPELLING = stringPreferencesKey("spelling")
 private val FAVORITES = stringPreferencesKey("favorites")
+private val CUSTOMS = stringPreferencesKey("customs")
 
 /**
  * Real persisted settings backed by androidx DataStore (JVM host).
@@ -46,25 +49,60 @@ class DataStoreSettingsRepository(
 
     @Suppress("UnsafeOptInUsageError")
     override suspend fun update(transform: (Settings) -> Settings): Settings {
-        val updated = transform(decode(dataStore.data.first()))
-        // updateData (not edit): suspends until the write is persisted, so
-        // callers never observe a half-flushed file.
+        val prefs = dataStore.data.first()
+        val updated = transform(decode(prefs))
+        // persist everything: a settings update must not clobber customs
+        persist(updated, decodeCustoms(prefs[CUSTOMS].orEmpty()))
+        return updated
+    }
+
+    /** Read user-created presets from the persisted JSON payload. */
+    @Suppress("UnsafeOptInUsageError")
+    suspend fun loadCustomPresets(): List<TuningPreset> =
+        decodeCustoms(dataStore.data.first()[CUSTOMS].orEmpty())
+
+    /** Replace the persisted customs (durable), preserving settings. */
+    @Suppress("UnsafeOptInUsageError")
+    suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> {
+        val prefs = dataStore.data.first()
+        persist(decode(prefs), customs)
+        return customs
+    }
+
+    /** Single durable write of settings + customs (updateData = persisted). */
+    @Suppress("UnsafeOptInUsageError")
+    private suspend fun persist(settings: Settings, customs: List<TuningPreset>) {
         dataStore.updateData { _ ->
             val m = mutablePreferencesOf()
-            m.set(CONCERT_MHZ, updated.concertPitchHz * 1000.0)
-            m.set(MODE, updated.mode.name)
-            m.set(SELECTED_PRESET, updated.selectedPresetId)
-            m.set(SPELLING, updated.accidentalSpelling.name)
-            m.set(FAVORITES, updated.favorites.joinToString(","))
+            m.set(CONCERT_MHZ, settings.concertPitchHz * 1000.0)
+            m.set(MODE, settings.mode.name)
+            m.set(SELECTED_PRESET, settings.selectedPresetId)
+            m.set(SPELLING, settings.accidentalSpelling.name)
+            m.set(FAVORITES, settings.favorites.joinToString(","))
+            m.set(CUSTOMS, TuningPresetJson.encode(customs))
             m
         }
-        return updated
     }
 
     companion object {
         const val KEY_CONCERT_MHZ = "concert_mhz"
         const val KEY_MODE = "mode"
         const val KEY_SELECTED_PRESET_ID = "selected_preset_id"
+        const val KEY_CUSTOMS = "customs"
+
+        /**
+         * Decode the persisted customs JSON. Any malformed payload
+         * (corruption, tampering, future format) recovers to empty — the app
+         * must never crash on its own storage.
+         */
+        internal fun decodeCustoms(payload: String): List<TuningPreset> {
+            if (payload.isBlank()) return emptyList()
+            return try {
+                TuningPresetJson.decode(payload)
+            } catch (e: IllegalArgumentException) {
+                emptyList()
+            }
+        }
 
         /** Read-side guard: same path used for every file read. */
         internal fun decode(prefs: Preferences): Settings {

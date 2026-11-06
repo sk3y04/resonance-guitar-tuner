@@ -58,11 +58,18 @@ class InMemorySettingsRepository(initial: Settings = Settings.DEFAULTS) : Settin
 class PresetStore(
     private val builtIns: List<dev.anima.resonance.music.TuningPreset> =
         dev.anima.resonance.music.BuiltInTunings.all,
+    /** Persisted customs snapshot — restored before any mutation. */
+    initialCustoms: List<dev.anima.resonance.music.TuningPreset> = emptyList(),
+    /** Persisted favorites snapshot. */
+    initialFavorites: List<String> = emptyList(),
 ) {
-    private var customs: MutableList<dev.anima.resonance.music.TuningPreset> = mutableListOf()
-    private var favorites: MutableList<String> = mutableListOf()
+    private var customs: MutableList<dev.anima.resonance.music.TuningPreset> =
+        initialCustoms.toMutableList()
+    private var favorites: MutableList<String> = initialFavorites.toMutableList()
     private var nextCustomIndex = 0
-    private var idCounter = 0
+    private var idCounter = initialCustoms
+        .mapNotNull { it.id.removePrefix("custom-").toIntOrNull() }
+        .maxOrNull() ?: 0
 
     /** All presets, built-ins first (stable order), then customs. */
     fun all(): List<dev.anima.resonance.music.TuningPreset> = builtIns + customs
@@ -70,6 +77,9 @@ class PresetStore(
     fun byId(id: String): dev.anima.resonance.music.TuningPreset? = all().firstOrNull { it.id == id }
 
     fun favorites(): List<String> = favorites.toList()
+
+    /** Only user-created presets, in stable creation order. */
+    fun customs(): List<dev.anima.resonance.music.TuningPreset> = customs.toList()
 
     fun isFavorite(id: String): Boolean = id in favorites
 

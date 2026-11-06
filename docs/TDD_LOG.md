@@ -243,3 +243,17 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Catalog: added androidx.datastore:datastore-preferences:1.3.0 (Google
   Maven; jvm+android variants verified in .module metadata).
 - FULL SUITE: ./scripts/test-unit.sh PASS — "discovered tests: 133", exit 0.
+
+## Customs persistence + PresetStore hydration (COMPLETE)
+- Code: PresetStore(initialCustoms, initialFavorites) hydration + customs()
+  accessor; idCounter continues from the max hydrated "custom-N" so new IDs
+  never collide. DataStoreSettingsRepository: KEY_CUSTOMS string payload =
+  TuningPresetJson.encode(customs); loadCustomPresets/saveCustomPresets;
+  single private persist(settings, customs) so a settings update can never
+  clobber customs (and vice versa). decodeCustoms recovery: blank/garbage/
+  oversized/versioned payloads -> emptyList, never crash.
+- Tests: PresetStoreHydrationTest (3, commonTest) + DataStoreCustomPresetsTest
+  (4, jvmTest, real files): fresh store empty; round trip deep-equal across
+  instances (incl. string ids/notes); save-replaces-previous AND survives a
+  subsequent settings update; malformed payload recovery.
+- RED: 7/7 failing (NIE stubs, 0 compile errors) -> GREEN 21/21 persistence.
