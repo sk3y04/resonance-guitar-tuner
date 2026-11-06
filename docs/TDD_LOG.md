@@ -128,3 +128,14 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Pipeline: chunk(copy)->ring->frame->rms+clip(raw)->removeDc->YIN->
   TunerStateMachine->TunerSnapshot. Bounded memory; one snapshot per call
   once ready.
+
+## Capture orchestration (COMPLETE)
+- Tests: CaptureOrchestratorTest (8): start idempotent, stop idempotent +
+  release, chunk delivery with virtual time, transient error -> RECOVERING ->
+  CAPTURING, consecutive errors beyond budget -> ERROR + release + bounded
+  (no re-open/no further closes), failed open -> ERROR without release +
+  user retry, restart after stop reopens clean, poll-while-idle no-op.
+- RED: exit 1 — 8/8 NotImplementedError on stub (96 tests, prior 88 green).
+- GREEN: exit 0 — 96/96.
+- Design: deterministic pump (poll(nowMs)) + virtual clock; no threads/sleeps;
+  recovery budget maxConsecutiveErrors=3; failed open never closed.
