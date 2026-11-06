@@ -257,3 +257,15 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   instances (incl. string ids/notes); save-replaces-previous AND survives a
   subsequent settings update; malformed payload recovery.
 - RED: 7/7 failing (NIE stubs, 0 compile errors) -> GREEN 21/21 persistence.
+
+## Preset sheet mappers (COMPLETE)
+- Code: presentation/PresetSheetUi (pure): PresetRowUi(id/name/builtIn/
+  favorite/selected/stringsPreview low-to-high), toRows (flags by stable id,
+  unknown selection selects nothing), concertPitchLabel, concertPitchError
+  (400..480), centsLabel (+12 / -3 / 0, zero-band 0.5).
+- Tests: PresetSheetUiTest (6) RED 6/6 (NIE stubs) -> GREEN. One fixture
+  self-bug fixed: assumed 5 built-ins, there are 7 -> assert from data.
+- NEXT: wire the sheet into TunerScreen — extend MainScreenUiState
+  with presetRows/concertLabel/concertError + mapper params, render the
+  sheet in Compose (compile-verified), then Android document-picker boundary
+  = missing Android SDK (document, do not retry).
