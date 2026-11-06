@@ -84,7 +84,7 @@ class TunerController(
             permission = permission,
             mode = settings.mode,
             preset = if (instrument) presets.byId(settings.selectedPresetId) else null,
-            selectedStringIndex = if (instrument) engine.selectedStringIndex else null,
+            selectedStringIndex = if (instrument) engine.lockedString else null,
             concertPitchHz = settings.concertPitchHz,
             captureError = captureError,
             presets = presets.all(),

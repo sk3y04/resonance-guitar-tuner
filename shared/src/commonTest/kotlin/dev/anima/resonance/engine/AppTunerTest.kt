@@ -114,9 +114,9 @@ class AppTunerTest {
     }
 
     @Test
-    fun instrumentModeLocksSelectedString() = runBlocking {
-        // Play G3 while the 6th string (E2) is selected: cents must be huge,
-        // note must stay LOCKED to E2 — the target moves, not the measurement.
+    fun instrumentModeAutoSelectsNearestString() = runBlocking {
+        // Spec §2: instrument mode AUTO-FOLLOWS the nearest preset string.
+        // A G3 tone under Standard must read G3 in tune (no lock active).
         val (engine, _) = harness(
             ToneInput(freq("G", 3)),
             Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),
@@ -126,9 +126,32 @@ class AppTunerTest {
         val snap = engine.lastSnapshot
         assertNotNull(snap)
         assertEquals(TunerStatus.MEASURED, snap.status)
-        assertEquals(Note("E", 2), snap.reading.note, "instrument mode must lock the selected string")
-        assertTrue(snap.reading.cents > 800, "G3 vs E2 target is ~+863 cents, got ${snap.reading.cents}")
-        assertFalse(snap.reading.inTune)
+        assertEquals(Note("G", 3), snap.reading.note, "auto mode must follow the played string")
+        assertTrue(snap.reading.inTune)
+    }
+
+    @Test
+    fun selectStringLocksThenTogglesBackToAuto() = runBlocking {
+        val (engine, _) = harness(
+            ToneInput(freq("G", 3)),
+            Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),
+        )
+        engine.start()
+        pump(engine, 8)
+        // Manual lock on the 6th string (E2): the target moves, not the measurement.
+        engine.selectString(0)
+        pump(engine, 8)
+        var snap = engine.lastSnapshot
+        assertNotNull(snap)
+        assertEquals(Note("E", 2), snap.reading.note, "locked target must be E2")
+        assertTrue(snap.reading.cents > 800, "G3 vs E2 lock, got ${snap.reading.cents}")
+        // Tapping the same string again releases the lock → back to auto.
+        engine.selectString(0)
+        pump(engine, 8)
+        snap = engine.lastSnapshot
+        assertNotNull(snap)
+        assertEquals(Note("G", 3), snap.reading.note, "unlock must return to auto selection")
+        assertTrue(snap.reading.inTune)
     }
 
     @Test

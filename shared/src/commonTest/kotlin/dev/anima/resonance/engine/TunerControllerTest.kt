@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -118,6 +119,23 @@ class TunerControllerTest {
         assertEquals(6, ui.targetLabels.size, "guitar preset shows six strings")
         assertEquals("E2", ui.targetLabels.first())
         assertEquals("E4", ui.targetLabels.last())
+    }
+
+    @Test
+    fun autoModeShowsNoSelectionUntilLocked() = runBlocking {
+        val (controller, _) = harness(
+            Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),
+        )
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        assertNull(
+            controller.state().selectedStringIndex,
+            "auto mode: no string is selected until the user locks one",
+        )
+        controller.selectString(3)
+        assertEquals(3, controller.state().selectedStringIndex)
+        controller.selectString(3) // tap again → release the lock
+        assertNull(controller.state().selectedStringIndex)
     }
 
     @Test

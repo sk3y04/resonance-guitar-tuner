@@ -107,21 +107,30 @@ private fun chromaticDetectsE2() {
     outcomes += Outcome("chromatic detects E2 in tune", ok, describe(ui))
 }
 
-/** [2] Instrument mode LOCKS the selected string: a G3 tone vs the E2 6th
- *  string shows the target (E2), a huge sharp deviation, never the tone. */
-private fun instrumentModeLocksString() {
-    val controller = harness(
-        SynthMic(freq("G", 3)),
-        Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),
-    )
+/** [2] Instrument mode: AUTO follows the played string (G3 → G3 in tune);
+ *  locking the E2 6th string switches the target (not the measurement) to a
+ *  huge deviation, and tapping it again returns to auto. */
+private fun instrumentModeAutoThenLock() {
+    val mic = SynthMic(freq("G", 3))
+    val controller = harness(mic, Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"))
     pump(controller, 14)
-    val ui = controller.state()
-    val ok = ui.status == TunerStatus.MEASURED &&
-        ui.noteLabel == "E" && ui.octave == "2" && !ui.inTune &&
-        ui.directionText == "Tune down"
-    println("[2] instrument — G3 tone while the E2 6th string is selected")
-    println("    " + describe(ui))
-    outcomes += Outcome("instrument mode locks the E2 target", ok, describe(ui))
+    val auto = controller.state()
+    controller.selectString(0) // lock the E2 6th string
+    pump(controller, 14)
+    val locked = controller.state()
+    controller.selectString(0) // unlock → auto again
+    pump(controller, 14)
+    val unLocked = controller.state()
+    val ok = auto.noteLabel == "G" && auto.octave == "3" && auto.inTune &&
+        locked.noteLabel == "E" && locked.octave == "2" && !locked.inTune &&
+        locked.selectedStringIndex == 0 &&
+        unLocked.noteLabel == "G" && unLocked.inTune && unLocked.selectedStringIndex == null
+    println("[2] instrument — G3 tone: auto, then locked to E2, then unlocked")
+    println("    auto:     " + describe(auto))
+    println("    locked:   " + describe(locked))
+    println("    unlocked: " + describe(unLocked))
+    outcomes += Outcome("instrument auto selection + manual lock + unlock", ok,
+        "auto=${auto.noteLabel}${auto.octave} locked=${locked.noteLabel}${locked.octave} cents=${locked.centsText}")
 }
 
 /** [3] Chromatic mode measures the played note freely: G3 → G3. */
@@ -179,7 +188,7 @@ fun main() {
     println("=== Resonance host demo — deterministic synthetic mic, virtual clock ===")
     println("    (synthetic mic → AppTuner → TunerController → UI state)\n")
     chromaticDetectsE2()
-    instrumentModeLocksString()
+    instrumentModeAutoThenLock()
     chromaticMeasuresG3()
     concert432Retunes()
     captureFailureRecovers()

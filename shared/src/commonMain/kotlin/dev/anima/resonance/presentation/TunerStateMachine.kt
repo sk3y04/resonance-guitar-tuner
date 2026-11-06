@@ -31,6 +31,12 @@ class TunerStateMachine(
     val inTuneExitCents: Double = 8.0,
     val minConfidence: Double = 0.5,
     private var targets: List<Note> = ChromaticTargets.inRange(440.0),
+    /**
+     * Instrument-mode AUTO selection: when non-null, nearest matching is
+     * restricted to these strings (the selected preset). A manual lock
+     * ([setManualTarget]) still overrides the set. Null = chromatic.
+     */
+    private var targetSet: List<Note>? = null,
     private var concertPitchHz: Double = 440.0,
 ) {
     private val smoothingWindow = 5
@@ -82,7 +88,11 @@ class TunerStateMachine(
             note = manual
             targetHz = manual.frequency(concertPitchHz)
         } else {
-            val match = TargetMatcher.nearest(estimate.frequencyHz, targets, concertPitchHz)
+            val match = TargetMatcher.nearest(
+                estimate.frequencyHz,
+                targetSet ?: targets,
+                concertPitchHz,
+            )
             val current = stableNote
             if (current == null || match.note != current) {
                 if (candidateNote == match.note) candidateCount++ else {
@@ -147,6 +157,17 @@ class TunerStateMachine(
     }
 
     /**
+     * Instrument-mode AUTO selection: restrict nearest matching to [notes]
+     * (the preset's strings). Null restores the full chromatic set. Resets
+     * candidate state so no stale target survives the change.
+     */
+    fun setTargetSet(notes: List<Note>?) {
+        targetSet = notes?.takeIf { it.isNotEmpty() }
+        candidateNote = null
+        candidateCount = 0
+    }
+
+    /**
      * Changes the A4 concert reference (400..480 Hz, validated). Rebuilds the
      * chromatic targets, resets candidate state and smoothing so no stale
      * estimate survives the scale change; in-tune is re-evaluated on the next
@@ -156,6 +177,9 @@ class TunerStateMachine(
         require(hz in 400.0..480.0) { "concert pitch out of bounds 400..480 Hz: $hz" }
         concertPitchHz = hz
         targets = ChromaticTargets.inRange(hz, 55.0, 1200.0)
+        // A restricted (instrument) set must track the new scale: the caller
+        // re-applies it via setTargetSet right after this call.
+        targetSet = null
         // No stale estimate may survive a scale change.
         candidateNote = null
         candidateCount = 0

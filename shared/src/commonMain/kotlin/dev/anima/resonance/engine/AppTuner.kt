@@ -55,8 +55,11 @@ class AppTuner(
     var lastSnapshot: TunerSnapshot? = null
         private set
 
-    /** Currently selected string index within the instrument preset. */
-    var selectedStringIndex: Int = 0
+    /**
+     * Locked string index in instrument mode; null = AUTO selection
+     * (nearest preset string). Tapping the locked string again unlocks.
+     */
+    var lockedString: Int? = null
         private set
 
     /** Live capture state (mirrors the orchestrator). */
@@ -89,7 +92,7 @@ class AppTuner(
     suspend fun setConcertPitch(hz: Double): Settings {
         applied = settingsRepo.update { it.copy(concertPitchHz = hz) }
         stateMachine.setConcertPitch(hz)
-        applyTarget(applied)
+        applyTarget(applied) // re-applies a restricted set under the new scale
         return applied
     }
 
@@ -100,17 +103,20 @@ class AppTuner(
         return applied
     }
 
-    /** Persists and applies a new preset; resets the selected string. */
+    /** Persists and applies a new preset; the instrument returns to AUTO. */
     suspend fun setPreset(id: String): Settings {
         applied = settingsRepo.update { it.copy(selectedPresetId = id) }
-        selectedStringIndex = 0
+        lockedString = null
         applyTarget(applied)
         return applied
     }
 
-    /** Moves the selected string (instrument mode retargets immediately). */
+    /**
+     * Locks the [index]-th string (instrument mode). Tapping the already
+     * locked string releases the lock and returns to AUTO selection.
+     */
     fun selectString(index: Int) {
-        selectedStringIndex = index
+        lockedString = if (lockedString == index) null else index
         applyTarget(applied)
     }
 
@@ -122,19 +128,25 @@ class AppTuner(
     }
 
     /**
-     * Applies mode + preset to the state machine: chromatic clears the manual
-     * target (free matching); instrument locks the selected string of the
-     * selected preset (unknown preset → no lock, chromatic behavior).
+     * Applies mode + preset to the state machine:
+     *  - chromatic: full chromatic set, no lock;
+     *  - instrument: AUTO selection over the preset's strings, overridden by
+     *    the manual lock ([lockedString]) when active.
      */
     private fun applyTarget(settings: Settings) {
-        val target = when (settings.mode) {
-            TunerMode.CHROMATIC -> null
-            TunerMode.INSTRUMENT -> presets
-                .byId(settings.selectedPresetId)
-                ?.strings
-                ?.getOrNull(selectedStringIndex)
-                ?.note
+        val preset = presets.byId(settings.selectedPresetId)
+        when (settings.mode) {
+            TunerMode.CHROMATIC -> {
+                stateMachine.setTargetSet(null)
+                stateMachine.setManualTarget(null)
+            }
+            TunerMode.INSTRUMENT -> {
+                // setConcertPitch may have cleared the set on a scale change;
+                // apply the set first, then the lock (lock overrides the set).
+                stateMachine.setTargetSet(preset?.strings?.map { it.note })
+                val lock = lockedString?.let { preset?.strings?.getOrNull(it)?.note }
+                stateMachine.setManualTarget(lock)
+            }
         }
-        stateMachine.setManualTarget(target)
     }
 }
