@@ -139,3 +139,13 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - GREEN: exit 0 — 96/96.
 - Design: deterministic pump (poll(nowMs)) + virtual clock; no threads/sleeps;
   recovery budget maxConsecutiveErrors=3; failed open never closed.
+
+## Concert-pitch re-derivation (COMPLETE)
+- Tests: TunerConcertPitchTest (3): concert change updates target + re-evaluates
+  stale in-tune (440Hz measured @435 ref = +20c SHARP, exits in-tune, re-enters
+  at 435Hz), candidate/smoothing reset on change, validation 400..480 inclusive
+  (399.9/480.1/0.0 rejected with IAE).
+- RED: exit 1 — 3/3 NotImplementedError on stub; 99 tests total, prior 96 green.
+- Test correction (own fixture): 1200*log2(440/435)=+19.8c, not +29c as first
+  drafted; range fixed to 18..21. Implementation untouched.
+- GREEN: exit 0 — 99/99; ./scripts/test-unit.sh PASS (99 discovered).

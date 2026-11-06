@@ -30,8 +30,8 @@ class TunerStateMachine(
     val inTuneCents: Double = 5.0,
     val inTuneExitCents: Double = 8.0,
     val minConfidence: Double = 0.5,
-    private val targets: List<Note> = ChromaticTargets.inRange(440.0),
-    private val concertPitchHz: Double = 440.0,
+    private var targets: List<Note> = ChromaticTargets.inRange(440.0),
+    private var concertPitchHz: Double = 440.0,
 ) {
     private val smoothingWindow = 5
 
@@ -144,6 +144,22 @@ class TunerStateMachine(
         manualTarget = note
         candidateNote = null
         candidateCount = 0
+    }
+
+    /**
+     * Changes the A4 concert reference (400..480 Hz, validated). Rebuilds the
+     * chromatic targets, resets candidate state and smoothing so no stale
+     * estimate survives the scale change; in-tune is re-evaluated on the next
+     * frame (not force-cleared here).
+     */
+    fun setConcertPitch(hz: Double) {
+        require(hz in 400.0..480.0) { "concert pitch out of bounds 400..480 Hz: $hz" }
+        concertPitchHz = hz
+        targets = ChromaticTargets.inRange(hz, 55.0, 1200.0)
+        // No stale estimate may survive a scale change.
+        candidateNote = null
+        candidateCount = 0
+        ring.clear()
     }
 
     private fun median(values: List<Double>): Double {
