@@ -1,24 +1,19 @@
 # STATE — Resonance
 
-- Settings & custom tunings COMPLETE → integration next
-- Last green checkpoint: ./scripts/test-unit.sh exit 0, "discovered tests: 151".
+- Integration COMPLETE (engine/controller/host done; verification running) → project
+  at final verification; only external blockers remain (SDK, display, device).
+- Last green checkpoint: ./scripts/test-unit.sh exit 0, "discovered tests: 167".
 - Test breakdown: 47 music + 27 DSP + 25 state/streaming/capture/concert +
-  18 UI-state (15+3 sheet) + 7 headless Compose UI + 21 persistence = 151.
-- Next action (audio wiring + integration):
-  (a) integration seam (TDD, commonTest): an AppTuner engine that owns
-      StreamingAnalyzer + CaptureOrchestrator + TunerStateMachine +
-      PresetStore + SettingsRepository and exposes a single
-      start(concertHz)/stop()/setPreset(id)/setMode(mode) API — fake audio
-      input + virtual clock, assert snapshot flow (listening → measured →
-      in-tune) end to end;
-  (b) AndroidViewModel wiring (androidMain, compile-blocked on the missing SDK —
-      write + document), MainScreen wiring to engine (shared UI callbacks:
-      onPresetSelect/onModeToggle/onPermissionCta already exist);
-  (c) import/export document-picker boundary (SDK-blocked — document the
-      unblocking steps; TuningPresetJson + decodeCustoms already cover the
-      codec+recovery path);
-  (d) final verification pass: scripts/verify.sh + VERIFICATION.md
-      update with every run-verified result + every honest NOT RUN item.
+  18 UI-state (15+3 sheet) + 10 headless Compose UI (7 screen + 3 host) +
+  21 persistence + 7 AppTuner + 6 TunerController = 167.
+- Final verification in flight: ./scripts/verify.sh (background job) — final gates.
+- Architecture (final): AppTuner (engine, common) → TunerController
+  (permissions/errors/UI mapping, common) → MainScreen (Compose host,
+  common) → Android shell (ViewModel + pump thread + Activity, androidMain,
+  Compile-blocked on the missing SDK). DataStoreSettingsRepository is commonMain
+  (injected DataStore); file factory jvmMain, Context factory androidMain.
+- Next after verify PASS: commit the verification slice (docs + verify evidence) and report
+  the honest final state (all host-verifiable behavior is tested green).
 - Compose test facts: performScrollToNode = top-level extension in
   androidx.compose.ui.test (import it); assertIsDisplayed is viewport-based —
   assert top-of-container nodes BEFORE scrolling, use performScrollToNode

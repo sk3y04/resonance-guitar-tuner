@@ -291,3 +291,55 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   reordered assertions. GREEN 7/7 TunerScreenUiTest.
 - performScrollToNode is a top-level extension in androidx.compose.ui.test
   (import required; ActionsKt facade).
+
+## AppTuner integration engine (COMPLETE)
+- One engine owns capture + analysis + state + presets + settings;
+  caller-driven time/pump (no threads) → fully deterministic.
+- Test (7): default start→MEASURED E2 in tune; stop clears + halts flow;
+  instrument mode LOCKS the selected string (G3 tone vs E2 target →
+  cents > 800, note stays E2); chromatic measures freely; setPreset persists
+  + retargets (Drop D / D2 in tune); setConcertPitch(432) persists + 432 Hz
+  A4 reads in tune (±1 cent); 3 device losses → RECOVERING → ERROR, stop()
+  safe from ERROR.
+- RED: throwing stub, 7/7 failing (one fixture self-bug fixed in the test:
+  a nonsense sanity line I wrote; and TunerSnapshot exposes .reading —
+  test corrected to snap.reading.*, not a behavior change).
+- GREEN 7/7 on first implementation run. Suite 158/158. Commit: AppTuner integration engine.
+
+## TunerController (COMPLETE)
+- Common bridge: owns AppTuner (capture-state callback can't be forgotten),
+  permission gating (DENIED never opens the mic), error surfacing, and
+  MainScreenUi.toUiState mapping (instrument mode passes the preset;
+  chromatic passes null preset/selectedStringIndex).
+- Test (6): permission gates start (0 opens when denied); measured reading
+  maps to UI (note/octave/meter/inTune); mode toggle → 6 target labels
+  E2..E4; preset+string selection flow; 3 device losses → captureError,
+  retry reopens; stop → IDLE + device closed.
+- RED: throwing stub 6/6. GREEN: 4/6 first run — my test fixture reset sine
+  phase per chunk (discontinuous tone); fixed the fixture (phase is a
+  field), not the implementation. GREEN 6/6. Suite 164/164. Commit: TunerController.
+
+## MainScreen host + DataStore KMP cleanup + Android shell (COMPLETE)
+- KMP fix: DataStoreSettingsRepository moved jvmMain → commonMain (its only
+  dependency is the injected DataStore<Preferences>, which is KMP); File
+  factory stays jvmMain, Context factory lands in androidMain. The 8 real-
+  file DataStore tests pass UNCHANGED in behavior (construction via the
+  factory only).
+- MainScreen (Compose, common): ticker re-reads immutable UI state
+  (refreshMs param, 50ms default); mutations via controller + immediate
+  refresh; TunerScreen gained showSettingsButton/showPresetsButton
+  (default true — the 7 headless UI tests unchanged; the host hides them because
+  the inline settings sheet replaces them).
+- Test (3, headless, REAL controller): E2 tone → rendered note "E"
+  (verified via SemanticsProperties.Text, 1.12 API); listening hint before
+  start; tap sheet row drop-d → preset label "Drop D". RED: stub 3/3.
+  GREEN 3/3 first implementation run. Suite 167/167. Commit: MainScreen host + Android shell.
+- Android shell (WRITTEN, compile BLOCKED (missing SDK)): ResonanceViewModel
+  (thin AndroidViewModel + PumpWorker thread on the audio clock),
+  ContextDataStore (context.createDataStore), ResonanceApp (permission
+  policy: granted→start; rationale→request; else DENIED_PERMANENT → CTA to
+  app settings, never re-prompts). No device testing.
+- Compose 1.12 test API facts: fetchSemanticsNodes is INTERNAL on
+  SemanticsNodeInteraction (use the collection's public
+  fetchSemanticsNodes(atLeastOneRootRequired=false)); no assertText;
+  text read via node.config[SemanticsProperties.Text].
