@@ -439,3 +439,25 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Gotcha: `ImportResult` landed top-level in the engine package (not nested
   in AppTuner); result text renders below the 300dp fold →
   `performScrollToNode` in the headless test.
+
+## Document-picker wiring (COMPLETE for local gates)
+- Spec §2: import/export needs a file source on Android = SAF document
+  picker (shell) + a payload handoff the common tests can drive.
+- TDD: RED (MainScreen had no `importPayload`/`onImportConsumed`;
+  `importPayloadTriggersSheetFeedback`) → GREEN: `MainScreen` params
+  `importPayload: String?` + `onImportConsumed`, `LaunchedEffect` handles
+  once via the tested `handleImportPayload` (import runs on the composable
+  scope so it survives the shell clearing the payload).
+  Test: payload → sheet shows "Imported 1" + repo has "P7 Import".
+  GREEN 204/204 + demo 5/5 + verify.sh local gates PASS.
+- Shell (WRITTEN, compile-blocked on the missing SDK): `ResonanceApp` SAF launchers
+  (`OpenDocument` [application/json, text/plain] / `CreateDocument
+  "application/json"` → "resonance-tunings.json"); `ResonanceViewModel`
+  `onImportUri` (contentResolver read → `importPayload` StateFlow),
+  `consumeImport()`, `onExportUri` (contentResolver write of
+  `controller.exportCustomPresets()`). Read-only by contract — no storage
+  permission requested.
+- Kotlin gotcha: a local `fun` in a composable is NOT visible before its
+  declaration — place `LaunchedEffect`s that call it after the declaration.
+- Next: remaining follow-up work is external-blocker-gated (SDK
+  licenses, device). Nothing further is locally actionable.

@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.collectAsState
 import dev.anima.resonance.engine.ResonanceViewModel
 import dev.anima.resonance.presentation.MicPermissionState
 import dev.anima.resonance.ui.MainScreen
@@ -47,6 +48,20 @@ class ResonanceApp : ComponentActivity() {
             }
         }
 
+    // Tuning-file import/export via the document picker (SAF).
+    // Read-only access by contract — no storage permission is ever
+    // requested; the picked URI is handed to the ViewModel, which stages
+    // the payload for the tested common import path.
+    private val importLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { viewModel.onImportUri(it) }
+        }
+
+    private val exportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri?.let { viewModel.onExportUri(it) }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -54,6 +69,14 @@ class ResonanceApp : ComponentActivity() {
                 MainScreen(
                     controller = viewModel.controller,
                     onPermissionCta = { openAppSettings() },
+                    onImportPicker = {
+                        importLauncher.launch(arrayOf("application/json", "text/plain"))
+                    },
+                    onExportPicker = {
+                        exportLauncher.launch("resonance-tunings.json")
+                    },
+                    importPayload = viewModel.importPayload.collectAsState(initial = null).value,
+                    onImportConsumed = { viewModel.consumeImport() },
                 )
             }
         }

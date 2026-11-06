@@ -41,6 +41,13 @@ fun MainScreen(
     onImportPicker: () -> Unit = {},
     /** Open the document picker for export (Android shell). */
     onExportPicker: () -> Unit = {},
+    /**
+     * A tuning-file payload delivered by the shell (the Android
+     * document picker reads the file and hands the text over). Null =
+     * nothing pending. Handled once, then [onImportConsumed] fires.
+     */
+    importPayload: String? = null,
+    onImportConsumed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var ui by remember(controller) { mutableStateOf(controller.state()) }
@@ -72,6 +79,16 @@ fun MainScreen(
                 else -> "Import complete — no new tunings in file"
             }
             refresh()
+        }
+    }
+
+    // The shell hands over a tuning-file payload (Android document
+    // picker → text). Handle it exactly once, then signal consumption so
+    // the shell can clear its state.
+    LaunchedEffect(importPayload) {
+        importPayload?.let { payload ->
+            handleImportPayload(payload)
+            onImportConsumed()
         }
     }
 

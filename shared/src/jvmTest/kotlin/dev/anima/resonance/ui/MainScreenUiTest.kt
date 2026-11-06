@@ -22,6 +22,7 @@ import org.junit.Test
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The host screen against a REAL controller (fake audio, virtual
@@ -147,6 +148,36 @@ class MainScreenUiTest {
             val created = repo.customsSnapshot.single()
             assertEquals("UI Created", created.name)
             assertEquals(dev.anima.resonance.music.Note.fromLabel("G2"), created.strings.single().note)
+        }
+    }
+
+    @Test
+    fun importPayloadTriggersSheetFeedback() {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        runBlocking {
+            controller.onPermissionResult(MicPermissionState.GRANTED)
+            controller.startCapture()
+        }
+        val payload = dev.anima.resonance.music.TuningPresetJson.encode(
+            listOf(
+                dev.anima.resonance.music.TuningPreset("p7-imp", "P7 Import", builtIn = false,
+                    strings = listOf(dev.anima.resonance.music.TuningString("p7-imp-s1", Note.fromLabel("D2")))),
+            ),
+        )
+        rule.setContent { MainScreen(controller, importPayload = payload, onImportConsumed = {}) }
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.sheet.importResult"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.sheet")
+            .performScrollToNode(hasTestTag("resonance.sheet.importResult"))
+        val text = rule.onNodeWithTag("resonance.sheet.importResult")
+            .fetchSemanticsNode().config[SemanticsProperties.Text]!!
+            .joinToString("") { it.text }
+        assertTrue(text.contains("Imported 1"), "feedback must report the import: $text")
+        runBlocking {
+            assertTrue(repo.customsSnapshot.any { it.name == "P7 Import" })
         }
     }
 

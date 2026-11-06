@@ -1,12 +1,15 @@
 package dev.anima.resonance.engine
 
 import android.app.Application
+import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.anima.resonance.audio.AndroidAudioInput
 import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.createContextDataStore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +56,45 @@ class ResonanceViewModel(application: Application) : AndroidViewModel(applicatio
     fun stop() {
         pumpThread.stopFeeding()
         viewModelScope.launch { controller.stopCapture() }
+    }
+
+    /**
+     * Pending tuning-file payload from the import picker
+     * (null = nothing pending). The common [MainScreen] handles it once
+     * and calls [consumeImport]; all import semantics (validation,
+     * dedupe, feedback) live in the tested common code.
+     */
+    private val _importPayload = MutableStateFlow<String?>(null)
+    val importPayload: kotlinx.coroutines.flow.StateFlow<String?> = _importPayload.asStateFlow()
+
+    /** Reads the picked document and stages it as [importPayload]. */
+    fun onImportUri(uri: Uri) {
+        viewModelScope.launch {
+            val text = try {
+                getApplication<Application>()
+                    .contentResolver.openInputStream(uri)
+                    ?.use { it.readBytes().decodeToString() }
+            } catch (e: Exception) {
+                null
+            }
+            if (text != null) _importPayload.value = text
+            // Unreadable documents are dropped silently here; malformed
+            // CONTENT still flows through the codec and shows feedback.
+        }
+    }
+
+    /** Signals that the staged payload was handled (clears it). */
+    fun consumeImport() {
+        _importPayload.value = null
+    }
+
+    /** Writes all custom tunings to the destination document. */
+    fun onExportUri(uri: Uri) {
+        viewModelScope.launch {
+            getApplication<Application>()
+                .contentResolver.openOutputStream(uri)
+                ?.use { it.write(controller.exportCustomPresets().encodeToByteArray()) }
+        }
     }
 
     override fun onCleared() {
