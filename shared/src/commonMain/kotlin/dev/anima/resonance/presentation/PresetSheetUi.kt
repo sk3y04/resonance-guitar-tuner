@@ -29,6 +29,7 @@ object PresetSheetUi {
         presets: List<TuningPreset>,
         favorites: Set<String>,
         selectedId: String,
+        spelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
     ): List<PresetRowUi> = presets.map { p ->
         PresetRowUi(
             id = p.id,
@@ -36,7 +37,7 @@ object PresetSheetUi {
             builtIn = p.builtIn,
             favorite = p.id in favorites,
             selected = p.id == selectedId,
-            stringsPreview = p.strings.joinToString(" ") { it.note.label },
+            stringsPreview = p.strings.joinToString(" ") { it.note.spelledLabel(spelling) },
         )
     }
 

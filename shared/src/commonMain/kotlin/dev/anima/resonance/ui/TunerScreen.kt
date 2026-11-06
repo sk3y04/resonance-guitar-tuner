@@ -59,6 +59,7 @@ fun TunerScreen(
     onAddTuning: () -> Unit = {},
     onEditTuning: (String) -> Unit = {},
     onDeleteTuning: (String) -> Unit = {},
+    onSpellingSelect: (dev.anima.resonance.music.Spelling) -> Unit = {},
     editor: CustomEditorUiState? = null,
     onEditorNameChange: (String) -> Unit = {},
     onEditorNoteCycle: (Int, Boolean) -> Unit = { _, _ -> },
@@ -315,6 +316,43 @@ fun TunerScreen(
                                 style = ResonanceType.hint,
                                 modifier = Modifier.testTag("resonance.sheet.concertError"),
                             )
+                        }
+                    }
+                    // Enharmonic display preference (♯ / ♭)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .testTag("resonance.sheet.spelling"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Accidentals",
+                            style = ResonanceType.labelSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (state.accidentalSpelling == dev.anima.resonance.music.Spelling.SHARP) {
+                            Button(
+                                onClick = { onSpellingSelect(dev.anima.resonance.music.Spelling.SHARP) },
+                                modifier = Modifier.testTag("resonance.sheet.spelling.sharp"),
+                            ) { Text("♯") }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onSpellingSelect(dev.anima.resonance.music.Spelling.SHARP) },
+                                modifier = Modifier.testTag("resonance.sheet.spelling.sharp"),
+                            ) { Text("♯") }
+                        }
+                        Spacer(Modifier.size(6.dp))
+                        if (state.accidentalSpelling == dev.anima.resonance.music.Spelling.FLAT) {
+                            Button(
+                                onClick = { onSpellingSelect(dev.anima.resonance.music.Spelling.FLAT) },
+                                modifier = Modifier.testTag("resonance.sheet.spelling.flat"),
+                            ) { Text("♭") }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onSpellingSelect(dev.anima.resonance.music.Spelling.FLAT) },
+                                modifier = Modifier.testTag("resonance.sheet.spelling.flat"),
+                            ) { Text("♭") }
                         }
                     }
                     state.presetRows.forEach { row ->

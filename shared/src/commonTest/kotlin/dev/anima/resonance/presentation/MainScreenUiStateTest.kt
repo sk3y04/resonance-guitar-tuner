@@ -48,6 +48,34 @@ class MainScreenUiStateTest {
 
     // ---------- status matrix ----------
 
+    @Test
+    fun flatSpellingPreferenceRenamesDisplayedNoteAndTargets() {
+        // A#4 reading: under FLAT preference the glyph becomes "Bb", and the
+        // Open D preset's F#3 string renders as Gb3. Identity unchanged.
+        val flat = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.MEASURED, note = Note.fromLabel("A#4"), freq = 466.16),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.openD,
+            selectedStringIndex = null,
+            accidentalSpelling = dev.anima.resonance.music.Spelling.FLAT,
+        )
+        assertEquals("Bb", flat.noteLabel)
+        assertEquals("4", flat.octave)
+        assertTrue(flat.targetLabels.contains("Gb3"), "F#3 must render Gb3: ${flat.targetLabels}")
+
+        val sharp = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.MEASURED, note = Note.fromLabel("A#4"), freq = 466.16),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.openD,
+            selectedStringIndex = null,
+            accidentalSpelling = dev.anima.resonance.music.Spelling.SHARP,
+        )
+        assertEquals("A#", sharp.noteLabel)
+        assertTrue(sharp.targetLabels.contains("F#3"), "default sharp: ${sharp.targetLabels}")
+    }
+
     private fun snapshot(
         status: TunerStatus,
         note: Note? = null,

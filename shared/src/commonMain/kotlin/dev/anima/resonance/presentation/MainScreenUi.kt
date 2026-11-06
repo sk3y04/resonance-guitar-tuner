@@ -32,6 +32,8 @@ object MainScreenUi {
         presets: List<TuningPreset> = emptyList(),
         favoritePresetIds: Set<String> = emptySet(),
         selectedPresetId: String = "standard",
+        // Enharmonic display preference (identity never changes)
+        accidentalSpelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
     ): MainScreenUiState {
         val status = snapshot?.status ?: TunerStatus.IDLE
         val reading = snapshot?.reading
@@ -59,6 +61,10 @@ object MainScreenUi {
         }
 
         val inInstrument = mode == TunerMode.INSTRUMENT && preset != null
+        // The glyph renders the spelled name (letter + accidental)
+        // under the user's preference; octave is read off the same label so
+        // folded notes (Cb3 → B2) stay consistent.
+        val spelled = note?.spelledLabel(accidentalSpelling)
         return MainScreenUiState(
             status = status,
             permission = permission,
@@ -66,8 +72,8 @@ object MainScreenUi {
             permissionCtaText = "App settings",
             meterPosition = if (hasPitch) meterPosition(cents) else 0.0,
             meterClamped = if (hasPitch) isMeterClamped(cents) else false,
-            noteLabel = note?.letter,
-            octave = note?.octave?.toString(),
+            noteLabel = spelled?.dropLast(1),
+            octave = spelled?.last()?.toString(),
             frequencyText = if (hasPitch) formatHz(reading!!.frequencyHz) else null,
             centsText = if (hasPitch) formatCents(cents) else null,
             directionText = directionText,
@@ -76,12 +82,13 @@ object MainScreenUi {
             captureError = captureError,
             mode = mode,
             presetName = if (inInstrument) preset!!.name else null,
-            targetLabels = if (inInstrument) preset!!.strings.map { it.note.label } else emptyList(),
+            targetLabels = if (inInstrument) preset!!.strings.map { it.note.spelledLabel(accidentalSpelling) } else emptyList(),
             selectedStringIndex = if (inInstrument) selectedStringIndex else null,
             concertPitchHz = concertPitchHz,
-            presetRows = PresetSheetUi.toRows(presets, favoritePresetIds, selectedPresetId),
+            presetRows = PresetSheetUi.toRows(presets, favoritePresetIds, selectedPresetId, accidentalSpelling),
             concertLabel = PresetSheetUi.concertPitchLabel(concertPitchHz),
             concertError = PresetSheetUi.concertPitchError(concertPitchHz),
+            accidentalSpelling = accidentalSpelling,
         )
     }
 

@@ -91,6 +91,7 @@ class TunerController(
             presets = presets.all(),
             favoritePresetIds = presets.favorites().toSet(),
             selectedPresetId = settings.selectedPresetId,
+            accidentalSpelling = settings.accidentalSpelling,
         )
     }
 
@@ -125,6 +126,11 @@ class TunerController(
     /** Steps the A4 reference by ±0.1 Hz (spec §2); clamped at 400..480. */
     suspend fun stepConcertPitch(up: Boolean) {
         engine.stepConcertPitch(up)
+    }
+
+    /** Sets the enharmonic display preference (display-only, persisted). */
+    suspend fun setAccidentalSpelling(spelling: dev.anima.resonance.music.Spelling) {
+        engine.setAccidentalSpelling(spelling)
     }
 
     suspend fun toggleFavorite(id: String): Boolean = engine.toggleFavorite(id)

@@ -38,4 +38,6 @@ data class MainScreenUiState(
     val presetRows: List<PresetRowUi> = emptyList(),
     val concertLabel: String = "",
     val concertError: String? = null,
+    // Active enharmonic display preference (drives the glyph, targets, rows)
+    val accidentalSpelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
 )

@@ -110,6 +110,14 @@ class AppTuner(
         setConcertPitch(PresetSheetUi.stepConcertPitch(applied.concertPitchHz, up))
     }
 
+    /**
+     * Sets the enharmonic display preference (spec §2). Display-only: note
+     * identity, frequencies and stored tunings never change.
+     */
+    suspend fun setAccidentalSpelling(spelling: dev.anima.resonance.music.Spelling) {
+        applied = settingsRepo.update { it.copy(accidentalSpelling = spelling) }
+    }
+
     /** Persists and applies a new mode; retargets the state machine. */
     suspend fun setMode(mode: TunerMode): Settings {
         applied = settingsRepo.update { it.copy(mode = mode) }

@@ -160,6 +160,19 @@ class TunerControllerTest {
     }
 
     @Test
+    fun setAccidentalSpellingPersistsAndDrivesUiState() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        controller.setAccidentalSpelling(dev.anima.resonance.music.Spelling.FLAT)
+        assertEquals(dev.anima.resonance.music.Spelling.FLAT, repo.get().accidentalSpelling)
+        assertEquals(dev.anima.resonance.music.Spelling.FLAT, controller.state().accidentalSpelling)
+        controller.setAccidentalSpelling(dev.anima.resonance.music.Spelling.NATURAL)
+        assertEquals(dev.anima.resonance.music.Spelling.NATURAL, repo.get().accidentalSpelling)
+    }
+
+    @Test
     fun autoModeShowsNoSelectionUntilLocked() = runBlocking {
         val (controller, _) = harness(
             Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),

@@ -142,6 +142,12 @@ fun MainScreen(
                 refresh()
             }
         },
+        onSpellingSelect = { spelling ->
+            scope.launch {
+                controller.setAccidentalSpelling(spelling)
+                refresh()
+            }
+        },
         editor = editor,
         onEditorNameChange = { name -> updateEditor { it.copy(name = name) } },
         onEditorNoteCycle = { index, up ->

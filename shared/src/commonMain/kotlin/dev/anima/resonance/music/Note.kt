@@ -86,7 +86,27 @@ data class Note(
             append(octave)
         }
 
+    /**
+     * Display label under an enharmonic [preference]. NATURAL keeps
+     * the note's native spelling; SHARP/FLAT render the pitch class in the
+     * preferred accidental family (A#4 → Bb4, E#5 → F5, Cb3 → B2). Only the
+     * label changes — identity and frequency never do.
+     */
+    fun spelledLabel(preference: Spelling): String {
+        if (preference == Spelling.NATURAL) return label
+        val name = (if (preference == Spelling.SHARP) SHARP_NAMES else FLAT_NAMES)[pitchClass]
+        val base = 12 * octave + rawSemitones
+        val octaveIndex = if (base >= 0) base / 12 else (base - 11) / 12
+        return "$name$octaveIndex"
+    }
+
     companion object {
+        /** Canonical sharp-family names by pitch class (0..11). */
+        private val SHARP_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+        /** Canonical flat-family names by pitch class (0..11). */
+        private val FLAT_NAMES = listOf("C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B")
+
         /** Parses an unambiguous label like "E2", "F#3", "Eb2" (octave 0..8). */
         fun fromLabel(label: String): Note {
             require(label.isNotEmpty()) { "empty note label" }

@@ -42,4 +42,24 @@ class NoteSpellingTest {
         assertFailsWith<IllegalArgumentException> { Note("Q", 4) }
         assertFailsWith<IllegalArgumentException> { Note("X#", 4) }
     }
+
+    // Enharmonic display preference. The stored note
+    // identity never changes; only its rendered label does.
+
+    @Test
+    fun sharpPreferenceRendersSharpCanonicalForms() {
+        assertEquals("A#4", Note.fromLabel("A#4").spelledLabel(Spelling.SHARP))
+        assertEquals("A#4", Note.fromLabel("Bb4").spelledLabel(Spelling.SHARP))
+        assertEquals("D#3", Note.fromLabel("Eb3").spelledLabel(Spelling.SHARP))
+        assertEquals("C3", Note.fromLabel("C3").spelledLabel(Spelling.SHARP))
+    }
+
+    @Test
+    fun flatPreferenceRendersFlatCanonicalForms() {
+        assertEquals("Bb4", Note.fromLabel("A#4").spelledLabel(Spelling.FLAT))
+        assertEquals("Db2", Note.fromLabel("C#2").spelledLabel(Spelling.FLAT))
+        assertEquals("F5", Note.fromLabel("E#5").spelledLabel(Spelling.FLAT), "E# folds to F")
+        assertEquals("B2", Note.fromLabel("Cb3").spelledLabel(Spelling.FLAT), "Cb folds to the lower B")
+        assertEquals("C2", Note.fromLabel("C2").spelledLabel(Spelling.FLAT))
+    }
 }

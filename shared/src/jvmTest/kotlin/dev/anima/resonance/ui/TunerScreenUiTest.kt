@@ -327,6 +327,29 @@ class TunerScreenUiTest {
     }
 
     @Test
+    fun sheetSpellingControlInvokesCallback() {
+        val calls = mutableListOf<dev.anima.resonance.music.Spelling>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(
+                    state = ui,
+                    onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
+                    onSpellingSelect = { calls.add(it) },
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.sheet.spelling.sharp").performClick()
+        rule.onNodeWithTag("resonance.sheet.spelling.flat").performClick()
+        assertEquals(
+            listOf(dev.anima.resonance.music.Spelling.SHARP, dev.anima.resonance.music.Spelling.FLAT),
+            calls,
+        )
+    }
+
+    @Test
     fun presetSheetHiddenWithoutRows() {
         show(state(status = TunerStatus.LISTENING))
         rule.onNodeWithTag("resonance.sheet").assertDoesNotExist()
