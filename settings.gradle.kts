@@ -6,8 +6,6 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-includeBuild("build-logic")
-
 dependencyResolutionManagement {
     repositories {
         google()
