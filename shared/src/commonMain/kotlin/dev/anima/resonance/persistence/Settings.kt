@@ -150,4 +150,16 @@ class PresetStore(
             true
         }
     }
+
+    /**
+     * Adds an imported custom preset. The codec has already
+     * disambiguated its ID against the existing set; this is defense in
+     * depth — an ID collision here is a bug, never an overwrite.
+     */
+    fun addImported(preset: TuningPreset): TuningPreset {
+        require(!preset.builtIn) { "built-ins are never imported: ${preset.id}" }
+        require(customs.none { it.id == preset.id }) { "import ID collision: ${preset.id}" }
+        customs.add(preset)
+        return preset
+    }
 }

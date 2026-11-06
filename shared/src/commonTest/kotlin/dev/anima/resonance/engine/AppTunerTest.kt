@@ -263,6 +263,54 @@ class AppTunerTest {
     }
 
     @Test
+    fun importCustomPresetsAddsAndPersists() = runBlocking {
+        val saved = mutableListOf<List<dev.anima.resonance.music.TuningPreset>>()
+        val engine = AppTuner(ToneInput(freq("E", 2)), InMemorySettingsRepository(), PresetStore()) { saved += it }
+        engine.start()
+        val payload = dev.anima.resonance.music.TuningPresetJson.encode(
+            listOf(
+                dev.anima.resonance.music.TuningPreset("imp-a", "Imported A", builtIn = false,
+                    strings = listOf(dev.anima.resonance.music.TuningString("imp-a-s1", Note.fromLabel("E2")))),
+                dev.anima.resonance.music.TuningPreset("imp-b", "Imported B", builtIn = false,
+                    strings = listOf(dev.anima.resonance.music.TuningString("imp-b-s1", Note.fromLabel("A2")))),
+            ),
+        )
+        val result = engine.importCustomPresets(payload)
+        assertEquals(2, result.importedCount)
+        assertNull(result.error)
+        assertEquals(1, saved.size, "import must persist exactly once")
+        assertTrue(engine.presetsView.any { it.name == "Imported A" })
+        // Re-importing the same file: deterministic dedupe, no clobber.
+        val second = engine.importCustomPresets(payload)
+        assertEquals(2, second.importedCount, "re-import creates disambiguated copies, not overwrites")
+        assertEquals(4, engine.presetsView.count { it.name.startsWith("Imported") })
+    }
+
+    @Test
+    fun importMalformedPayloadFailsWithoutMutation() = runBlocking {
+        val engine = harness(ToneInput(freq("E", 2))).first
+        engine.start()
+        val before = engine.presetsView.size
+        val bad = engine.importCustomPresets("{ not json")
+        assertEquals(0, bad.importedCount, "a failed import imports nothing")
+        assertTrue(bad.error != null, "the failure reason must be surfaced")
+        assertEquals(before, engine.presetsView.size, "no mutation on failure")
+        val wrongVersion = engine.importCustomPresets("""{"resonanceVersion": 99, "tunings": []}""")
+        assertTrue(wrongVersion.error != null)
+    }
+
+    @Test
+    fun exportCustomPresetsRoundTrips() = runBlocking {
+        val engine = harness(ToneInput(freq("E", 2))).first
+        engine.start()
+        engine.createCustomPreset("Export Me", listOf("D2", "A2", "D3").map(Note::fromLabel))
+        val payload = engine.exportCustomPresets()
+        val decoded = dev.anima.resonance.music.TuningPresetJson.decode(payload)
+        assertEquals(listOf("Export Me"), decoded.map { it.name })
+        assertEquals(listOf("D2", "A2", "D3"), decoded.single().strings.map { it.note.label })
+    }
+
+    @Test
     fun captureFailureStopsEngineAfterBudget() = runBlocking {
         val input = ToneInput(freq("E", 2))
         input.openOk = true

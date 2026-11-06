@@ -1,14 +1,15 @@
 # STATE — Resonance
 
-- Integration — custom-preset CRUD done (184/184 green). In flight: custom-tuning
-  editor UI (create/edit/delete wired to the custom-preset CRUD engine API). After: import/
-  export feedback (SDK-blocked picker); next: external-blocker follow-up.
-- Last green checkpoint: :shared:jvmTest 184/184 (2026-11-06), commit
-  (custom-preset CRUD); ./scripts/run-demo.sh 5/5 exit 0.
-- Test breakdown: 184 = music 47 + DSP 27 + state/stream/capture 25 +
-  target-set 4 + UI-state 21 + headless Compose UI 11 + persistence 21 +
-  AppTuner 11 + TunerController 9 + others (concert/codec). Verify per-run
-  via test-results XML, not this snapshot.
+- Integration — import/export done (203/203 green): integration COMPLETE (all product-spec
+  slices). In flight: external-blocker follow-up (Android
+  document-picker wiring in the shell is code-complete,
+  compile-blocked on the missing SDK; device smoke when a device exists).
+- Last green checkpoint: :shared:jvmTest 203/203 (2026-11-06);
+  ./scripts/run-demo.sh 5/5 exit 0.
+- Test breakdown: 203 = music 47 + DSP 27 + state/stream/capture 25 +
+  target-set 4 + UI-state 21 + headless Compose UI 14 + persistence 21 +
+  AppTuner 14 + TunerController 10 + editor/codec/concert/others.
+  Verify per-run via test-results XML, not this snapshot.
 - Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios;
   [2] = instrument AUTO → lock E2 → unlock; mandatory verify.sh gate 2/4).
 - Architecture: AppTuner (engine, common: capture orchestration, YIN,

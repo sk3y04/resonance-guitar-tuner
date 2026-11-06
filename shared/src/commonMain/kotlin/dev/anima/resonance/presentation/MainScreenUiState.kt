@@ -40,4 +40,6 @@ data class MainScreenUiState(
     val concertError: String? = null,
     // Active enharmonic display preference (drives the glyph, targets, rows)
     val accidentalSpelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
+    // Last import/export result message (null = nothing to show)
+    val importResultText: String? = null,
 )

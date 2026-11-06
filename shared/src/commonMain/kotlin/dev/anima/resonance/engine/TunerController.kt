@@ -133,5 +133,15 @@ class TunerController(
         engine.setAccidentalSpelling(spelling)
     }
 
+    /**
+     * Imports tunings from a versioned JSON payload (the Android
+     * document picker hands the controller the file contents).
+     */
+    suspend fun importCustomPresets(payload: String): ImportResult =
+        engine.importCustomPresets(payload)
+
+    /** Versioned JSON of all custom tunings (for the export picker). */
+    fun exportCustomPresets(): String = engine.exportCustomPresets()
+
     suspend fun toggleFavorite(id: String): Boolean = engine.toggleFavorite(id)
 }

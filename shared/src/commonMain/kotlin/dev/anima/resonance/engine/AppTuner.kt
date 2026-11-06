@@ -15,6 +15,16 @@ import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerSnapshot
 import dev.anima.resonance.presentation.TunerStateMachine
 
+    /**
+     * Result of an import attempt. A failed import has
+     * [importedCount] = 0 and a non-null [error] describing why.
+     */
+    data class ImportResult(
+        val importedCount: Int,
+        val skippedCount: Int,
+        val error: String?,
+    )
+
 /**
  * AppTuner: the single deterministic engine behind the UI.
  *
@@ -40,6 +50,8 @@ class AppTuner(
      */
     private val persistCustoms: (suspend (List<TuningPreset>) -> Unit)? = null,
 ) {
+    /** All presets (built-ins + customs) for import dedupe and UI mapping. */
+    val presetsView: List<TuningPreset> get() = presets.all()
     private val stateMachine = TunerStateMachine()
     private val analyzer = StreamingAnalyzer(input.sampleRate, stateMachine = stateMachine)
 
@@ -189,6 +201,30 @@ class AppTuner(
         persistCustoms?.invoke(presets.customs())
         return true
     }
+
+    /**
+     * Imports custom tunings from a versioned JSON payload
+     * (spec §2). Untrusted by contract: the codec validates size/counts/
+     * lengths, built-ins are never imported, duplicate IDs are disambiguated
+     * deterministically (never overwriting). A failed import mutates
+     * nothing and reports its reason.
+     */
+    suspend fun importCustomPresets(payload: String): ImportResult {
+        val decoded = try {
+            dev.anima.resonance.music.TuningPresetJson.decode(payload, presets.all())
+        } catch (e: IllegalArgumentException) {
+            return ImportResult(0, 0, e.message ?: "Unreadable tuning file")
+        }
+        for (preset in decoded) {
+            presets.addImported(preset)
+        }
+        persistCustoms?.invoke(presets.customs())
+        return ImportResult(decoded.size, 0, null)
+    }
+
+    /** Versioned JSON of all custom tunings (for the document picker). */
+    fun exportCustomPresets(): String =
+        dev.anima.resonance.music.TuningPresetJson.encode(presets.customs())
 
     /**
      * Applies mode + preset to the state machine:

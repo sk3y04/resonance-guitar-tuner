@@ -403,3 +403,39 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - JUnit4 gotcha: `fun test() = runBlocking { assertFailsWith<T> { ... } }`
   infers a non-Unit return type → "Method should be void". Use a block body
   when the last expression is a value-returning assertion helper.
+
+## Custom-tuning editor sheet (COMPLETE)
+- Spec §2: creating a custom named tuning. `CustomEditorUi` mapper (note/
+  octave cycling, validation, `toNotes`) + `CustomEditorSheet` composable
+  (tags `resonance.editor.*`); `TunerScreen` editor param + onAddTuning/
+  onEditTuning/onDeleteTuning; `MainScreen` form state in `remember`
+  (headless-testable), prefill from stringsPreview, save re-validates.
+  Custom rows in the sheet get edit/delete actions; built-ins read-only.
+  GREEN 194/194. Commit: custom-tuning editor UI.
+- Headless UI gotcha: nodes below the 300dp sheet fold are in the semantics
+  tree but `performClick` on off-screen nodes is a no-op — use
+  `performScrollToNode` first (see sheet.add in the create-flow test).
+
+## Accidental-preference control ♯/♭ (COMPLETE)
+- Spec §2: ♯/♭ display preference for the same pitch. `Note.Spelling` enum
+  + `Note.spelledLabel()` (enharmonic conversion, floor division for Cb/Fb).
+  Display-only by contract: Note identity, frequencies, stored tunings and
+  the codec never change. Fixed a latent display bug in
+  `MainScreenUi.toUiState` (accidental glyph was missing from the big label).
+  Persists via settings; re-derives targets + sheet rows.
+  Tests: NoteSpellingTest (10), MainScreenUiStateTest, TunerControllerTest,
+  TunerScreenUiTest. GREEN 199/199 + demo 5/5.
+
+## Import/export feedback (engine + sheet) (COMPLETE)
+- Spec §2: import/export + result feedback. `AppTuner.importCustomPresets`
+  (versioned JSON, untrusted: codec limits, builtIns never imported, ID
+  dedupe `-import`, no mutation on failure) + `exportCustomPresets`;
+  `ImportResult`; `PresetStore.addImported` (defense: no ID overwrite);
+  sheet Import/Export buttons (`resonance.sheet.import`/`.export`) + result
+  text (`resonance.sheet.importResult`); `MainScreen.handleImportPayload`
+  (ticker merges the message into mapped state so it survives refresh);
+  `onImportPicker`/`onExportPicker` params (Android document picker — SDK-blocked).
+  GREEN 203/203 + demo 5/5.
+- Gotcha: `ImportResult` landed top-level in the engine package (not nested
+  in AppTuner); result text renders below the 300dp fold →
+  `performScrollToNode` in the headless test.

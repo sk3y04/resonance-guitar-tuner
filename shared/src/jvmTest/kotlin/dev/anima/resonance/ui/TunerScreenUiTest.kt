@@ -350,6 +350,21 @@ class TunerScreenUiTest {
     }
 
     @Test
+    fun sheetShowsImportResultText() {
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            importResultText = "Imported 2 tunings",
+        )
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+            }
+        }
+        rule.onNodeWithTag("resonance.sheet").performScrollToNode(hasTestTag("resonance.sheet.importResult"))
+        rule.onNodeWithTag("resonance.sheet.importResult").assertIsDisplayed()
+    }
+
+    @Test
     fun presetSheetHiddenWithoutRows() {
         show(state(status = TunerStatus.LISTENING))
         rule.onNodeWithTag("resonance.sheet").assertDoesNotExist()

@@ -37,19 +37,42 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     refreshMs: Long = 50,
     onPermissionCta: () -> Unit = {},
+    /** Open the document picker for import (Android shell). */
+    onImportPicker: () -> Unit = {},
+    /** Open the document picker for export (Android shell). */
+    onExportPicker: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var ui by remember(controller) { mutableStateOf(controller.state()) }
+    // Last import/export result message (UI-local; the ticker merges
+    // it into the mapped state so it survives refreshes).
+    var importMessage by remember(controller) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(controller) {
         while (isActive) {
-            ui = controller.state()
+            ui = controller.state().copy(importResultText = importMessage)
             delay(refreshMs)
         }
     }
 
     fun refresh() {
-        ui = controller.state()
+        ui = controller.state().copy(importResultText = importMessage)
+    }
+
+    /**
+     * Handles a tuning file payload (Android's document picker hands
+     * it over). Result feedback renders in the sheet.
+     */
+    fun handleImportPayload(payload: String) {
+        scope.launch {
+            val result = controller.importCustomPresets(payload)
+            importMessage = when {
+                result.error != null -> "Import failed: ${result.error}"
+                result.importedCount > 0 -> "Imported ${result.importedCount} tuning(s)"
+                else -> "Import complete — no new tunings in file"
+            }
+            refresh()
+        }
     }
 
     // Custom-tuning editor form state (create: editingId = null).
@@ -148,6 +171,8 @@ fun MainScreen(
                 refresh()
             }
         },
+        onImportRequested = onImportPicker,
+        onExportRequested = onExportPicker,
         editor = editor,
         onEditorNameChange = { name -> updateEditor { it.copy(name = name) } },
         onEditorNoteCycle = { index, up ->

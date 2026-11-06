@@ -60,6 +60,8 @@ fun TunerScreen(
     onEditTuning: (String) -> Unit = {},
     onDeleteTuning: (String) -> Unit = {},
     onSpellingSelect: (dev.anima.resonance.music.Spelling) -> Unit = {},
+    onImportRequested: () -> Unit = {},
+    onExportRequested: () -> Unit = {},
     editor: CustomEditorUiState? = null,
     onEditorNameChange: (String) -> Unit = {},
     onEditorNoteCycle: (Int, Boolean) -> Unit = { _, _ -> },
@@ -417,13 +419,42 @@ fun TunerScreen(
                             }
                         }
                     }
-                    OutlinedButton(
-                        onClick = onAddTuning,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 6.dp)
-                            .testTag("resonance.sheet.add"),
-                    ) { Text("＋ New tuning") }
+                            .padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = onAddTuning,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("resonance.sheet.add"),
+                        ) { Text("＋ New") }
+                        OutlinedButton(
+                            onClick = onImportRequested,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("resonance.sheet.import"),
+                        ) { Text("Import") }
+                        OutlinedButton(
+                            onClick = onExportRequested,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("resonance.sheet.export"),
+                        ) { Text("Export") }
+                    }
+                    state.importResultText?.let { message ->
+                        Text(
+                            text = message,
+                            style = ResonanceType.hint,
+                            color = ResonanceColors.accent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .testTag("resonance.sheet.importResult"),
+                        )
+                    }
                 }
             }
         }
