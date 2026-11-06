@@ -269,3 +269,25 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   with presetRows/concertLabel/concertError + mapper params, render the
   sheet in Compose (compile-verified), then Android document-picker boundary
   = missing Android SDK (document, do not retry).
+
+## Sheet wiring into TunerScreen (COMPLETE)
+- Mapper (TDD): MainScreenUiState += presetRows/concertLabel/concertError;
+  toUiState += presets/favoritePresetIds/selectedPresetId (additive, default
+  values — all 15 UI-state tests unchanged). RED: 21 compile errors (missing
+  params/fields) -> GREEN 3/3 (MainScreenSheetStateTest: rows+flags,
+  out-of-range concert error, empty defaults).
+- Renderer (TDD, headless semantics): TunerScreen += onPresetSelect (default
+  {}), sheet section when presetRows non-empty: container tag
+  resonance.sheet (bounded heightIn(300dp) + verticalScroll — content
+  overflows the screen, sheet must scroll), resonance.sheet.concert
+  (label + error text in ResonanceColors.error), resonance.sheet.row.<id>
+  (clickable m3 Surface(onClick), selected highlight, favorite star,
+  stringsPreview).
+- UI tests: +2 (sheet visible w/ rows + concert error; hidden without rows).
+  RED: sheet test failed (no tags). Two honest test-ordering bugs found via
+  failures: (1) row 8 below the 300dp fold -> assertIsDisplayed is correct
+  behavior, fixed by performScrollToNode(hasTestTag(...)) — the row MUST be
+  scroll-reachable; (2) concert row asserted AFTER scrolling past it —
+  reordered assertions. GREEN 7/7 TunerScreenUiTest.
+- performScrollToNode is a top-level extension in androidx.compose.ui.test
+  (import required; ActionsKt facade).

@@ -28,6 +28,10 @@ object MainScreenUi {
         selectedStringIndex: Int?,
         concertPitchHz: Double = 440.0,
         captureError: Boolean = false,
+        // Sheet inputs (built-ins + customs, favorites, selection)
+        presets: List<TuningPreset> = emptyList(),
+        favoritePresetIds: Set<String> = emptySet(),
+        selectedPresetId: String = "standard",
     ): MainScreenUiState {
         val status = snapshot?.status ?: TunerStatus.IDLE
         val reading = snapshot?.reading
@@ -75,6 +79,9 @@ object MainScreenUi {
             targetLabels = if (inInstrument) preset!!.strings.map { it.note.label } else emptyList(),
             selectedStringIndex = if (inInstrument) selectedStringIndex else null,
             concertPitchHz = concertPitchHz,
+            presetRows = PresetSheetUi.toRows(presets, favoritePresetIds, selectedPresetId),
+            concertLabel = PresetSheetUi.concertPitchLabel(concertPitchHz),
+            concertError = PresetSheetUi.concertPitchError(concertPitchHz),
         )
     }
 

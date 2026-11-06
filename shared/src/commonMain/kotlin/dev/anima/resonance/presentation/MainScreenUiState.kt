@@ -34,4 +34,8 @@ data class MainScreenUiState(
     val targetLabels: List<String>,  // low-to-high with octaves; empty in chromatic
     val selectedStringIndex: Int?,   // exposed semantically in the UI
     val concertPitchHz: Double,
+    // Settings/preset sheet
+    val presetRows: List<PresetRowUi> = emptyList(),
+    val concertLabel: String = "",
+    val concertError: String? = null,
 )

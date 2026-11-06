@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,6 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
@@ -49,6 +52,7 @@ fun TunerScreen(
     onStringSelect: (Int) -> Unit,
     onPermissionCta: () -> Unit,
     onRetryCapture: () -> Unit,
+    onPresetSelect: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -238,6 +242,91 @@ fun TunerScreen(
         }
 
         Spacer(Modifier.height(8.dp))
+
+        // Settings/preset sheet — rows + concert pitch (tested state)
+        if (state.presetRows.isNotEmpty()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState())
+                    .testTag("resonance.sheet"),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("resonance.sheet.concert"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = state.concertLabel,
+                            style = ResonanceType.labelSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        state.concertError?.let { error ->
+                            Text(
+                                text = error,
+                                color = ResonanceColors.error,
+                                style = ResonanceType.hint,
+                                modifier = Modifier.testTag("resonance.sheet.concertError"),
+                            )
+                        }
+                    }
+                    state.presetRows.forEach { row ->
+                        Surface(
+                            onClick = { onPresetSelect(row.id) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
+                                .testTag("resonance.sheet.row.${row.id}")
+                                .semantics {
+                                    contentDescription = "Tuning ${row.name}" +
+                                        (if (row.selected) ", selected" else "") +
+                                        (if (row.favorite) ", favorite" else "")
+                                },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (row.selected) ResonanceColors.accent.copy(alpha = 0.14f)
+                            else MaterialTheme.colorScheme.surface,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = row.name,
+                                    style = ResonanceType.labelSmall,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = row.stringsPreview,
+                                    style = ResonanceType.hint,
+                                )
+                                if (row.favorite) {
+                                    Text(
+                                        text = "★",
+                                        color = ResonanceColors.accent,
+                                        style = ResonanceType.labelSmall,
+                                        modifier = Modifier.padding(start = 8.dp),
+                                    )
+                                }
+                                if (row.selected) {
+                                    Text(
+                                        text = "●",
+                                        color = ResonanceColors.accent,
+                                        style = ResonanceType.labelSmall,
+                                        modifier = Modifier.padding(start = 8.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         OutlinedButton(
             onClick = onOpenPresets,
             modifier = Modifier
