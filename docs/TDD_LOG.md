@@ -164,3 +164,34 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - GREEN: exit 0 — 114/114.
 - Design: MainScreenUiState is Compose-free; screen renders it, so the whole
   spec state matrix is testable without a display (headless workaround).
+
+## Theme tokens + instrument screen (COMPLETE, compile-verified)
+- Code: ui/ResonanceTheme.kt (spec §8 dark-primary tokens #0B1118/#121D29/
+  #ECF3F7/#98AABD/#54D6C7/#8AD9A0/#F0B56D/#F18F91 + light secondary, tnum
+  tabular numerals), ui/CentsDial.kt (270° partial arc, ±10c ticks, in-tune
+  zone, animated pointer, clamped-outside pointer), ui/TunerScreen.kt (note
+  glyph+octave, Hz, FLAT/SHARP context, signed cents, direction text, string
+  row low-to-high, mode toggle, permission CTA, settings/presets, full test
+  tag surface).
+- Verification: :shared:compileKotlinJvm EXIT 0 (commonMain Compose compiles
+  for the JVM target). No contrived tests for pure layout/theme (spec allows).
+- 2026 Compose API notes (verified by compile + javap against ui-desktop
+  1.12.2 jar): testTag is now Modifier.testTag (androidx.compose.ui.platform),
+  contentDescription is property-assignment in semantics {}, Modifier.weight
+  is a RowScope/ColumnScope member (no top-level import), layout package split
+  into foundation-layout artifact, @Composable reads must precede Canvas
+  lambdas.
+
+## Headless JVM Compose UI tests (COMPLETE)
+- Tests: TunerScreenUiTest (5) in jvmTest: listening hint+dial, no fake note;
+  flat E2 instrument mode (note/cents/string.0-5 tags); chromatic has no
+  string nodes; permission CTA only on permanent denial; clipping keeps dial.
+- Infra: ui-test-junit4 1.12.2 (verified 200 on Maven Central) + native skiko
+  skiko-awt-runtime-linux-x64 0.150.2 (pinned to CMP 1.12.2's resolved skiko)
+  in jvmTest — WITHOUT it: LibraryLoadException "Cannot find
+  libskiko-linux-x64.so.sha256".
+- RESULT: 5/5 PASS headless (skiko software rendering; no display needed).
+  Render-blocker scope NARROWED: semantics/behavior UI tests are unblocked; screenshots
+  remain blocked — CMP 1.12.2 desktop test API has NO capture method (verified
+  via javap of ui-test-desktop-1.12.2.jar: no capture/screenshot symbols).
+- FULL SUITE: ./scripts/test-unit.sh PASS — "discovered tests: 119" exit 0.

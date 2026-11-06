@@ -14,6 +14,10 @@ activityCompose = "1.13.0"
 
 [libraries]
 compose-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref = "compose" }
+compose-ui-test-junit4 = { group = "org.jetbrains.compose.ui", name = "ui-test-junit4", version.ref = "compose" }
+# Native skiko runtime for headless JVM Compose UI tests. Version MUST track
+# the skiko resolved by CMP 1.12.2 (verified 2026-11-06: 0.150.2).
+skiko-native = { module = "org.jetbrains.skiko:skiko-awt-runtime-linux-x64", version = "0.150.2" }
 compose-foundation = { group = "org.jetbrains.compose.foundation", name = "foundation", version.ref = "compose" }
 compose-material3 = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "material3" }
 coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

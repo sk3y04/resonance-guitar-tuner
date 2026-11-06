@@ -40,5 +40,10 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.coroutines.test)
         }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.compose.ui.test.junit4)
+            runtimeOnly(libs.skiko.native)
+        }
     }
 }

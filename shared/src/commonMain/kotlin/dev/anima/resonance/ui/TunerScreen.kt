@@ -1,0 +1,253 @@
+package dev.anima.resonance.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import dev.anima.resonance.presentation.MainScreenUiState
+import dev.anima.resonance.presentation.TunerMode
+import kotlin.math.roundToInt
+
+/**
+ * Main instrument screen. Renders the tested [MainScreenUiState]
+ * Original precision-instrument aesthetic: large note
+ * glyph, partial-arc dial, signed cents, FLAT/SHARP context, string row,
+ * mode toggle, and real permission/settings controls — no placeholders.
+ *
+ * Semantic/test tags: resonance.note, resonance.cents, resonance.dial,
+ * resonance.hint, resonance.mode, resonance.string.<i>, resonance.settings,
+ * resonance.concert, resonance.permission, resonance.preset.
+ */
+@Composable
+fun TunerScreen(
+    state: MainScreenUiState,
+    onOpenSettings: () -> Unit,
+    onOpenPresets: () -> Unit,
+    onModeToggle: () -> Unit,
+    onStringSelect: (Int) -> Unit,
+    onPermissionCta: () -> Unit,
+    onRetryCapture: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Top bar: preset / mode name + settings + concert pitch
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = state.presetName ?: "Chromatic",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("resonance.preset"),
+            )
+            OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.testTag("resonance.settings"),
+                contentPadding = PaddingValues(12.dp),
+            ) { Text("Settings") }
+            Spacer(Modifier.size(12.dp))
+            Text(
+                text = "A4 ${state.concertPitchHz.toIntIfWholeOrOneDecimal()} Hz",
+                style = ResonanceType.labelSmall,
+                modifier = Modifier.testTag("resonance.concert"),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Built-in microphone",
+            style = ResonanceType.hint,
+            modifier = Modifier.align(Alignment.Start),
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        // Note + octave + frequency
+        if (state.noteLabel != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = state.noteLabel,
+                    style = ResonanceType.noteGlyph,
+                    modifier = Modifier
+                        .testTag("resonance.note")
+                        .semantics {
+                            contentDescription = "Detected note ${state.noteLabel}${state.octave ?: ""}"
+                        },
+                )
+                state.octave?.let {
+                    Text(
+                        text = it,
+                        style = ResonanceType.octave,
+                        modifier = Modifier.padding(bottom = 28.dp),
+                    )
+                }
+            }
+            Text(
+                text = state.frequencyText ?: "",
+                style = ResonanceType.frequency,
+                modifier = Modifier.testTag("resonance.frequency"),
+            )
+        } else {
+            Spacer(Modifier.size(96.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Dial with FLAT / SHARP context
+        CentsDial(
+            position = state.meterPosition,
+            inTune = state.inTune,
+            clamped = state.meterClamped,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("FLAT", style = ResonanceType.labelSmall)
+            Text(
+                text = state.centsText?.let { "$it cents" } ?: "—",
+                style = ResonanceType.cents,
+                modifier = Modifier
+                    .testTag("resonance.cents")
+                    .semantics {
+                        contentDescription = "${state.centsText ?: "no"} cents ${state.directionText?.lowercase() ?: "measuring"}"
+                    },
+            )
+            Text("SHARP", style = ResonanceType.labelSmall)
+        }
+        Text(
+            text = state.directionText ?: "",
+            style = ResonanceType.direction,
+        )
+
+        // Status hint (listening / clipping / stale / error)
+        if (state.statusHint != null) {
+            Text(
+                text = state.statusHint,
+                style = ResonanceType.hint,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .testTag("resonance.hint"),
+            )
+        }
+        if (state.captureError) {
+            Button(
+                onClick = onRetryCapture,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .testTag("resonance.retry"),
+            ) { Text("Retry microphone") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // String row (instrument mode) or nothing (chromatic)
+        if (state.targetLabels.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                state.targetLabels.forEachIndexed { i, label ->
+                    val selected = state.selectedStringIndex == i
+                    val color = if (selected) ResonanceColors.accent
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("resonance.string.$i")
+                            .semantics {
+                                contentDescription = "String ${i + 1}: $label" +
+                                    (if (selected) ", selected" else "")
+                            }
+                            .let { m -> if (selected) m.background(ResonanceColors.accent.copy(alpha = 0.18f)) else m },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = label,
+                                style = ResonanceType.labelSmall.copy(
+                                    color = color,
+                                    fontWeight = FontWeight.Medium,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Mode toggle
+        Row(
+            modifier = Modifier.testTag("resonance.mode"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(onClick = onModeToggle) {
+                Text(if (state.mode == TunerMode.CHROMATIC) "Instrument" else "Chromatic")
+            }
+        }
+
+        // Permission CTA — only on permanent denial (never re-prompts)
+        if (state.permissionCtaVisible) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onPermissionCta,
+                modifier = Modifier.testTag("resonance.permission"),
+            ) { Text(state.permissionCtaText) }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onOpenPresets,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("resonance.presets"),
+        ) { Text("Tunings") }
+    }
+}
+
+private fun Double.toIntIfWholeOrOneDecimal(): String {
+    val tenths = (this * 10).roundToInt()
+    return if (tenths % 10 == 0) "${tenths / 10}" else "${tenths / 10}.${tenths % 10}"
+}
