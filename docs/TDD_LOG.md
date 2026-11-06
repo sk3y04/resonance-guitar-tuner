@@ -43,3 +43,19 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   implementation (derived formula) was already correct; the wrong expectations
   were corrected to 4-dp exact values, tolerance 1e-3 retained. This commit
   was amended (local repo, same slice) so no failing state is labeled green.
+
+## Target matching + chromatic band (COMPLETE)
+- Tests: TargetMatcherTest (6), ChromaticTargetsTest (4).
+- RED: exit 1; matcher 6/6 + chromatic 2/4 failures (stubs threw/returned empty;
+  band-iteration tests pass vacuously on empty lists by design).
+- GREEN: test-unit → "discovered tests: 35", PASS, exit 0.
+
+## Versioned preset JSON + label parser (COMPLETE)
+- Tests: TuningPresetJsonTest (10), NoteLabelTest (2).
+- RED: exit 1; json 9/10 + label 2/2 failures (stubs: decode→[], fromLabel→NIError).
+- Design note (before GREEN): round-trip test corrected to not assert the
+  builtIn flag survives import — payload entries with builtIn=true are
+  deterministically SKIPPED (built-ins always come from code).
+- BUG FIXED during GREEN: fromLabel used octave offset 2 for naturals ("E2" →
+  empty octave part); corrected to offset 1 for naturals / 2 for accidentals.
+- GREEN: test-unit → "discovered tests: 47", PASS, exit 0.
