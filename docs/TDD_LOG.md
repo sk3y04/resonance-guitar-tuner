@@ -114,3 +114,17 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Design: virtual clock (nowMs) injected per frame; median-of-5 smoothing;
   PitchEstimate(0,0) or conf < minConfidence = discontinuity (resets candidate
   + smoothing); manual target bypasses chromatic matching.
+
+## Streaming analyzer (COMPLETE)
+- Tests: StreamingAnalyzerTest (6): null-until-first-frame then MEASURED 440Hz
+  stream, clipping surface overrides status (CLIPPING), silence stays
+  LISTENING with zero frequency (no fake 0Hz success state), caller chunks
+  never mutated, stale after silence stream, low-level sine not clipping.
+- RED: exit 1 — 6/6 NotImplementedError on stub (after fixing the stub's own
+  missing imports); 88 tests total, prior 82 green.
+- Test correction (own fixture): 2x1024 samples fill the 2048 ring exactly, so
+  the 2nd call yields an UNSTABLE snapshot, not null.
+- GREEN: exit 0 — 88/88.
+- Pipeline: chunk(copy)->ring->frame->rms+clip(raw)->removeDc->YIN->
+  TunerStateMachine->TunerSnapshot. Bounded memory; one snapshot per call
+  once ready.

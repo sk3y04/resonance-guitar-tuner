@@ -9,6 +9,7 @@ enum class TunerStatus {
     UNSTABLE,     // pitch present but not stable yet (hysteresis/silence grace)
     MEASURED,     // stable note, reliable display
     STALE,        // no fresh pitch beyond the stale window — last data is old
+    CLIPPING,     // input at full scale — measurement untrustworthy
 }
 
 enum class PitchDirection { FLAT, INTUNE, SHARP }
