@@ -1,0 +1,39 @@
+# All versions verified against official metadata on 2026-11-06.
+# See docs/DEPENDENCIES.md for evidence, URLs, and deviations from the
+# research candidates (AGP/Gradle pinned to the KMP-tested matrix ceiling).
+[versions]
+kotlin = "2.4.21"
+agp = "9.3.1"
+compose = "1.12.2"
+material3 = "1.9.0"
+coroutines = "1.11.0"
+serializationRuntime = "1.12.0"
+lifecycle = "2.11.0"
+datastore = "1.3.0"
+activityCompose = "1.13.0"
+
+[libraries]
+compose-ui = { group = "org.jetbrains.compose", name = "ui", version.ref = "compose" }
+compose-foundation = { group = "org.jetbrains.compose", name = "foundation", version.ref = "compose" }
+compose-material3 = { group = "org.jetbrains.compose", name = "material3", version.ref = "material3" }
+coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationRuntime" }
+lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "lifecycle" }
+lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime", version.ref = "lifecycle" }
+lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+datastore = { group = "androidx.datastore", name = "datastore", version.ref = "datastore" }
+activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+# Compose compiler plugin: version MUST equal the Kotlin plugin version
+# (per CMP compatibility docs; verified marker exists at 2.4.21).
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# Unified CMP plugin (1.10+): replaces the old `org.jetbrains.compose` +
+# separate `org.jetbrains.compose.compiler` pair. The Compose compiler is
+# wired in internally at the Kotlin plugin's version.
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+resonanceAndroidKmp = { id = "resonance.android.kmp" }

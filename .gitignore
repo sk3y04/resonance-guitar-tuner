@@ -1,0 +1,17 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+local.properties
+
+# Android / IDE
+*.iml
+.idea/
+captures/
+.cxx/
+.DS_Store
+
+# Build artifacts (keep checksums/metadata tracked, ignore binaries + logs)
+artifacts/*.apk
+artifacts/*.aab
+artifacts/logs/
