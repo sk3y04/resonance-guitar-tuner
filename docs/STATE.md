@@ -21,3 +21,11 @@
 - Blockers: Android SDK licenses; no display/Xvfb;
   no emulator/phone.
 - Failing test: none.
+- AudioRecord adapter: WRITTEN, compile BLOCKED (missing SDK). The state-machine/capture milestone
+  otherwise COMPLETE (99/99 host tests: state machine, streaming, capture
+  orchestration, concert pitch). Milestone exit = satisfied for everything
+  locally achievable; Android compile + device validation remain explicit
+  BLOCKED/NOT RUN gates, not claims.
+- Next session resume point: Compose UI — behavior/semantics tests
+  FIRST (denied permission, listening, flat E2, in-tune, clipping, stale,
+  string select/lock, preset switch), then dial + theme tokens per spec §8.
