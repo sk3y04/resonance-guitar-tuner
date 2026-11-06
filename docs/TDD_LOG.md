@@ -357,4 +357,49 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   A4=440 → in tune after setConcertPitch(432) (persisted, shown in UI state);
   [5] 3 lost chunks → captureError, retry reopens (deviceOpens=2) → cleared.
 - Assertive: any scenario failure exits 1; wired as mandatory gate 2/4 in
-  verify.sh + ./scripts/run-demo.sh. Run-verified 5/5, exit 0.
+  verify.sh + ./scripts/run-demo.sh. Run-verified 5/5, exit 0. (Scenario [2]
+  was rewritten for AUTO target selection: instrument mode no longer locks by default — it
+  AUTO-selects the played string, then locks/unlocks via tap.)
+
+## Instrument AUTO target selection + manual lock (COMPLETE)
+- Spec §2: instrument mode follows the played string (AUTO nearest preset
+  string); tapping a string locks it, tapping again unlocks.
+- TDD: RED TargetSetTest (4, compile errors: no setTargetSet) →
+  TunerStateMachine.targetSetOverride used in onPitch (manual lock still
+  overrides the set; setConcertPitch clears the set, engine re-applies);
+  AppTuner.lockedString + selectString toggle + applyTarget(set→lock);
+  controller passes engine.lockedString (null in AUTO). GREEN 173/173.
+- Demo [2] rewritten: G3 tone → AUTO G3 in tune → lock E2 (target switches,
+  cents huge) → unlock → G3 again. 5/5. Commit: instrument AUTO target selection.
+- Note: A#4 vs E4 is +600 cents (perfect 5th), not +700 — first RED draft
+  had the wrong expected value; the implementation was correct, the test
+  expectation was fixed (assertion kept strict: 590..610 window).
+
+## Concert-pitch steppers + tenths label (COMPLETE)
+- Spec §2 requires a working 0.1 Hz control; it was display-only.
+- TDD: RED 10 compile errors (PresetSheetUiTest ×3, TunerControllerTest ×1,
+  TunerScreenUiTest ×1 + cascade) → PresetSheetUi.stepConcertPitch (tenth
+  rounding + clamp 400..480, long-arithmetic to avoid float drift),
+  concertPitchLabel keeps the tenth ("A4 = 439.9 Hz"; whole numbers clean),
+  AppTuner/TunerController.stepConcertPersists, TunerScreen −/+ buttons
+  (tags resonance.sheet.concert.minus/.plus) wired in MainScreen.
+  GREEN 178/178. Commit: concert-pitch steppers.
+- Latent bug fixed in-slice: concertPitchLabel used hz.toInt() and would
+  have shown "439" for 439.9 — existing integer-only label tests stayed
+  green (integer format unchanged).
+
+## Custom-preset CRUD at engine/controller level (COMPLETE)
+- Spec §2: custom named tuning creation/editing/deletion. Data layer
+  (PresetStore, JSON codec) existed but the engine never exposed
+  it.
+- TDD: RED 26 compile errors (AppTunerTest ×4, TunerControllerTest ×2) →
+  SettingsRepository.saveCustomPresets (interface default pass-through;
+  InMemory real storage + customsSnapshot; DataStore override),
+  AppTuner persistCustoms hook (last ctor param — trailing lambda),
+  createCustomPreset/editCustomPreset (string IDs preserved positionally
+  when count unchanged)/deleteCustomPreset (selection fallback to
+  "standard" persisted, lock released), TunerController facade + hook.
+  GREEN 184/184. Commit: custom-preset CRUD.
+- JUnit4 gotcha: `fun test() = runBlocking { assertFailsWith<T> { ... } }`
+  infers a non-Unit return type → "Method should be void". Use a block body
+  when the last expression is a value-returning assertion helper.

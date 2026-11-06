@@ -1,20 +1,24 @@
 # STATE — Resonance
 
-- Integration COMPLETE (engine/controller/host/verification) → project at final verification state;
-  only external blockers remain (SDK, display, device); the follow-up milestone tracks them.
-- Last green checkpoint: ./scripts/test-unit.sh exit 0, "discovered tests: 167".
-- Test breakdown: 47 music + 27 DSP + 25 state/streaming/capture/concert +
-  18 UI-state (15+3 sheet) + 10 headless Compose UI (7 screen + 3 host) +
-  21 persistence + 7 AppTuner + 6 TunerController = 167.
-- Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios,
-  full pipeline, deterministic; mandatory verify.sh gate 2/4).
-- Final verification done: ./scripts/verify.sh PASS (mandatory locally-available gates;
-  blocked gates reported as BLOCKED, never green). VERIFICATION.md matrix
-  synced; working tree clean.
-- Architecture (final): AppTuner (engine, common) → TunerController
-  (permissions/errors/UI mapping, common) → MainScreen (Compose host,
-  common) → Android shell (ViewModel + pump thread + Activity, androidMain,
-  Compile-blocked on the missing SDK). DataStoreSettingsRepository is commonMain
+- Integration — custom-preset CRUD done (184/184 green). In flight: custom-tuning
+  editor UI (create/edit/delete wired to the custom-preset CRUD engine API). After: import/
+  export feedback (SDK-blocked picker); next: external-blocker follow-up.
+- Last green checkpoint: :shared:jvmTest 184/184 (2026-11-06), commit
+  (custom-preset CRUD); ./scripts/run-demo.sh 5/5 exit 0.
+- Test breakdown: 184 = music 47 + DSP 27 + state/stream/capture 25 +
+  target-set 4 + UI-state 21 + headless Compose UI 11 + persistence 21 +
+  AppTuner 11 + TunerController 9 + others (concert/codec). Verify per-run
+  via test-results XML, not this snapshot.
+- Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios;
+  [2] = instrument AUTO → lock E2 → unlock; mandatory verify.sh gate 2/4).
+- Architecture: AppTuner (engine, common: capture orchestration, YIN,
+  state machine, PresetStore targets, custom CRUD + persistCustoms hook,
+  AUTO/lock targeting, ±0.1 Hz concert steppers) → TunerController
+  (permissions/errors/UI mapping + CRUD facade, common) → MainScreen
+  (Compose host, common) → Android shell (ViewModel + pump thread +
+  Activity, androidMain, compile-blocked on the missing SDK).
+- Editor UI note: form state lives in MainScreen (remember), not in
+  the composable — headless semantics tests drive it via callbacks. DataStoreSettingsRepository is commonMain
   (injected DataStore); file factory jvmMain, Context factory androidMain.
 - Compose test facts: performScrollToNode = top-level extension in
   androidx.compose.ui.test (import it); assertIsDisplayed is viewport-based —
