@@ -48,6 +48,9 @@ class AppTuner(
     /** Last persisted settings applied to the state machine. */
     private var applied: Settings = Settings.DEFAULTS
 
+    /** Read-only view of [applied] (the UI maps from this). */
+    val currentSettings: Settings get() = applied
+
     /** Most recent analyzed frame; null before the first frame or after stop. */
     var lastSnapshot: TunerSnapshot? = null
         private set
