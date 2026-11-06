@@ -149,3 +149,18 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Test correction (own fixture): 1200*log2(440/435)=+19.8c, not +29c as first
   drafted; range fixed to 18..21. Implementation untouched.
 - GREEN: exit 0 — 99/99; ./scripts/test-unit.sh PASS (99 discovered).
+
+## Main screen UI state (COMPLETE)
+- Tests: MainScreenUiStateTest (15): meter mapping (center 0, limits ±50c,
+  clamping ±1 beyond scale, linearity, clamped flag), permanent denial shows
+  "App settings" route (no re-prompt), listening hint with no fake 0 Hz,
+  flat E2 -> "E"/"2"/"82.4 Hz"/"-3"/"Tune up"/pos -0.06, in-tune center +
+  "In tune", sharp "+12"/"Tune down" explicit sign, stale hint + in-tune
+  cleared (no frozen success), clipping hint + CLIPPING status, capture error
+  distinct from silence (orchestrator-level flag), instrument strings low-to-
+  high with octaves + selection, chromatic has no targets.
+- RED: exit 1 — 15/15 NotImplementedError; 114 tests total, prior 99 green.
+  (captureError added to the stub signature first, per minimal-signature rule.)
+- GREEN: exit 0 — 114/114.
+- Design: MainScreenUiState is Compose-free; screen renders it, so the whole
+  spec state matrix is testable without a display (headless workaround).
