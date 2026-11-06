@@ -15,3 +15,31 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   exit 0 (log artifacts/logs/test-unit-20261106T101420Z.log). Commit: 2nd commit.
 - Reformat note: none needed; implementation is the derived MIDI formula
   freq = concert * 2^((midi-69)/12), midi = 12*(octave+1)+semitones.
+
+## Accidental spelling (COMPLETE)
+- Tests: NoteSpellingTest (5): enharmonic A#==Bb, 2-arg ctor parsing
+  "C#"/"Db"/"A", E#/Fb wrap-around, pitchClass mod-12, invalid names rejected.
+- RED: `./gradlew :shared:jvmTest` → exit 1; NoteSpellingTest tests=5 failures=5
+  (NotImplementedError from minimal parsing stub; regression NoteMathTest 5/5 green).
+- GREEN: `./scripts/test-unit.sh` → "discovered tests: 10", PASS, exit 0.
+
+## Signed cents (COMPLETE)
+- Tests: CentsTest (5): zero at target, ±50c, ±3c, ±1200c octave error (unclamped),
+  non-positive rejection. Exact-integer assertions (values constructed at exact
+  cent offsets; FP error ~1e-10, far from 0.5 rounding boundary).
+- RED: exit 1; CentsTest tests=5 failures=4 (zeroAtTarget passes trivially on 0-stub).
+- GREEN: test-unit → "discovered tests: 15", PASS, exit 0.
+
+## Built-in presets (COMPLETE)
+- Tests: TuningPresetTest (10): Standard/Drop-D/DADGAD/Open-D/Open-G/Half-Step-Down
+  frequencies & labels (low-to-high, strict monotonicity), stable distinct ids,
+  unique string ids, concert-pitch derivation (no frequency literals).
+- RED: exit 1; tests=10 failures=9 (empty-string-list stub; builtInIds test
+  passes on stub by design — id-level guard).
+- GREEN: test-unit → "discovered tests: 25", PASS, exit 0.
+- TEST CORRECTION (justified): first GREEN attempt failed 2 tests because the
+  TEST expectations used conventionally rounded values (G3 "196.00", F#3
+  "185.00"). Exact equal-temperament values are 195.9977 / 184.9972 Hz — the
+  implementation (derived formula) was already correct; the wrong expectations
+  were corrected to 4-dp exact values, tolerance 1e-3 retained. This commit
+  was amended (local repo, same slice) so no failing state is labeled green.
