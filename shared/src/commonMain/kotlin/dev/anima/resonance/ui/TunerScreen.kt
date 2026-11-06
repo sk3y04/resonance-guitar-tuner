@@ -52,6 +52,7 @@ fun TunerScreen(
     onStringSelect: (Int) -> Unit,
     onPermissionCta: () -> Unit,
     onRetryCapture: () -> Unit,
+    onConcertStep: (Boolean) -> Unit = {},
     onPresetSelect: (String) -> Unit = {},
     showSettingsButton: Boolean = true,
     showPresetsButton: Boolean = true,
@@ -270,6 +271,15 @@ fun TunerScreen(
                             style = ResonanceType.labelSmall,
                             modifier = Modifier.weight(1f),
                         )
+                        OutlinedButton(
+                            onClick = { onConcertStep(false) },
+                            modifier = Modifier.testTag("resonance.sheet.concert.minus"),
+                        ) { Text("−") }
+                        Spacer(Modifier.size(6.dp))
+                        OutlinedButton(
+                            onClick = { onConcertStep(true) },
+                            modifier = Modifier.testTag("resonance.sheet.concert.plus"),
+                        ) { Text("+") }
                         state.concertError?.let { error ->
                             Text(
                                 text = error,

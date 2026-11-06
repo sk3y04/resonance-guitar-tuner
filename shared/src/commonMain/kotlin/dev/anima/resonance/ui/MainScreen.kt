@@ -77,6 +77,12 @@ fun MainScreen(
                 refresh()
             }
         },
+        onConcertStep = { up ->
+            scope.launch {
+                controller.stepConcertPitch(up)
+                refresh()
+            }
+        },
         showSettingsButton = false,
         showPresetsButton = false,
         modifier = modifier,

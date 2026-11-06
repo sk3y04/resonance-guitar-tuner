@@ -109,5 +109,10 @@ class TunerController(
         engine.setConcertPitch(hz)
     }
 
+    /** Steps the A4 reference by ±0.1 Hz (spec §2); clamped at 400..480. */
+    suspend fun stepConcertPitch(up: Boolean) {
+        engine.stepConcertPitch(up)
+    }
+
     suspend fun toggleFavorite(id: String): Boolean = engine.toggleFavorite(id)
 }

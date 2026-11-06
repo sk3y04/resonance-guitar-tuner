@@ -7,6 +7,7 @@ import dev.anima.resonance.dsp.StreamingAnalyzer
 import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.Settings
 import dev.anima.resonance.persistence.SettingsRepository
+import dev.anima.resonance.presentation.PresetSheetUi
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerSnapshot
 import dev.anima.resonance.presentation.TunerStateMachine
@@ -94,6 +95,11 @@ class AppTuner(
         stateMachine.setConcertPitch(hz)
         applyTarget(applied) // re-applies a restricted set under the new scale
         return applied
+    }
+
+    /** Steps the A4 reference by ±0.1 Hz (spec §2); clamped at 400..480. */
+    suspend fun stepConcertPitch(up: Boolean) {
+        setConcertPitch(PresetSheetUi.stepConcertPitch(applied.concertPitchHz, up))
     }
 
     /** Persists and applies a new mode; retargets the state machine. */

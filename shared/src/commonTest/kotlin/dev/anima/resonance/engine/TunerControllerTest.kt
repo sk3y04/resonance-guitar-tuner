@@ -122,6 +122,20 @@ class TunerControllerTest {
     }
 
     @Test
+    fun stepConcertPitchPersistsAndClamps() = runBlocking {
+        val (controller, _) = harness()
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        controller.stepConcertPitch(up = false)
+        assertEquals(439.9, controller.state().concertPitchHz, 1e-9)
+        // Drive to the lower bound: repeated down-steps must clamp at 400.0.
+        repeat(400) { controller.stepConcertPitch(up = false) }
+        assertEquals(400.0, controller.state().concertPitchHz, 1e-9)
+        controller.stepConcertPitch(up = false)
+        assertEquals(400.0, controller.state().concertPitchHz, 1e-9, "400 Hz is the floor")
+    }
+
+    @Test
     fun autoModeShowsNoSelectionUntilLocked() = runBlocking {
         val (controller, _) = harness(
             Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "standard"),

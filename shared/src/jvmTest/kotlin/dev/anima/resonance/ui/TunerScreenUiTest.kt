@@ -4,14 +4,17 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import dev.anima.resonance.music.BuiltInTunings
 import dev.anima.resonance.music.Note
 import dev.anima.resonance.presentation.MicPermissionState
 import dev.anima.resonance.presentation.MainScreenUi
+import dev.anima.resonance.presentation.PresetSheetUi
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerSnapshot
 import dev.anima.resonance.presentation.TunerStatus
+import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -155,7 +158,38 @@ class TunerScreenUiTest {
     }
 
     @Test
-    fun sheetHiddenWithoutRows() {
+    fun sheetConcertSteppersInvokeCallback() {
+        val calls = mutableListOf<Boolean>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(
+                presets = BuiltInTunings.all,
+                favorites = setOf("standard"),
+                selectedId = "standard",
+            ),
+            concertLabel = "A4 = 440 Hz",
+        )
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(
+                    state = ui,
+                    onOpenSettings = {},
+                    onOpenPresets = {},
+                    onModeToggle = {},
+                    onStringSelect = {},
+                    onPermissionCta = {},
+                    onRetryCapture = {},
+                    onConcertStep = { calls.add(it) },
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.sheet.concert.minus").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
+        assertEquals(listOf(false, true, true), calls, "minus, then plus twice")
+    }
+
+    @Test
+    fun presetSheetHiddenWithoutRows() {
         show(state(status = TunerStatus.LISTENING))
         rule.onNodeWithTag("resonance.sheet").assertDoesNotExist()
         rule.onNodeWithTag("resonance.sheet.row.standard").assertDoesNotExist()

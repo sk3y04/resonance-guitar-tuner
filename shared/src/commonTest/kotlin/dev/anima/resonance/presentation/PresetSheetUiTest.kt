@@ -74,4 +74,24 @@ class PresetSheetUiTest {
         assertEquals("-3", PresetSheetUi.centsLabel(-3.2))
         assertEquals("0", PresetSheetUi.centsLabel(0.4))
     }
+
+    @Test
+    fun stepConcertPitchStepsByTenths() {
+        assertEquals(439.9, PresetSheetUi.stepConcertPitch(440.0, up = false), 1e-9)
+        assertEquals(440.0, PresetSheetUi.stepConcertPitch(439.9, up = true), 1e-9)
+        assertEquals(440.1, PresetSheetUi.stepConcertPitch(440.0, up = true), 1e-9)
+    }
+
+    @Test
+    fun stepConcertPitchClampsAtProductBounds() {
+        assertEquals(400.0, PresetSheetUi.stepConcertPitch(400.0, up = false), 1e-9)
+        assertEquals(480.0, PresetSheetUi.stepConcertPitch(480.0, up = true), 1e-9)
+    }
+
+    @Test
+    fun concertPitchLabelShowsTenthsPrecision() {
+        // Spec §2: 0.1 Hz steps — the label must not truncate the tenth.
+        assertEquals("A4 = 439.9 Hz", PresetSheetUi.concertPitchLabel(439.9))
+        assertEquals("A4 = 440 Hz", PresetSheetUi.concertPitchLabel(440.0))
+    }
 }

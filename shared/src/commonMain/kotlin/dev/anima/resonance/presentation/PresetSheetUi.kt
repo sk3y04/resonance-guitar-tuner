@@ -1,6 +1,7 @@
 package dev.anima.resonance.presentation
 
 import dev.anima.resonance.music.TuningPreset
+import kotlin.math.roundToLong
 
 /** One row of the preset sheet (pure — Compose renders this). */
 data class PresetRowUi(
@@ -39,7 +40,24 @@ object PresetSheetUi {
         )
     }
 
-    fun concertPitchLabel(hz: Double): String = "A4 = ${hz.toInt()} Hz"
+    /**
+     * A4 reference label. Spec §2: the product steps by 0.1 Hz, so tenths
+     * must be visible (439.9); whole numbers stay clean ("A4 = 440 Hz").
+     */
+    fun concertPitchLabel(hz: Double): String {
+        val tenths = (hz * 10).roundToLong()
+        return if (tenths % 10 == 0L) "A4 = ${tenths / 10} Hz"
+        else "A4 = ${tenths / 10}.${tenths % 10} Hz"
+    }
+
+    /**
+     * Steps the A4 reference by ±0.1 Hz (spec §2), rounded to the tenth and
+     * clamped to the product range 400..480 Hz.
+     */
+    fun stepConcertPitch(hz: Double, up: Boolean, step: Double = 0.1): Double {
+        val tenths = (hz * 10).roundToLong() + if (up) 1L else -1L
+        return (tenths.coerceIn((CONCERT_MIN_HZ * 10).toLong(), (CONCERT_MAX_HZ * 10).toLong())) / 10.0
+    }
 
     /** Non-null when [hz] is outside the product range 400..480. */
     fun concertPitchError(hz: Double): String? =
