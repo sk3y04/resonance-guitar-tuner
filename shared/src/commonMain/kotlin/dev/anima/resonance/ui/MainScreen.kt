@@ -9,6 +9,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import dev.anima.resonance.engine.TunerController
+import dev.anima.resonance.presentation.CustomEditorUi
+import dev.anima.resonance.presentation.CustomEditorUiState
+import dev.anima.resonance.presentation.EditorStringUi
 import dev.anima.resonance.presentation.TunerMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -49,6 +52,54 @@ fun MainScreen(
         ui = controller.state()
     }
 
+    // Custom-tuning editor form state (create: editingId = null).
+    var editor by remember(controller) { mutableStateOf<CustomEditorUiState?>(null) }
+
+    fun openEditor(id: String? = null) {
+        val row = id?.let { uid -> ui.presetRows.firstOrNull { it.id == uid } }
+        val strings = row?.stringsPreview
+            ?.split(" ")
+            ?.filter { it.isNotBlank() }
+            ?.mapNotNull { label ->
+                Regex("([A-G]#?)(\\d)").find(label)?.let { m ->
+                    EditorStringUi(m.groupValues[1], m.groupValues[2].toInt())
+                }
+            }
+            ?: listOf(EditorStringUi("E", 2))
+        editor = CustomEditorUiState(
+            name = row?.name ?: "",
+            strings = strings,
+            editingId = id,
+            isEdit = id != null,
+        )
+    }
+
+    fun updateEditor(transform: (CustomEditorUiState) -> CustomEditorUiState) {
+        editor = editor?.let {
+            val next = transform(it)
+            next.copy(errors = CustomEditorUi.validate(next.name, next.strings.map { s -> s.label }))
+        }
+    }
+
+    fun saveEditor() {
+        val form = editor ?: return
+        // Re-validate on save: the form may be untouched since openEditor,
+        // when the errors list was not (re)computed.
+        val errors = CustomEditorUi.validate(form.name, form.strings.map { it.label })
+        if (errors.isNotEmpty()) {
+            editor = form.copy(errors = errors)
+            return
+        }
+        val notes = CustomEditorUi.toNotes(form.strings.map { it.label })
+        scope.launch {
+            val target = form.editingId
+            if (target != null) controller.editCustomPreset(target, form.name, notes)
+            else controller.createCustomPreset(form.name, notes)
+            editor = null
+            refresh()
+        }
+    }
+
     TunerScreen(
         state = ui,
         onOpenSettings = {},
@@ -83,6 +134,44 @@ fun MainScreen(
                 refresh()
             }
         },
+        onAddTuning = { openEditor() },
+        onEditTuning = { openEditor(it) },
+        onDeleteTuning = { id ->
+            scope.launch {
+                controller.deleteCustomPreset(id)
+                refresh()
+            }
+        },
+        editor = editor,
+        onEditorNameChange = { name -> updateEditor { it.copy(name = name) } },
+        onEditorNoteCycle = { index, up ->
+            updateEditor { form ->
+                form.copy(strings = form.strings.mapIndexed { i, s ->
+                    if (i == index) s.copy(noteName = CustomEditorUi.nextNoteName(s.noteName, up)) else s
+                })
+            }
+        },
+        onEditorOctaveCycle = { index, up ->
+            updateEditor { form ->
+                form.copy(strings = form.strings.mapIndexed { i, s ->
+                    if (i == index) s.copy(octave = CustomEditorUi.nextOctave(s.octave, up)) else s
+                })
+            }
+        },
+        onEditorRemoveString = { index ->
+            updateEditor { form ->
+                form.copy(strings = form.strings.filterIndexed { i, _ -> i != index })
+            }
+        },
+        onEditorAddString = {
+            updateEditor { form ->
+                if (form.strings.size < CustomEditorUi.MAX_STRINGS) {
+                    form.copy(strings = form.strings + EditorStringUi("E", 2))
+                } else form
+            }
+        },
+        onEditorSave = { saveEditor() },
+        onEditorCancel = { editor = null },
         showSettingsButton = false,
         showPresetsButton = false,
         modifier = modifier,

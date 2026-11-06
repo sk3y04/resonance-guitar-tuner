@@ -18,8 +18,9 @@
   (Compose host, common) → Android shell (ViewModel + pump thread +
   Activity, androidMain, compile-blocked on the missing SDK).
 - Editor UI note: form state lives in MainScreen (remember), not in
-  the composable — headless semantics tests drive it via callbacks. DataStoreSettingsRepository is commonMain
-  (injected DataStore); file factory jvmMain, Context factory androidMain.
+  the composable — headless semantics tests drive it via callbacks.
+- DataStoreSettingsRepository is commonMain (injected DataStore); file
+  factory jvmMain, Context factory androidMain.
 - Compose test facts: performScrollToNode = top-level extension in
   androidx.compose.ui.test (import it); assertIsDisplayed is viewport-based —
   assert top-of-container nodes BEFORE scrolling, use performScrollToNode

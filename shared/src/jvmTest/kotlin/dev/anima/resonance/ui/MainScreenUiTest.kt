@@ -5,6 +5,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasText
 import dev.anima.resonance.audio.AudioInput
 import dev.anima.resonance.engine.TunerController
@@ -107,6 +109,45 @@ class MainScreenUiTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         rule.onNodeWithTag("resonance.hint").assertExists()
+    }
+
+    @Test
+    fun editorCreateFlowPersistsCustomPreset() {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        runBlocking {
+            controller.onPermissionResult(MicPermissionState.GRANTED)
+            controller.startCapture()
+        }
+        rule.setContent { MainScreen(controller) }
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.sheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        // the add button sits below the sheet's fold — scroll it into view
+        // before tapping (off-screen taps do not land in headless tests).
+        rule.onNodeWithTag("resonance.sheet")
+            .performScrollToNode(hasTestTag("resonance.sheet.add"))
+        rule.onNodeWithTag("resonance.sheet.add").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.editor.name"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.editor.name").performTextInput("UI Created")
+        // default first string is E2; three upward note cycles → G2 (E→F→F#→G)
+        rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
+        rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
+        rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
+        rule.onNodeWithTag("resonance.editor.save").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        runBlocking {
+            val created = repo.customsSnapshot.single()
+            assertEquals("UI Created", created.name)
+            assertEquals(dev.anima.resonance.music.Note.fromLabel("G2"), created.strings.single().note)
+        }
     }
 
     @Test

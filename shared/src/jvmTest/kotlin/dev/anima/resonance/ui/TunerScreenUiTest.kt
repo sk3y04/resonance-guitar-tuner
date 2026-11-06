@@ -8,6 +8,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import dev.anima.resonance.music.BuiltInTunings
 import dev.anima.resonance.music.Note
+import dev.anima.resonance.presentation.CustomEditorUiState
+import dev.anima.resonance.presentation.EditorStringUi
 import dev.anima.resonance.presentation.MicPermissionState
 import dev.anima.resonance.presentation.MainScreenUi
 import dev.anima.resonance.presentation.PresetSheetUi
@@ -186,6 +188,142 @@ class TunerScreenUiTest {
         rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
         assertEquals(listOf(false, true, true), calls, "minus, then plus twice")
+    }
+
+    @Test
+    fun editorRendersRowsAndControls() {
+        val ui = CustomEditorUiState(
+            name = "My Open D",
+            strings = listOf(
+                EditorStringUi("D", 2),
+                EditorStringUi("F#", 3),
+            ),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                CustomEditorSheet(
+                    state = ui,
+                    onNameChange = {},
+                    onNoteCycle = { _, _ -> },
+                    onOctaveCycle = { _, _ -> },
+                    onRemoveString = {},
+                    onAddString = {},
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.editor").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.name").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.string.0.note").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.string.1.octave").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.add").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.save").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.editor.cancel").assertIsDisplayed()
+    }
+
+    @Test
+    fun editorButtonsInvokeFormCallbacks() {
+        val events = mutableListOf<String>()
+        val ui = CustomEditorUiState(
+            name = "X",
+            strings = listOf(EditorStringUi("E", 2)),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                CustomEditorSheet(
+                    state = ui,
+                    onNameChange = { events += "name:$it" },
+                    onNoteCycle = { i, up -> events += "note:$i:$up" },
+                    onOctaveCycle = { i, up -> events += "octave:$i:$up" },
+                    onRemoveString = { i -> events += "remove:$i" },
+                    onAddString = { events += "add" },
+                    onSave = { events += "save" },
+                    onCancel = { events += "cancel" },
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
+        rule.onNodeWithTag("resonance.editor.string.0.octave").performClick()
+        rule.onNodeWithTag("resonance.editor.string.0.remove").performClick()
+        rule.onNodeWithTag("resonance.editor.add").performClick()
+        rule.onNodeWithTag("resonance.editor.save").performClick()
+        rule.onNodeWithTag("resonance.editor.cancel").performClick()
+        assertEquals(
+            listOf("note:0:true", "octave:0:true", "remove:0", "add", "save", "cancel"),
+            events,
+        )
+    }
+
+    @Test
+    fun editorShowsValidationErrors() {
+        val ui = CustomEditorUiState(name = "", strings = emptyList(), errors = listOf("Name is required"))
+        rule.setContent {
+            ResonanceTheme {
+                CustomEditorSheet(
+                    state = ui,
+                    onNameChange = {},
+                    onNoteCycle = { _, _ -> },
+                    onOctaveCycle = { _, _ -> },
+                    onRemoveString = {},
+                    onAddString = {},
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.editor.error").assertIsDisplayed()
+    }
+
+    @Test
+    fun editorVisibleOnlyWhenStateProvided() {
+        val ui = state(status = TunerStatus.LISTENING).copy(presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"))
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+            }
+        }
+        rule.onNodeWithTag("resonance.editor").assertDoesNotExist()
+
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(
+                    state = ui,
+                    onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
+                    editor = CustomEditorUiState(name = "X", strings = listOf(EditorStringUi("E", 2))),
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.editor").assertIsDisplayed()
+    }
+
+    @Test
+    fun sheetExposesAddTuningAndCustomRowActions() {
+        val customPreset = dev.anima.resonance.music.TuningPreset(
+            id = "custom-1", name = "My Open D", builtIn = false,
+            strings = listOf(
+                dev.anima.resonance.music.TuningString("c1-s1", Note.fromLabel("D2")),
+                dev.anima.resonance.music.TuningString("c1-s2", Note.fromLabel("A2")),
+            ),
+        )
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all + customPreset, setOf("standard"), "standard"),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+            }
+        }
+        rule.onNodeWithTag("resonance.sheet").assertIsDisplayed()
+        // custom rows + add button sit below the sheet's fold: the add button
+        // is the sheet's last child — scrolling it into view (a 300dp window)
+        // also brings the trailing custom row in, per the preset-sheet pattern.
+        rule.onNodeWithTag("resonance.sheet")
+            .performScrollToNode(hasTestTag("resonance.sheet.add"))
+        rule.onNodeWithTag("resonance.sheet.add").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.standard.edit").assertDoesNotExist() // built-ins are read-only
     }
 
     @Test

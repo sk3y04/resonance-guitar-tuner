@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.MainScreenUiState
 import dev.anima.resonance.presentation.TunerMode
 import kotlin.math.roundToInt
@@ -54,6 +56,17 @@ fun TunerScreen(
     onRetryCapture: () -> Unit,
     onConcertStep: (Boolean) -> Unit = {},
     onPresetSelect: (String) -> Unit = {},
+    onAddTuning: () -> Unit = {},
+    onEditTuning: (String) -> Unit = {},
+    onDeleteTuning: (String) -> Unit = {},
+    editor: CustomEditorUiState? = null,
+    onEditorNameChange: (String) -> Unit = {},
+    onEditorNoteCycle: (Int, Boolean) -> Unit = { _, _ -> },
+    onEditorOctaveCycle: (Int, Boolean) -> Unit = { _, _ -> },
+    onEditorRemoveString: (Int) -> Unit = {},
+    onEditorAddString: () -> Unit = {},
+    onEditorSave: () -> Unit = {},
+    onEditorCancel: () -> Unit = {},
     showSettingsButton: Boolean = true,
     showPresetsButton: Boolean = true,
     modifier: Modifier = Modifier,
@@ -249,6 +262,21 @@ fun TunerScreen(
         Spacer(Modifier.height(8.dp))
 
         // Settings/preset sheet — rows + concert pitch (tested state)
+        // Custom-tuning editor: rendered above the sheet while open.
+        editor?.let { form ->
+            CustomEditorSheet(
+                state = form,
+                onNameChange = onEditorNameChange,
+                onNoteCycle = onEditorNoteCycle,
+                onOctaveCycle = onEditorOctaveCycle,
+                onRemoveString = onEditorRemoveString,
+                onAddString = onEditorAddString,
+                onSave = onEditorSave,
+                onCancel = onEditorCancel,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
+
         if (state.presetRows.isNotEmpty()) {
             Surface(
                 modifier = Modifier
@@ -305,38 +333,59 @@ fun TunerScreen(
                             color = if (row.selected) ResonanceColors.accent.copy(alpha = 0.14f)
                             else MaterialTheme.colorScheme.surface,
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = row.name,
-                                    style = ResonanceType.labelSmall,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    text = row.stringsPreview,
-                                    style = ResonanceType.hint,
-                                )
-                                if (row.favorite) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "★",
-                                        color = ResonanceColors.accent,
+                                        text = row.name,
                                         style = ResonanceType.labelSmall,
-                                        modifier = Modifier.padding(start = 8.dp),
+                                        modifier = Modifier.weight(1f),
                                     )
+                                    if (row.favorite) {
+                                        Text(
+                                            text = "★",
+                                            color = ResonanceColors.accent,
+                                            style = ResonanceType.labelSmall,
+                                            modifier = Modifier.padding(start = 8.dp),
+                                        )
+                                    }
+                                    if (row.selected) {
+                                        Text(
+                                            text = "●",
+                                            color = ResonanceColors.accent,
+                                            style = ResonanceType.labelSmall,
+                                            modifier = Modifier.padding(start = 8.dp),
+                                        )
+                                    }
                                 }
-                                if (row.selected) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "●",
-                                        color = ResonanceColors.accent,
-                                        style = ResonanceType.labelSmall,
-                                        modifier = Modifier.padding(start = 8.dp),
+                                        text = row.stringsPreview,
+                                        style = ResonanceType.hint,
+                                        modifier = Modifier.weight(1f),
                                     )
+                                    if (!row.builtIn) {
+                                        TextButton(
+                                            onClick = { onEditTuning(row.id) },
+                                            modifier = Modifier.testTag("resonance.sheet.row.${row.id}.edit"),
+                                            contentPadding = PaddingValues(6.dp),
+                                        ) { Text("✎") }
+                                        TextButton(
+                                            onClick = { onDeleteTuning(row.id) },
+                                            modifier = Modifier.testTag("resonance.sheet.row.${row.id}.delete"),
+                                            contentPadding = PaddingValues(6.dp),
+                                        ) { Text("✕") }
+                                    }
                                 }
                             }
                         }
                     }
+                    OutlinedButton(
+                        onClick = onAddTuning,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .testTag("resonance.sheet.add"),
+                    ) { Text("＋ New tuning") }
                 }
             }
         }
