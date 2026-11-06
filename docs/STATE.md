@@ -1,13 +1,11 @@
 # STATE — Resonance
 
-- Device/SDK follow-up — document-picker wiring done (204/204 green)
-  code-complete (common payload handoff tested headlessly; Activity SAF
-  launchers + ViewModel URI bridge written, compile-blocked on the missing SDK).
-  After: remaining follow-up items need the external blockers (SDK
-  licenses, device) — nothing further is locally actionable.
+- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06): first real Android build GREEN
+  (compile + lint + assembleDebug → androidApp-debug.apk). 204/204 host
+  tests + demo 5/5 still green. Only the device run remains.
 - Last green checkpoint: :shared:jvmTest 204/204 (2026-11-06);
-  ./scripts/run-demo.sh 5/5 exit 0; verify.sh mandatory local gates PASS
-  (blocked gates: Android SDK ×2; not run: device tests).
+  ./scripts/run-demo.sh 5/5 exit 0; verify.sh ALL mandatory gates PASS
+  (Android compile/lint/APK green; device gate not run).
 - Test breakdown: 204 = music 47 + DSP 27 + state/stream/capture 25 +
   target-set 4 + UI-state 21 + headless Compose UI 15 + persistence 21 +
   AppTuner 14 + TunerController 10 + editor/codec/concert/others.
@@ -40,11 +38,13 @@
 - Versions: Kotlin 2.4.21, AGP 9.3.1, Gradle 9.7.0 (wrapper, sha256-pinned),
   CMP 1.12.2, CMP-Material3 1.9.0, coroutines 1.11.0, serialization 1.12.0,
   lifecycle 2.11.0, datastore + datastore-preferences 1.3.0, activity-compose
-  1.13.0, skiko native 0.150.2 (jvmTest), compileSdk 36, minSdk 26, JDK 21
+  1.13.0, skiko native 0.150.2 (jvmTest), compileSdk 37 (flag suppressed —
+  repo has no platforms;android-37, see gradle.properties), minSdk 26, JDK 21
   (JVM_17 bytecode).
 - Key paths: repo root; Gradle
-  user-local 9.7.0; SDK at ANDROID_HOME (NO platforms).
-- Blockers: Android SDK licenses (compile/APK/device + AndroidAudioInput +
-  document picker); screenshots/visual inspection only (semantics tests
-  pass headless); no device.
+  user-local 9.7.0; SDK at ANDROID_HOME (platforms:
+  android-36; ANDROID_HOME must be exported for builds).
+- Blockers: Android SDK RESOLVED (first Android build green, see TDD_LOG for
+  the 4 fixes); screenshots/visual inspection only (semantics tests
+  pass headless); no device (only remaining gate).
 - Failing test: none.

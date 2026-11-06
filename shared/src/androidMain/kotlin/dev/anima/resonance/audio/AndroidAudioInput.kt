@@ -9,10 +9,10 @@ import android.os.Process
 /**
  * Direct AudioRecord backend for the [AudioInput] contract (Android).
  *
- * Status: WRITTEN — COMPILE VERIFICATION BLOCKED (SDK
- * platform not installed / licenses not accepted, so the android target is
- * auto-disabled). Must be compile-checked via ./scripts/verify.sh as soon as
- * the SDK platform is available. No device testing has been performed.
+ * Status: COMPILE-VERIFIED (2026-11-06, first real Android
+ * build — `./scripts/verify.sh` assembleDebug + lint green). One compile
+ * fix was required: the `rate` ctor param is not visible in member
+ * functions — `open()` now uses `sampleRate`. No device testing yet
  *
  * Design (per spec): raw mono PCM16, explicit buffer sizing, no allocation
  * beyond the chunk conversion, read errors surface as null (device lost) for
@@ -45,7 +45,7 @@ class AndroidAudioInput(
         return try {
             val rec = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                rate,
+                sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 bufferBytes,

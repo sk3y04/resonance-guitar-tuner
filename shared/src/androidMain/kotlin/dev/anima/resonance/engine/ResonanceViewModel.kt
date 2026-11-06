@@ -19,9 +19,9 @@ import kotlinx.coroutines.launch
  * backend, the Context-backed DataStore, and the pump thread that drives
  * the engine from the audio clock.
  *
- * Status: WRITTEN — COMPILE VERIFICATION BLOCKED (SDK platform /
- * licenses not accepted → android target auto-disabled). No device
- * testing has been performed.
+ * Status: COMPILE-VERIFIED (2026-11-06, first real Android
+ * build — assembleDebug + lint green; picker wiring included). No
+ * device testing has been performed.
  *
  * Permission policy (enforced by the Activity, not here): the mic is only
  * opened after RECORD_AUDIO is granted; permanent denial maps to

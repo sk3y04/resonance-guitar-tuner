@@ -461,3 +461,31 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   declaration — place `LaunchedEffect`s that call it after the declaration.
 - Next: remaining follow-up work is external-blocker-gated (SDK
   licenses, device). Nothing further is locally actionable.
+
+## Android SDK unblock + first real Android build (COMPLETE)
+- User accepted all SDK licenses → installed platform-tools/android-36/
+  build-tools (user-local). `./scripts/verify.sh` was the acceptance gate:
+  :androidApp compile + lint + assembleDebug.
+- Fix 1 (build wiring): build-logic's precompiled `resonance.android.kmp`
+  convention plugin was NEVER resolvable — top-level includeBuild doesn't
+  feed plugin-ID resolution, and every buildSrc variant hit KGP
+  "already on the classpath with an unknown version" (buildSrc leaks deps
+  to the whole build; any classpath KGP/AGP breaks versioned plugin
+  requests, incl. AGP's transitive KGP 2.2.10). Final design: isolated
+  `buildscript { classpath(AGP-kmp marker) }` in shared/build.gradle.kts +
+  conditional `apply` (ADR-003 gate intact — SDK-less machines still
+  green) + configuring the AGP-kmp AUTO-CREATED `android` target via the
+  public `KotlinMultiplatformAndroidLibraryTarget` (namespace/compileSdk/
+  minSdk/jvmTarget; `androidTarget()` is forbidden with AGP-kmp).
+- Fix 2: AndroidAudioInput.open() used ctor param `rate` in a member
+  function (invisible) → `sampleRate`.
+- Fix 3: ContextDataStore — `context.createDataStore` doesn't exist in
+  DataStore 1.3.0 → `PreferenceDataStoreFactory.create` (jvmAndAndroid
+  API) rooted at context.filesDir, IO scope.
+- Fix 4: CMP 1.12.2 android variant → Jetpack Compose 1.12.1 AARs need
+  minCompileSdk 37; repo snapshot has no platforms;android-37 → official
+  `android.experimental.disableCompileSdkChecks=true` (gradle.properties,
+  removal condition documented).
+- Result: VERIFY_EXIT=0 — all mandatory gates PASS; androidApp-debug.apk
+  (~12.8 MB) built; 204/204 host tests + demo 5/5 unchanged.
+- Only remaining gate: device smoke.

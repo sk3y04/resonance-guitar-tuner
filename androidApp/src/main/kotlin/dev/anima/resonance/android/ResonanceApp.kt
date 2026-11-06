@@ -25,9 +25,8 @@ import dev.anima.resonance.ui.MainScreen
  *  - permanently denied (no rationale offered) → DENIED_PERMANENT: the UI
  *    shows the "open app settings" CTA and the app never re-prompts.
  *
- * Status: WRITTEN — COMPILE VERIFICATION BLOCKED (SDK platform /
- * licenses not accepted → android target auto-disabled). No device testing
- * yet.
+ * Status: COMPILE-VERIFIED (2026-11-06, first real Android
+ * build — assembleDebug + lint green). No device testing yet.
  */
 class ResonanceApp : ComponentActivity() {
 

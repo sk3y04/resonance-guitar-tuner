@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "dev.anima.resonance.android"
-    compileSdk = 36
+    // Compose 1.12.x artifacts require compileSdk >= 37 (AAR metadata);
+    // targetSdk stays at 36 for the Play-API floor.
+    compileSdk = 37
     defaultConfig {
         applicationId = "dev.anima.resonance"
         minSdk = 26

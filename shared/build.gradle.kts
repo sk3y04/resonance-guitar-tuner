@@ -1,4 +1,20 @@
+buildscript {
+    // AGP-kmp plugin on THIS module's isolated classpath (not buildSrc —
+    // buildSrc exports every dep to the whole build, and a classpath AGP
+    // makes versioned `com.android.*` plugin requests fail with
+    // "already on the classpath with an unknown version"). The plugin is
+    // only APPLIED when a usable SDK is present (ADR-003 gate below), so
+    // machines without an SDK never configure it.
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.kotlin.multiplatform.library:com.android.kotlin.multiplatform.library.gradle.plugin:9.3.1")
+    }
+}
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -16,7 +32,20 @@ val androidSdkUsable: Boolean = run {
     platforms.isDirectory && !platforms.listFiles().orEmpty().isEmpty()
 }
 if (androidSdkUsable) {
-    apply(plugin = "resonance.android.kmp")
+    apply(plugin = "com.android.kotlin.multiplatform.library")
+
+    // AGP-kmp auto-creates the "android" target that unifies the AGP and KMP
+    // sides; configure it through the public target interface.
+    val kotlin = project.extensions.getByType(KotlinMultiplatformExtension::class.java)
+    val android = kotlin.targets.getByName("android")
+        as com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
+    android.namespace = "dev.anima.resonance.shared"
+    // Compose 1.12.x artifacts require compileSdk >= 37 (AAR metadata).
+    android.compileSdk = (findProperty("resonance.compileSdk") as String?)?.toIntOrNull() ?: 37
+    android.minSdk = (findProperty("resonance.minSdk") as String?)?.toIntOrNull() ?: 26
+    android.compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 kotlin {
