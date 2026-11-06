@@ -7,10 +7,13 @@ set -u
 cd "$(dirname "$0")/.."
 FAILED=0
 
-echo "=== 1/3 host unit tests ==="
+echo "=== 1/4 host unit tests ==="
 ./scripts/test-unit.sh || FAILED=1
 
-echo "=== 2/3 Kotlin/Compose lint (host-visible subset) ==="
+echo "=== 2/4 runnable host demo (full pipeline, synthetic mic) ==="
+./scripts/run-demo.sh || FAILED=1
+
+echo "=== 3/4 Kotlin/Compose lint (host-visible subset) ==="
 # lintDebug lives in :androidApp; only available when the Android SDK gate is open.
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
   ./gradlew :androidApp:lintDebug --console=plain || FAILED=1
@@ -18,7 +21,7 @@ else
   echo "[verify] BLOCKED: :androidApp not configured (no Android SDK platform)"
 fi
 
-echo "=== 3/3 debug assembly ==="
+echo "=== 4/4 debug assembly ==="
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
   ./gradlew :androidApp:assembleDebug --console=plain || FAILED=1
 else

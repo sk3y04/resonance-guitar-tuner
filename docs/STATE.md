@@ -6,6 +6,8 @@
 - Test breakdown: 47 music + 27 DSP + 25 state/streaming/capture/concert +
   18 UI-state (15+3 sheet) + 10 headless Compose UI (7 screen + 3 host) +
   21 persistence + 7 AppTuner + 6 TunerController = 167.
+- Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios,
+  full pipeline, deterministic; mandatory verify.sh gate 2/4).
 - Final verification done: ./scripts/verify.sh PASS (mandatory locally-available gates;
   blocked gates reported as BLOCKED, never green). VERIFICATION.md matrix
   synced; working tree clean.

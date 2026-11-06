@@ -17,6 +17,7 @@ Legend: PASS / FAIL / BLOCKED (id) / NOT RUN. Updated after each run.
 | AppTuner end-to-end engine | PASS | 158/158 (7 tests: capture→YIN→state→presets→settings) |
 | TunerController (permissions/errors/UI-state) | PASS | 164/164 (6 tests) |
 | MainScreen host + DataStore→commonMain | PASS | 167/167 (3 headless tests: real controller → rendered semantics) |
+| Runnable host demo (full pipeline) | PASS | :hostDemo:run 5/5 scenarios (synthetic mic → UI state); mandatory verify.sh gate |
 | Android debug assembly | BLOCKED (missing SDK) | no SDK platform; verify.sh reports BLOCKED, never green |
 | Android lint | BLOCKED (missing SDK) | :androidApp not configured without SDK platform |
 | Compose screenshots / visual inspection | BLOCKED (no display) | no display; CMP 1.12.2 desktop test jar has no capture API (javap-verified) |

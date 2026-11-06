@@ -17,6 +17,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "resonance-tuner"
 include(":shared")
+include(":hostDemo")
 
 // Android targets are enabled only when a usable Android SDK (with at least one
 // installed platform) is present on this machine. Host (JVM) development and the

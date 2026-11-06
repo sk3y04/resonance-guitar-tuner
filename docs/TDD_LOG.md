@@ -343,3 +343,18 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   SemanticsNodeInteraction (use the collection's public
   fetchSemanticsNodes(atLeastOneRootRequired=false)); no assertText;
   text read via node.config[SemanticsProperties.Text].
+
+## :hostDemo runnable demo (COMPLETE)
+- New Gradle module (kotlin jvm + application) depending on :shared —
+  version-less kotlin("jvm") plugin (build-logic kotlin-dsl puts the plugin
+  on the classpath; an explicit version collides — "already on the classpath
+  with an unknown version").
+- One executable program runs the FULL pipeline with a deterministic
+  synthetic mic + virtual clock: [1] chromatic E2 in tune; [2] instrument
+  mode LOCKS the E2 target under a G3 tone (displayed cents +1500,
+  direction "Tune down" — the unclamped cents contract surfaces the octave
+  relationship); [3] chromatic measures G3; [4] 432 Hz tone flat (-32) under
+  A4=440 → in tune after setConcertPitch(432) (persisted, shown in UI state);
+  [5] 3 lost chunks → captureError, retry reopens (deviceOpens=2) → cleared.
+- Assertive: any scenario failure exits 1; wired as mandatory gate 2/4 in
+  verify.sh + ./scripts/run-demo.sh. Run-verified 5/5, exit 0.
