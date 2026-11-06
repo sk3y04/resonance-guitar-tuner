@@ -31,6 +31,7 @@ class TunerController(
         input = input,
         settingsRepo = settingsRepo,
         presets = presets,
+        persistCustoms = { customs -> settingsRepo.saveCustomPresets(customs) },
         onCaptureState = { s ->
             if (s == CaptureState.ERROR) captureError = true
             if (s == CaptureState.IDLE) capturing = false
@@ -100,6 +101,18 @@ class TunerController(
     suspend fun setPreset(id: String) {
         engine.setPreset(id)
     }
+
+    /** Creates a custom named tuning (spec §2); persists durably. */
+    suspend fun createCustomPreset(name: String, notes: List<dev.anima.resonance.music.Note>): dev.anima.resonance.music.TuningPreset =
+        engine.createCustomPreset(name, notes)
+
+    /** Edits a custom tuning (built-ins are read-only). */
+    suspend fun editCustomPreset(id: String, name: String, notes: List<dev.anima.resonance.music.Note>) {
+        engine.editCustomPreset(id, name, notes)
+    }
+
+    /** Deletes a custom tuning; selection falls back to "standard". */
+    suspend fun deleteCustomPreset(id: String): Boolean = engine.deleteCustomPreset(id)
 
     fun selectString(index: Int) {
         engine.selectString(index)

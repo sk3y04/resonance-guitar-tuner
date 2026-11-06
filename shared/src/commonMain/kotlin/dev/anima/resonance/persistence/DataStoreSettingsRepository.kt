@@ -55,7 +55,7 @@ class DataStoreSettingsRepository(
 
     /** Replace the persisted customs (durable), preserving settings. */
     @Suppress("UnsafeOptInUsageError")
-    suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> {
+    override suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> {
         val prefs = dataStore.data.first()
         persist(decode(prefs), customs)
         return customs

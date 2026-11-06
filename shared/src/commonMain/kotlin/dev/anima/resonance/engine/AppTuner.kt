@@ -4,6 +4,9 @@ import dev.anima.resonance.audio.AudioInput
 import dev.anima.resonance.audio.CaptureOrchestrator
 import dev.anima.resonance.audio.CaptureState
 import dev.anima.resonance.dsp.StreamingAnalyzer
+import dev.anima.resonance.music.Note
+import dev.anima.resonance.music.TuningPreset
+import dev.anima.resonance.music.TuningString
 import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.Settings
 import dev.anima.resonance.persistence.SettingsRepository
@@ -31,6 +34,11 @@ class AppTuner(
     private val presets: PresetStore,
     private val onSnapshot: (TunerSnapshot) -> Unit = {},
     private val onCaptureState: (CaptureState) -> Unit = {},
+    /**
+     * Durable hook for custom-preset changes. Null = in-memory only
+     * (host demo); production passes the repository's saveCustomPresets.
+     */
+    private val persistCustoms: (suspend (List<TuningPreset>) -> Unit)? = null,
 ) {
     private val stateMachine = TunerStateMachine()
     private val analyzer = StreamingAnalyzer(input.sampleRate, stateMachine = stateMachine)
@@ -131,6 +139,47 @@ class AppTuner(
         val nowFavorite = presets.toggleFavorite(id)
         settingsRepo.update { it.copy(favorites = presets.favorites()) }
         return nowFavorite
+    }
+
+    /**
+     * Creates a custom named tuning (spec §2). String IDs are positional
+     * and stable within the preset; the change is persisted durably.
+     */
+    suspend fun createCustomPreset(name: String, notes: List<Note>): TuningPreset {
+        val preset = presets.create(name, notes.mapIndexed { i, n -> TuningString("s${i + 1}", n) })
+        persistCustoms?.invoke(presets.customs())
+        return preset
+    }
+
+    /**
+     * Edits a custom tuning (built-ins are read-only). String IDs are
+     * preserved positionally when the string count is unchanged.
+     */
+    suspend fun editCustomPreset(id: String, name: String, notes: List<Note>): TuningPreset {
+        val previous = presets.byId(id)
+        val strings = notes.mapIndexed { i, n ->
+            val oldId = previous?.strings?.getOrNull(i)?.id
+            TuningString(oldId ?: "s${i + 1}", n)
+        }
+        val updated = presets.edit(id, name, strings)
+        persistCustoms?.invoke(presets.customs())
+        return updated
+    }
+
+    /**
+     * Deletes a custom tuning. If it was the selected preset, selection
+     * falls back to "standard" (persisted) and any string lock is released.
+     */
+    suspend fun deleteCustomPreset(id: String): Boolean {
+        val removed = presets.delete(id)
+        if (!removed) return false
+        lockedString = null
+        if (applied.selectedPresetId == id) {
+            applied = settingsRepo.update { it.copy(selectedPresetId = "standard") }
+        }
+        applyTarget(applied)
+        persistCustoms?.invoke(presets.customs())
+        return true
     }
 
     /**

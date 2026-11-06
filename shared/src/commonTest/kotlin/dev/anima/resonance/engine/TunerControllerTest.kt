@@ -1,6 +1,7 @@
 package dev.anima.resonance.engine
 
 import dev.anima.resonance.audio.AudioInput
+import dev.anima.resonance.music.Note
 import dev.anima.resonance.persistence.InMemorySettingsRepository
 import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.Settings
@@ -133,6 +134,29 @@ class TunerControllerTest {
         assertEquals(400.0, controller.state().concertPitchHz, 1e-9)
         controller.stepConcertPitch(up = false)
         assertEquals(400.0, controller.state().concertPitchHz, 1e-9, "400 Hz is the floor")
+    }
+
+    @Test
+    fun createCustomPresetAppearsInUiStateAndPersists() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        val preset = controller.createCustomPreset("UI Custom", listOf(Note.fromLabel("E2"), Note.fromLabel("A2")))
+        assertTrue(preset.id in controller.state().presetRows.map { it.id }, "the sheet must list the new custom")
+        assertEquals(1, repo.customsSnapshot.size, "customs must persist through the repository")
+    }
+
+    @Test
+    fun deleteSelectedCustomFallsBackToStandardInUiState() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        val preset = controller.createCustomPreset("Gone", listOf(Note.fromLabel("E2")))
+        controller.setPreset(preset.id)
+        controller.deleteCustomPreset(preset.id)
+        assertEquals("standard", repo.get().selectedPresetId)
     }
 
     @Test

@@ -18,6 +18,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 /**
  * End-to-end integration of the deterministic pieces — capture
@@ -201,6 +202,64 @@ class AppTunerTest {
             snap.reading.cents in -1..1 && snap.reading.inTune,
             "432 Hz A4 under A4=432 must read in tune, cents=${snap.reading.cents}",
         )
+    }
+
+    @Test
+    fun createCustomPresetIsListedAndPersisted() = runBlocking {
+        val saved = mutableListOf<List<dev.anima.resonance.music.TuningPreset>>()
+        val input = ToneInput(freq("E", 2))
+        val repo = InMemorySettingsRepository()
+        val engine = AppTuner(input, repo, PresetStore()) { saved += it }
+        engine.start()
+        val preset = engine.createCustomPreset("My Drop D", listOf("D2", "A2", "D3", "F#3", "A3", "D4").map(Note::fromLabel))
+        assertEquals(1, saved.size, "creation must persist exactly once")
+        assertEquals(listOf(preset), saved.single(), "the persisted customs must contain the new preset")
+        assertFalse(preset.builtIn)
+        assertEquals("My Drop D", preset.name)
+        assertEquals(6, preset.strings.size)
+        assertEquals(Note.fromLabel("D2"), preset.strings.first().note)
+    }
+
+    @Test
+    fun editCustomPresetReplacesNameAndStrings() {
+        runBlocking {
+            val engine = harness(ToneInput(freq("E", 2))).first
+            engine.start()
+            val created = engine.createCustomPreset("A", listOf("E2", "A2", "D3").map(Note::fromLabel))
+            val edited = engine.editCustomPreset(created.id, "B", listOf("E2", "A2", "D3", "E4").map(Note::fromLabel))
+            assertEquals("B", edited.name)
+            assertEquals(4, edited.strings.size)
+            assertFailsWith<IllegalArgumentException> {
+                runBlocking { engine.editCustomPreset("standard", "x", listOf(Note.fromLabel("E2"))) }
+            }
+        }
+    }
+
+    @Test
+    fun deleteSelectedCustomPresetFallsBackToStandard() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val engine = AppTuner(ToneInput(freq("E", 2)), repo, PresetStore())
+        engine.start()
+        val created = engine.createCustomPreset("Tmp", listOf("E2", "A2").map(Note::fromLabel))
+        engine.setPreset(created.id)
+        assertEquals(created.id, engine.currentSettings.selectedPresetId)
+        assertTrue(engine.deleteCustomPreset(created.id))
+        assertEquals("standard", engine.currentSettings.selectedPresetId, "selection must fall back")
+        assertEquals("standard", repo.get().selectedPresetId, "the fallback must persist")
+    }
+
+    @Test
+    fun createCustomPresetValidatesNameAndStringCount() {
+        runBlocking {
+            val engine = harness(ToneInput(freq("E", 2))).first
+            engine.start()
+            assertFailsWith<IllegalArgumentException> {
+                runBlocking { engine.createCustomPreset("  ", listOf(Note.fromLabel("E2"))) }
+            }
+            assertFailsWith<IllegalArgumentException> {
+                runBlocking { engine.createCustomPreset("Many", (0 until 13).map { Note.fromLabel("E2") }) }
+            }
+        }
     }
 
     @Test

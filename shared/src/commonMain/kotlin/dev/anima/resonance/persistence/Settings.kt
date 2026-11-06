@@ -36,17 +36,33 @@ interface SettingsRepository {
 
     /** Applies [transform] atomically; the returned settings are persisted. */
     suspend fun update(transform: (Settings) -> Settings): Settings
+
+    /**
+     * Persisted custom presets. Default pass-through keeps engines
+     * that never mutate customs on in-memory-only hosts working; real
+     * backends override this.
+     */
+    suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> = customs
 }
 
 /** In-memory implementation (tests, debug, and future platforms). */
 class InMemorySettingsRepository(initial: Settings = Settings.DEFAULTS) : SettingsRepository {
     private var current: Settings = initial
+    private var customs: List<TuningPreset> = emptyList()
+
+    /** Current customs snapshot (tests and UI mapping). */
+    val customsSnapshot: List<TuningPreset> get() = customs
 
     override suspend fun get(): Settings = current
 
     override suspend fun update(transform: (Settings) -> Settings): Settings {
         current = transform(current)
         return current
+    }
+
+    override suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> {
+        this.customs = customs
+        return customs
     }
 }
 
