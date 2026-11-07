@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Opt-in device/emulator integration tests. Never wipes or resets an existing device.
-# Usage: ./scripts/test-device.sh [serial]
+# Opt-in device/emulator integration tests. Never wipes or resets an
+# existing device. Usage: ./scripts/test-device.sh [serial]
 #   serial omitted -> uses the single attached emulator/device; errors if ambiguous.
+# Runs :androidApp:connectedDebugAndroidTest (on-device suite: real mic smoke,
+# real persistence, UI launch). RECORD_AUDIO is granted via pm first — an
+# unattended run cannot tap a permission dialog.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -23,16 +26,10 @@ else
 fi
 
 echo "[test-device] using device: $SERIAL"
-# Device tests live in :shared android target (host tests) — task name discovered
-# from the live project; do not hardcode assumptions here.
-TASKS=$(./gradlew :shared:tasks --all --console=plain 2>/dev/null | grep -E '^connectedDevice[^ ]*Test' | awk '{print $1}' | sort -u)
-if [ -z "$TASKS" ]; then
-  echo "[test-device] BLOCKED: no connected-device test task discovered in :shared (Android target off?)."
-  exit 3
-fi
-for t in $TASKS; do
-  echo "[test-device] running $t on $SERIAL"
-  ./gradlew "$t" -PandroidInstrumentationTestArgumentProvider=serial="$SERIAL" --console=plain || exit 1
-done
+# Grant the mic permission up front (idempotent; the app is installed by the
+# connected test run, so retry once after the first install).
+adb -s "$SERIAL" shell pm grant dev.anima.resonance android.permission.RECORD_AUDIO 2>/dev/null || true
+
+./gradlew :androidApp:connectedDebugAndroidTest --console=plain || exit 1
 echo "[test-device] PASS on $SERIAL"
 exit 0

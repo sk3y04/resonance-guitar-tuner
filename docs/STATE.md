@@ -1,12 +1,12 @@
 # STATE — Resonance
 
-- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06) + Robolectric host suite +
-  DSP realism (2026-11-07). 207/207 jvmTest + 183/183 android host +
-  demo 5/5; verify.sh 5/5 gates PASS. Only the real-device run (mic/UI) remains.
+- Device/SDK follow-up — COMPLETE except the physical device run. 207/207
+  jvmTest + 183/183 android host + demo 5/5 + instrumented test APK builds;
+  verify.sh 6/6 gates PASS. Device day = attach device, ./scripts/test-device.sh.
 - Last green checkpoint: :shared:jvmTest 207/207 (incl. 3 PluckedString
   realism tests); :shared:testAndroidHostTest 183/183 (179 common + 4
-  Robolectric); run-demo 5/5; verify.sh ALL 5 mandatory gates PASS
-  (device gate not run).
+  Robolectric); run-demo 5/5;  verify.sh ALL 6 mandatory gates PASS (device RUN still not run;
+  its test APK is assembled as gate 6).
 - Test breakdown: 207 = 204 (music 47 + DSP 27 + state/stream/capture 25 +
   target-set 4 + UI-state 21 + headless Compose UI 15 + persistence 21 +
   AppTuner 14 + TunerController 10 + editor/codec/concert/others) + 3

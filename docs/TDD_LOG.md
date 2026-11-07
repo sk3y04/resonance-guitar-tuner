@@ -552,3 +552,33 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Test data gotcha (self-caught via diagnostic): 130.81 Hz = C3,
   146.83 Hz = D3 — the original map had D3/F3 swapped; the DSP was right,
   the fixture was wrong.
+
+## On-device instrumented suite pre-write (COMPLETE)
+- Goal: make the device run a plug-in-and-run event. Suite lives in androidApp
+  androidTest (the app module — natural home for Activity + real mic):
+  1. RealMicSmokeTest — the real-device core: real AudioRecord reaches CAPTURING
+     within 5 s, reader thread delivers PCM within 3 s, ambient RMS > 0.
+     RECORD_AUDIO is pm-granted by test-device.sh up front (an unattended
+     run can't tap a dialog); otherwise the test ASSUMEs + skips with the
+     exact grant command in the message.
+  2. DevicePersistenceTest — real Context DataStore round trip + the
+     per-process singleton, on the actual framework (no shadows).
+  3. AppLaunchSmokeTest — createAndroidComposeRule<ResonanceApp>, asserts
+     resonance.note/.preset/.mode exist (state-independent tags, so it
+     passes with or without the mic permission).
+- Versions (live-verified 2026-11-07): androidx.test core/runner 1.7.0,
+  ext:junit 1.3.0, espresso-core 3.7.0, junit 4.13.2; Compose test
+  manifest + ui-test-junit4 = androidx 1.12.1 (matches what CMP 1.12.2
+  resolves).
+- Wiring gotchas: CMP's ui-test-junit4 does NOT resolve in the androidTest
+  compile classpath (unresolved org.jetbrains.compose.ui) — the app is
+  native Jetpack Compose on android, so use androidx.compose.ui:
+  ui-test-junit4 + createAndroidComposeRule (the no-arg createComposeRule
+  takes NO type args — wrong rule for an activity). DataStoreSettings
+  Repository's constructor names DataStore types and shared declares them
+  `implementation` → androidTest needs datastore(-preferences) directly.
+- Gates: verify.sh gate 6 = :androidApp:assembleDebugAndroidTest (SDK-gated;
+  keeps the device suite buildable without a device). test-device.sh now:
+  adb pm grant RECORD_AUDIO → :androidApp:connectedDebugAndroidTest.
+- Result: androidApp-debug-androidTest.apk (1.1 MB) builds; verify.sh
+  6/6 PASS; jvmTest 207/207 + androidHostTest 183/183 unchanged.

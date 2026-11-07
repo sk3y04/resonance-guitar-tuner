@@ -15,6 +15,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -37,4 +38,19 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.coroutines.core)
+
+    // On-device (instrumented) suite — the real-device gate. RUN via
+    // ./scripts/test-device.sh; ASSEMBLED (compile-checked) by verify.sh
+    // gate 6, so it stays buildable even without a device.
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.compose.androidx.ui.test.junit4)
+    androidTestImplementation(libs.compose.ui.test.manifest)
+    // DataStoreSettingsRepository's public API names DataStore types —
+    // shared exposes them as `implementation`, so the test compilation
+    // needs the artifacts directly.
+    androidTestImplementation(libs.datastore)
+    androidTestImplementation(libs.datastore.preferences)
 }
