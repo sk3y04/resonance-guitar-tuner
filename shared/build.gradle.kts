@@ -76,11 +76,14 @@ kotlin {
         }
         // Android host tests (Robolectric) — real Context/files on
         // the JVM, so androidMain is behavior-tested without a device.
-        // (No generated accessor for withHostTest source sets — use named.)
-        named("androidHostTest") {
-            dependencies {
-                implementation(kotlin("test"))
-                implementation(libs.robolectric)
+        // (No generated accessor for withHostTest source sets — use named.
+        // Gated: without an SDK the source set doesn't exist (ADR-003).)
+        if (androidSdkUsable) {
+            named("androidHostTest") {
+                dependencies {
+                    implementation(kotlin("test"))
+                    implementation(libs.robolectric)
+                }
             }
         }
         jvmTest.dependencies {

@@ -525,3 +525,30 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   SDK gate as lint/assemble — SDK-less machines stay green via BLOCKED).
 - Result: 204/204 jvmTest + 180/180 androidHostTest + demo 5/5;
   verify.sh 5/5 PASS. The device gate now covers ONLY real mic + on-screen UI.
+
+## DSP realism: plucked-string sweep (COMPLETE)
+- Goal: prove the YIN pipeline survives a REAL guitar tone (decaying harmonic
+  stack), not just sines, before the device gate.
+- Generator: Karplus-Strong with EXACT fractional delay —
+  y[n] = 0.996 * ((1-α) y[n-M] + α y[n-M-1]), M = floor(sr/f0),
+  α = period - M; delay-line indices need +L before Kotlin's % (which keeps
+  the dividend's sign) or startup indices go negative. First generator
+  draft (2-tap slerp of pair-averages) had a period bias ≈ 6 cents at A2 —
+  the test caught it (that's what the 5-cent median assertion is for).
+- 3 tests (commonTest → run on BOTH hosts):
+  1. 8 plucked frequencies (standard tuning + C3 + E5): >=90% of settled
+     frames show the right note, median Hz within 1%, median |cents| < 5,
+     and an in-tune lock is reached.
+  2. 20 dB room-tone noise on G3: judged on the AUDIBLE portion (>=80% G3,
+     tight cents, in-tune lock). Diagnostic first: near the end the pluck
+     sits BELOW the noise floor and the pipeline correctly reports
+     UNSTABLE (confidence 0.00) instead of asserting — correct behavior,
+     so the test judges the audible window, not the decayed tail.
+  3. Successive plucks E2→E4: the settled tail must show E4 (the analyzer
+     follows the player between strings).
+- Outcome: 3/3 GREEN. Every string: 100% correct note, 0 cents,
+  confidence 1.00 in the settled window (diagnostic evidence). The DSP is
+  ready for a real microphone; remaining device-gate scope is capture/UI only.
+- Test data gotcha (self-caught via diagnostic): 130.81 Hz = C3,
+  146.83 Hz = D3 — the original map had D3/F3 swapped; the DSP was right,
+  the fixture was wrong.

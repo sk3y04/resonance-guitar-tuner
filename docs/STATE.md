@@ -1,17 +1,18 @@
 # STATE — Resonance
 
-- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06) + host suite (2026-11-07): Robolectric
-  android-host suite GREEN. 204/204 jvmTest + 180/180 android host + demo
-  5/5; verify.sh 5/5 gates PASS (incl. :shared:testAndroidHostTest).
-  Only the real-device run (mic/UI) remains.
-- Last green checkpoint: :shared:jvmTest 204/204; :shared:testAndroidHostTest
-  180/180 (176 common + 4 Robolectric: ContextDataStore round trip +
-  ViewModel import/export/lifecycle, 2026-11-07); run-demo 5/5;
-  verify.sh ALL 5 mandatory gates PASS (device gate not run).
-- Test breakdown: 204 = music 47 + DSP 27 + state/stream/capture 25 +
+- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06) + Robolectric host suite +
+  DSP realism (2026-11-07). 207/207 jvmTest + 183/183 android host +
+  demo 5/5; verify.sh 5/5 gates PASS. Only the real-device run (mic/UI) remains.
+- Last green checkpoint: :shared:jvmTest 207/207 (incl. 3 PluckedString
+  realism tests); :shared:testAndroidHostTest 183/183 (179 common + 4
+  Robolectric); run-demo 5/5; verify.sh ALL 5 mandatory gates PASS
+  (device gate not run).
+- Test breakdown: 207 = 204 (music 47 + DSP 27 + state/stream/capture 25 +
   target-set 4 + UI-state 21 + headless Compose UI 15 + persistence 21 +
-  AppTuner 14 + TunerController 10 + editor/codec/concert/others.
-  180 android-host = 176 common suite + 4 new host tests (Robolectric sdk=34).
+  AppTuner 14 + TunerController 10 + editor/codec/concert/others) + 3
+  PluckedStringRealism (Karplus-Strong sweep 82–659 Hz, 20 dB noise,
+  successive-string tracking).
+  183 android-host = 179 common suite + 4 new host tests (Robolectric sdk=34).
   Verify per-run via test-results XML, not this snapshot.
 - Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios;
   [2] = instrument AUTO → lock E2 → unlock; mandatory verify.sh gate 2/4).
