@@ -1,14 +1,17 @@
 # STATE — Resonance
 
-- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06): first real Android build GREEN
-  (compile + lint + assembleDebug → androidApp-debug.apk). 204/204 host
-  tests + demo 5/5 still green. Only the device run remains.
-- Last green checkpoint: :shared:jvmTest 204/204 (2026-11-06);
-  ./scripts/run-demo.sh 5/5 exit 0; verify.sh ALL mandatory gates PASS
-  (Android compile/lint/APK green; device gate not run).
+- Device/SDK follow-up — SDK UNBLOCKED (2026-11-06) + host suite (2026-11-07): Robolectric
+  android-host suite GREEN. 204/204 jvmTest + 180/180 android host + demo
+  5/5; verify.sh 5/5 gates PASS (incl. :shared:testAndroidHostTest).
+  Only the real-device run (mic/UI) remains.
+- Last green checkpoint: :shared:jvmTest 204/204; :shared:testAndroidHostTest
+  180/180 (176 common + 4 Robolectric: ContextDataStore round trip +
+  ViewModel import/export/lifecycle, 2026-11-07); run-demo 5/5;
+  verify.sh ALL 5 mandatory gates PASS (device gate not run).
 - Test breakdown: 204 = music 47 + DSP 27 + state/stream/capture 25 +
   target-set 4 + UI-state 21 + headless Compose UI 15 + persistence 21 +
   AppTuner 14 + TunerController 10 + editor/codec/concert/others.
+  180 android-host = 176 common suite + 4 new host tests (Robolectric sdk=34).
   Verify per-run via test-results XML, not this snapshot.
 - Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios;
   [2] = instrument AUTO → lock E2 → unlock; mandatory verify.sh gate 2/4).
@@ -17,7 +20,16 @@
   AUTO/lock targeting, ±0.1 Hz concert steppers) → TunerController
   (permissions/errors/UI mapping + CRUD facade, common) → MainScreen
   (Compose host, common) → Android shell (ViewModel + pump thread +
-  Activity, androidMain, compile-blocked on the missing SDK).
+  Activity, androidMain; bridge behavior-tested via Robolectric).
+- Robolectric host-test facts: AGP-kmp android target gets the
+  test source set via `android.withHostTest { }` (no generated accessor —
+  deps go in `named("androidHostTest")`); task = :shared:testAndroidHostTest;
+  the 176-test common suite ALSO runs there; viewModelScope needs
+  `shadowOf(Looper.getMainLooper()).idle()` pumping; Robolectric apps are
+  per-test → reset process singletons in @Before (internal test hook).
+- DataStore 1.3.0 android facts (Robolectric host suite): filename MUST end in
+  preferences_pb (hard extension check); ONE active store per file per
+  process → createContextDataStore is a per-process singleton (synchronized).
 - Editor UI note: form state lives in MainScreen (remember), not in
   the composable — headless semantics tests drive it via callbacks.
 - DataStoreSettingsRepository is commonMain (injected DataStore); file

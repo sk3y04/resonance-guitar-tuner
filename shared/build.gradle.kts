@@ -46,6 +46,9 @@ if (androidSdkUsable) {
     android.compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+    // Android host (unit) tests on the JVM via Robolectric — the android
+    // side gets real-behavior tests without a device (device-independent).
+    android.withHostTest { }
 }
 
 kotlin {
@@ -70,6 +73,15 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.coroutines.test)
+        }
+        // Android host tests (Robolectric) — real Context/files on
+        // the JVM, so androidMain is behavior-tested without a device.
+        // (No generated accessor for withHostTest source sets — use named.)
+        named("androidHostTest") {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.robolectric)
+            }
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

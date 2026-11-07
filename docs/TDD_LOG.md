@@ -489,3 +489,39 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Result: VERIFY_EXIT=0 — all mandatory gates PASS; androidApp-debug.apk
   (~12.8 MB) built; 204/204 host tests + demo 5/5 unchanged.
 - Only remaining gate: device smoke.
+
+## Robolectric android-host suite (COMPLETE)
+- Goal: behavior-test androidMain WITHOUT a device (device gate still external).
+  Robolectric 4.17 (latest stable, live-verified; 4.18 is beta).
+- Wiring: AGP-kmp android target gets the host-test source set via
+  `android.withHostTest { }` (the earlier build warning documented it);
+  NO generated source-set accessor exists for it — deps must go through
+  `named("androidHostTest") { dependencies { ... } }`. Test task:
+  :shared:testAndroidHostTest. The 176-test common suite ALSO executes
+  on the android host (180 = 176 + 4 new).
+- RED → GREEN (4 tests):
+  1. ContextDataStoreHostTest.contextBackedStoreRoundTripsThroughRealFile
+     — real Robolectric Application, real file, fresh-repo re-read.
+  2. ResonanceViewModelHostTest.importUriStagesPayloadAndConsumeClearsIt
+     — SAF seam: file URI → ContentResolver → staged payload → codec
+        import (1/1) → consume clears. Payload made by the REAL codec.
+  3. ...exportUriWritesCodecEncodedCustomPresets — file URI out, decode
+     round-trip of the written JSON.
+  4. ...stopAndClearAreSafeWithoutCapture — lifecycle smoke via a test
+     subclass (onCleared is protected; ViewModel.clear() is internal).
+- Production bugs the suite CAUGHT (both androidMain, JVM suite couldn't):
+  a) DataStore 1.3.0 hard-checks the filename extension — must end in
+     `preferences_pb` (was `resonance.preferences`) → crashed on first use.
+  b) Two createContextDataStore calls = two active stores on one file →
+     IllegalStateException (DataStore is per-process-singleton by contract;
+     a recreated ViewModel would have crashed the app). Fixed: synchronized
+     per-process singleton + internal resetContextDataStoreForTesting()
+     (Robolectric apps are per-test; reset in @Before).
+- Test-side gotchas: JUnit4 rejects assertEquals(double,double) without
+  delta; viewModelScope coroutines need shadowOf(Looper.getMainLooper())
+  .idle() pumping (await-loop with deadline); Uri.fromFile works through
+  Robolectric's ContentResolver.
+- verify.sh: new mandatory gate 5/5 :shared:testAndroidHostTest (same
+  SDK gate as lint/assemble — SDK-less machines stay green via BLOCKED).
+- Result: 204/204 jvmTest + 180/180 androidHostTest + demo 5/5;
+  verify.sh 5/5 PASS. The device gate now covers ONLY real mic + on-screen UI.

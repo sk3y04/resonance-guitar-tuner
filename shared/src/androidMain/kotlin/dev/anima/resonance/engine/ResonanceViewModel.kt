@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
  * DENIED_PERMANENT, which the UI renders as the "open app settings" CTA
  * (never re-prompts).
  */
-class ResonanceViewModel(application: Application) : AndroidViewModel(application) {
+open class ResonanceViewModel(application: Application) : AndroidViewModel(application) {
 
     val controller: TunerController by lazy {
         TunerController(
