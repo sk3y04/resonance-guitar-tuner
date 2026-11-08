@@ -23,19 +23,18 @@ class TunerController(
     settingsRepo: SettingsRepository,
     private val presets: PresetStore,
 ) {
-    private var capturing = false
-    private var captureError = false
     private var permission: MicPermissionState = MicPermissionState.NOT_REQUESTED
 
+    /**
+     * The engine owns the UI capture flags (capturingUi /
+     * captureErrorUi), written under its lock by the pump side, so the main
+     * thread reads them in [state] with a happens-before guarantee.
+     */
     private val engine = AppTuner(
         input = input,
         settingsRepo = settingsRepo,
         presets = presets,
         persistCustoms = { customs -> settingsRepo.saveCustomPresets(customs) },
-        onCaptureState = { s ->
-            if (s == CaptureState.ERROR) captureError = true
-            if (s == CaptureState.IDLE) capturing = false
-        },
     )
 
     /** Live capture state (mirrors the engine; the Android pump thread uses it). */
@@ -49,20 +48,13 @@ class TunerController(
     /** Opens capture. Denied permission never touches the mic. */
     suspend fun startCapture() {
         if (permission != MicPermissionState.GRANTED) return
-        capturing = true
-        captureError = false
+        // The engine sets/clears the UI capture flags under its own lock.
         engine.start()
-        if (engine.captureState == CaptureState.ERROR) {
-            capturing = false
-            captureError = true
-        }
     }
 
     /** Stops capture and clears the screen reading. Idempotent. */
     suspend fun stopCapture() {
         engine.stop()
-        capturing = false
-        captureError = false
     }
 
     /** User-driven retry after a capture error: fresh stop + start. */
@@ -81,13 +73,13 @@ class TunerController(
         val settings = engine.currentSettings
         val instrument = settings.mode == TunerMode.INSTRUMENT
         return MainScreenUi.toUiState(
-            snapshot = if (capturing) engine.lastSnapshot else null,
+            snapshot = if (engine.capturingUi) engine.lastSnapshot else null,
             permission = permission,
             mode = settings.mode,
             preset = if (instrument) presets.byId(settings.selectedPresetId) else null,
             selectedStringIndex = if (instrument) engine.lockedString else null,
             concertPitchHz = settings.concertPitchHz,
-            captureError = captureError,
+            captureError = engine.captureErrorUi,
             presets = presets.all(),
             favoritePresetIds = presets.favorites().toSet(),
             selectedPresetId = settings.selectedPresetId,
