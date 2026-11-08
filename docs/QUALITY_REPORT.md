@@ -139,3 +139,50 @@ manual locks may show large deviations by design):
 Pinned result after fix: an out-of-semitone display lasts at most a couple
 of frames in the worst constructed case; the 20k-frame fuzz shows zero
 >200¢ displays.
+
+## Concurrency (COMPLETE)
+
+The Android shell drives the engine from TWO threads: the AudioRecord
+pump thread (`poll`, ~47 fps) and the main thread (settings, preset CRUD,
+UI state reads every recomposition). Before this slice, nothing in the
+engine was synchronized — the host tests were single-threaded, so the
+split was untested.
+
+### Bug found (RED → GREEN): pump-thread crash
+
+`AppTunerConcurrencyTest` (JVM-only, real threads) reproduces the shell's
+split: an unpaced pump thread hammers `poll()` while the main thread runs
+a random storm (concert-pitch churn, mode/preset switches, string locks,
+preset CRUD + favorites, garbage imports) and reads `state()`
+continuously. First run: the pump threw
+`IndexOutOfBoundsException: Empty list doesn't contain element at index 0`
+inside the state machine's 5-frame smoothing ring — `setConcertPitch`
+clearing the ring on the main thread mid-read on the pump thread. This is
+the crash the real app would have produced under settings churn.
+
+### Fix
+
+One lock, one rule: every access to engine shared state (state machine,
+analyzer, orchestrator, applied settings, string lock, snapshot, UI
+capture flags) is serialized on a single lock via `engineLocked`
+(expect/actual over JVM `synchronized` — both module targets are
+JVM-based). Two disciplines, documented on the class:
+
+1. The lock is never held across a suspension into the settings
+   repository (disk I/O) — the pump can never be blocked on the disk.
+2. The controller's old `capturing`/`captureError` fields (written by a
+   capture-state callback on the pump thread, read by `state()` on main,
+   no visibility guarantee) moved into the engine as `capturingUi` /
+   `captureErrorUi`, written and read under the same lock.
+
+After the fix the storm runs 10 s wall-clock clean and the engine
+invariants hold (unique preset IDs, built-ins intact, E2 still locks).
+
+### Flake note
+
+`FuzzStateMachineTest.randomWellFormedFramesStayConsistent` failed once
+during the overnight runs ("stale display lasted 5 frames (max 4)") and
+passed in all subsequent runs — a borderline staleness-boundary case,
+not a regression (it passed both pre- and post-concurrency suites). Watching;
+if it recurs, the bound in `StaleNoteYieldTest`'s fuzz partner gets a
+deterministic repro.

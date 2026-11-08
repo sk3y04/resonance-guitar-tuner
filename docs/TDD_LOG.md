@@ -661,3 +661,39 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   full jvm + host suites green, verify.sh gates green. Next: concurrency pass
   (concurrency + soak), contract gates, clean rebuild +
   report).
+
+## Concurrency: two-thread engine (2026-11-08)
+
+- RED: `AppTunerConcurrencyTest` (jvmTest, real threads). Pump thread:
+  unpaced `controller.pump(t+=21)` loop (the AudioRecord rhythm,
+  accelerated). Main thread: 10 s wall of seeded-random storm — concert
+  pitch 400–480 churn, ±0.1 steps, mode flips, preset switches, string
+  locks, custom-preset create/edit/delete, favorites, garbage imports,
+  plus continuous `state()` reads with a concert-range assert (torn-read
+  detector). Contract: no exception escapes either thread; afterwards
+  IDs unique, built-ins intact+ordered, settings persist, E2 re-locks in
+  tune. First run: `pump thread threw:
+  IndexOutOfBoundsException: Empty list doesn't contain element at index
+  0` — the state machine's smoothing ring read on the pump thread while
+  `setConcertPitch` cleared it on the main thread.
+- GREEN: single engine lock. `engineLocked(lock) { ... }`
+  (expect/actual over `kotlin.synchronized`; jvmMain + androidMain
+  actuals) wraps every read/write of shared state in AppTuner:
+  start/stop/poll, applied-settings, lastSnapshot, lockedString,
+  captureState, and the new engine-owned UI flags (capturingUi /
+  captureErrorUi — the controller's old cross-thread copies are gone).
+  Rule 1: lock never held across `settingsRepo` suspensions (pump never
+  blocks on disk). Rule 2: all state() reads go through locked getters.
+  One compile stumble: `var` + custom getter + `private set` needs an
+  initializer → the public properties became `val` over private backing
+  vars. One test stumble: JUnit4 `assertEquals(double, double)` without
+  delta → added 1e-9.
+- Result: jvmTest 228/228, android-host 203/203, verify.sh all mandatory
+  gates PASS (device gate still open). Storm clean for 10 s; invariants
+  hold; E2 re-locks in tune after the storm.
+- Note: an intermediate re-run initially reported the OLD crash because
+  `compileKotlinJvm` had failed (my first draft's init error) and Gradle
+  left stale results — lesson: clear test-results before a verifying run
+  and check the XML mtimes, not just the summary.
+- Next: contract gates (merged-manifest permission FAIL gate +
+  lint sweep), clean rebuild + final report.
