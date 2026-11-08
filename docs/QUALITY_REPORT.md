@@ -211,3 +211,44 @@ gate 3/7) makes it a build gate:
 violation classes for that permission); reverting restored PASS. Full
 `verify.sh` run: all 7 mandatory locally-available gates PASS (device RUN
 still the real-device gate). Lint sweep remains gate 4 (`:androidApp:lintDebug`).
+
+## Final summary (night of 2026-11-07 → 08)
+
+### Bugs found and fixed (all RED → GREEN, see TDD_LOG)
+
+| # | Bug | Found by | Fix |
+|---|---|---|---|
+| 1 | Low E (55/82 Hz) misread under 10 dB noise (59.64 Hz for 55 Hz) | DSP correctness matrix (45 notes × 3 flavors × noise) | `Yin.detect` now selects between the first-crossing candidate and the global in-band minimum, validated by spectral presence + fundamental plausibility |
+| 2 | Subharmonic fragility: sawtooth 246.94 Hz reported as 123.43 Hz at conf 0.99 | correctness matrix | same candidate-selection rule (in-band harmonic check kills the subharmonic) |
+| 3 | Stale-note display: a locked note could outlive its pitch forever (A1 displayed at +5210¢) | 20k-frame state-machine fuzz | bounded-staleness guard (yield after a full re-lock window) + 200¢ smoothed-display hard backstop |
+| 4 | Two-thread engine race: pump thread crashed with `IndexOutOfBoundsException` in the smoothing ring while the main thread changed settings | real-thread storm test | single engine lock (expect/actual `synchronized`); persistence kept outside the critical section; controller's cross-thread UI flags moved into the engine |
+| 5 | Offline contract unenforced (a comment, not an invariant) | contract-gate design | verify.sh gate 3/7 on the MERGED manifest (allowlist-only; dependency-added permissions fail the build) |
+
+### Measured quality
+
+- **431 tests, all green**: 228 JVM (incl. 45-note×3-flavor accuracy
+  matrix, 400 garbage codec payloads, 20k-frame state-machine fuzz,
+  600-op CRUD storm, 10 s real-thread concurrency storm) + 203 Android
+  host (same common suites via Robolectric + 4 Android-bridge tests).
+- **Accuracy contract at 20 dB** (gated): 45/45 notes × sine/pluck/noisy,
+  median |cents| ≤ 5 / 5 / 10; A4=432 retunes correctly; out-of-range
+  tones map to boundaries without false in-tune.
+- **Concurrency contract**: 10 s wall-clock storm (unpaced pump vs
+  random settings/CRUD storm + continuous state reads) — zero
+  exceptions, all invariants hold, tone re-locks after the storm.
+- **Clean rebuild**: from wiped build dirs, all 7 verify gates PASS
+  (tests, demo 5/5, offline contract, lint, assemble, android host
+  tests, instrumented-test APK build).
+- **Offline by contract, enforced at build time**: merged manifest
+  allowlist = RECORD_AUDIO (+ AGP-injected receiver-visibility
+  permission). No INTERNET, no cleartext, no network-security-config.
+
+### Known limitations / watch items
+
+- 10 dB low-register stress: identity drops in 87–150 Hz (documented
+  table in the DSP correctness map section — the physical low-end of a plucked
+  string; the app shows UNSTABLE rather than a wrong note there).
+- `FuzzStateMachineTest` borderline-boundary flake (1 of 6 overnight
+  runs; deterministic repro on deck if it recurs).
+- Device gate: on-device run (`./scripts/test-device.sh`) pending a
+  device/emulator — the test APK builds as gate 7/7 in the meantime.

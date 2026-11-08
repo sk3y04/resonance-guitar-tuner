@@ -1,23 +1,17 @@
 # STATE — Resonance
 
-- Device/SDK follow-up COMPLETE + DSP correctness map + fuzz/property
-  + concurrency + contract gates COMPLETE. 228/228
-  jvmTest + 203/203 android host + demo 5/5 + instrumented test APK
-  builds; verify.sh 7/7 gates PASS (new gate 3 = offline-by-contract on
-  the MERGED manifest). The correctness pass fixed a real low-E-at-noise DSP bug
-  (+ subharmonic fragility); the fuzz pass found + fixed a stale-note display
-  bug (a locked note could outlive its pitch indefinitely under rapid
-  setting changes — 5210¢ displays) via a bounded-staleness guard +
-  hard backstop; the concurrency pass proved the two-thread engine race real (pump
-  crashed with IndexOutOfBoundsException in the smoothing ring) and
-  fixed it with a single engine lock (expect/actual `synchronized`;
-  persistence kept outside the critical section); the offline-contract gate enforces the
-  offline contract from the merged manifest (allowlist: RECORD_AUDIO +
-  the AGP-injected receiver-visibility permission; any other
-  permission — including in a future dependency — fails the build).
-  10 dB low-register stress documented in docs/QUALITY_REPORT.md.
-  Device day = attach device, ./scripts/test-device.sh. Clean rebuild remains
-  (clean rebuild + final report).
+- Device/SDK follow-up COMPLETE + overnight quality program (all five passes) ALL
+  COMPLETE (2026-11-08). 228/228 jvmTest + 203/203 android host +
+  demo 5/5 + instrumented test APK builds; verify.sh 7/7 gates PASS,
+  including from a fully wiped build tree (clean rebuild).
+  Five real bugs found + fixed, all RED→GREEN: (1) low-E misread at
+  10 dB noise, (2) subharmonic fragility (246.94→123.43 Hz),
+  (3) stale-note display (A1 at +5210¢), (4) two-thread engine race
+  (pump crash in the smoothing ring — fixed with a single engine lock),
+  (5) offline contract now a build gate on the merged manifest.
+  Details + measured quality: docs/QUALITY_REPORT.md.
+  Device day = attach device, ./scripts/test-device.sh (test APK builds
+  as gate 7/7 until then).
 - Last green checkpoint: :shared:jvmTest 228/228 (214 + 13 fuzz:
   FuzzCodec 5 + FuzzStateMachine 4 + FuzzCrud 3 + StaleNoteYield 1 +
   1 concurrency AppTunerConcurrencyTest);

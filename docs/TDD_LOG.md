@@ -723,3 +723,23 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   dependency adding a permission fails the build on purpose until the
   spec and the allowlist are amended deliberately.
 - Next: clean rebuild + final report.
+
+## Clean rebuild + final report (2026-11-08)
+
+- `./gradlew clean` + manual removal of every module build dir (no
+  stale classes/results possible), then full `./scripts/verify.sh`:
+  all 7 gates PASS from the wiped state. The contract gate even rebuilt
+  its own input ("merged manifest not found — building it..."), proving
+  the gate works without pre-existing build state.
+- Fresh results: jvmTest 228/228, androidHostTest 203/203 (XML mtimes
+  verified post-run), demo 5/5, lint clean, debug APK (12.8 MB) +
+  instrumented test APK assembled.
+- docs/QUALITY_REPORT.md finalized: bug ledger (5 findings — DSP
+  low-E@10dB, subharmonic, stale-note display, two-thread race,
+  unenforced offline contract — all RED→GREEN), measured quality
+  (431 tests, accuracy contract, concurrency contract, clean rebuild),
+  watch items (10 dB low-register table, FuzzStateMachine boundary
+  flake, device run).
+- Overnight quality program (all five passes): COMPLETE. Remaining
+  external-only items: device run and optional visual
+  review).
