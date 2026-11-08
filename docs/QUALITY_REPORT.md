@@ -186,3 +186,28 @@ passed in all subsequent runs — a borderline staleness-boundary case,
 not a regression (it passed both pre- and post-concurrency suites). Watching;
 if it recurs, the bound in `StaleNoteYieldTest`'s fuzz partner gets a
 deterministic repro.
+
+## Contract gates (COMPLETE)
+
+The spec's offline contract ("no INTERNET permission, no analytics, no
+login, no cloud") was previously a promise in the manifest comment, not
+an enforced invariant. `scripts/check-offline-contract.sh` (verify.sh
+gate 3/7) makes it a build gate:
+
+- Parses the **merged** debug manifest — i.e. every `uses-permission`
+  from the app **and all its libraries** after manifest merging, so a
+  future dependency silently adding a permission fails the build.
+- Fails on: `INTERNET`; any network-adjacent permission (network /
+  wifi / location); any permission outside an explicit allowlist;
+  `usesCleartextTraffic="true"`; a wired-in network-security-config.
+- Allowlist (deliberate, documented in the script): `RECORD_AUDIO` and
+  the AGP-injected package-private `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+  (system receiver-visibility permission for the Android 13+
+  `ContextCompat.registerReceiver` path — not a capability, not a leak
+  surface).
+
+**Gate proven non-vacuous (RED→GREEN on the gate itself):** injecting
+`INTERNET` into the app manifest made the gate FAIL (it flagged all three
+violation classes for that permission); reverting restored PASS. Full
+`verify.sh` run: all 7 mandatory locally-available gates PASS (device RUN
+still the real-device gate). Lint sweep remains gate 4 (`:androidApp:lintDebug`).

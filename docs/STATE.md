@@ -1,25 +1,29 @@
 # STATE — Resonance
 
 - Device/SDK follow-up COMPLETE + DSP correctness map + fuzz/property
-  + concurrency COMPLETE. 228/228 jvmTest + 203/203 android host
-  + demo 5/5 + instrumented test APK builds; verify.sh 6/6 gates PASS.
-  The correctness pass fixed a real low-E-at-noise DSP bug (+ subharmonic fragility);
-  The fuzz pass found + fixed a stale-note display bug (a locked note could
-  outlive its pitch indefinitely under rapid setting changes — 5210¢
-  displays) via a bounded-staleness guard + hard backstop; the concurrency pass proved
-  the two-thread engine race real (pump crashed with
-  IndexOutOfBoundsException in the smoothing ring) and fixed it with a
-  single engine lock (expect/actual `synchronized`; persistence kept
-  outside the critical section). 10 dB low-register stress documented in
-  docs/QUALITY_REPORT.md. Device day = attach device,
-  ./scripts/test-device.sh. Remaining: contract gates → clean
-  rebuild).
+  + concurrency + contract gates COMPLETE. 228/228
+  jvmTest + 203/203 android host + demo 5/5 + instrumented test APK
+  builds; verify.sh 7/7 gates PASS (new gate 3 = offline-by-contract on
+  the MERGED manifest). The correctness pass fixed a real low-E-at-noise DSP bug
+  (+ subharmonic fragility); the fuzz pass found + fixed a stale-note display
+  bug (a locked note could outlive its pitch indefinitely under rapid
+  setting changes — 5210¢ displays) via a bounded-staleness guard +
+  hard backstop; the concurrency pass proved the two-thread engine race real (pump
+  crashed with IndexOutOfBoundsException in the smoothing ring) and
+  fixed it with a single engine lock (expect/actual `synchronized`;
+  persistence kept outside the critical section); the offline-contract gate enforces the
+  offline contract from the merged manifest (allowlist: RECORD_AUDIO +
+  the AGP-injected receiver-visibility permission; any other
+  permission — including in a future dependency — fails the build).
+  10 dB low-register stress documented in docs/QUALITY_REPORT.md.
+  Device day = attach device, ./scripts/test-device.sh. Clean rebuild remains
+  (clean rebuild + final report).
 - Last green checkpoint: :shared:jvmTest 228/228 (214 + 13 fuzz:
   FuzzCodec 5 + FuzzStateMachine 4 + FuzzCrud 3 + StaleNoteYield 1 +
   1 concurrency AppTunerConcurrencyTest);
   :shared:testAndroidHostTest 203/203 (199 common + 4 Robolectric);
-  run-demo 5/5; verify.sh ALL 6 mandatory gates PASS (device RUN still
-  not run; its test APK is assembled as gate 6).
+  run-demo 5/5; verify.sh ALL 7 mandatory gates PASS (device RUN still
+  not run; its test APK is assembled as gate 7).
 - DSP correctness facts (2026-11-07): Yin.detect now selects between the
   first-crossing candidate and the global in-band minimum, validated by
   spectral presence (ratio ≥ 0.25) + fundamental plausibility (no in-band

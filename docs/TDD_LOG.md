@@ -697,3 +697,29 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   and check the XML mtimes, not just the summary.
 - Next: contract gates (merged-manifest permission FAIL gate +
   lint sweep), clean rebuild + final report.
+
+## Contract gates: offline-by-contract (2026-11-08)
+
+- What: `scripts/check-offline-contract.sh`, verify.sh gate 3/7.
+  Parses the MERGED debug manifest
+  (androidApp/build/intermediates/merged_manifests/debug/processDebugManifest/
+  AndroidManifest.xml — app + all libraries after merging) and FAILs on
+  INTERNET, network-adjacent permissions, any non-allowlisted permission,
+  cleartext traffic, or a wired-in network-security-config. Allowlist:
+  RECORD_AUDIO + the AGP-injected
+  dev.anima.resonance.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION (both
+  documented in the script).
+- RED (gate non-vacuity, not a code bug): temporarily injected
+  `<uses-permission android:name="android.permission.INTERNET" />` into
+  androidApp/src/main/AndroidManifest.xml, re-merged, ran the gate →
+  FAIL with all three violation classes reported (INTERNET present,
+  network-adjacent, outside allowlist). GATE_EXIT=1.
+- GREEN: reverted the manifest (byte-identical, git diff clean),
+  re-merged, gate → PASS listing exactly the 2 allowed permissions.
+- verify.sh: gates renumbered 6→7; new gate runs before lint/assemble.
+  Full run: 7/7 mandatory locally-available gates PASS (device RUN
+  still the real-device gate).
+- Result: the offline contract is now enforced at build time — a future
+  dependency adding a permission fails the build on purpose until the
+  spec and the allowlist are amended deliberately.
+- Next: clean rebuild + final report.
