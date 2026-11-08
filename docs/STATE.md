@@ -1,19 +1,28 @@
 # STATE — Resonance
 
-- Device/SDK follow-up — COMPLETE except the physical device run. 207/207
-  jvmTest + 183/183 android host + demo 5/5 + instrumented test APK builds;
-  verify.sh 6/6 gates PASS. Device day = attach device, ./scripts/test-device.sh.
-- Last green checkpoint: :shared:jvmTest 207/207 (incl. 3 PluckedString
-  realism tests); :shared:testAndroidHostTest 183/183 (179 common + 4
-  Robolectric); run-demo 5/5;  verify.sh ALL 6 mandatory gates PASS (device RUN still not run;
+- Device/SDK follow-up COMPLETE + overnight quality: DSP correctness map
+  COMPLETE. 214/214 jvmTest + 190/190 android host + demo 5/5 +
+  instrumented test APK builds; verify.sh 6/6 gates PASS. The correctness pass found and
+  fixed a real low-E-at-noise DSP bug (+ subharmonic fragility); 10 dB
+  low-register stress documented in docs/QUALITY_REPORT.md. Device day =
+  attach device, ./scripts/test-device.sh. The fuzz/concurrency/contract/rebuild passes follow the same night
+  (fuzz/property → concurrency+soak → contract gates → clean rebuild).
+- Last green checkpoint: :shared:jvmTest 214/214 (207 baseline + 4
+  FrequencyMatrix + 3 YinNoiseRobustness); :shared:testAndroidHostTest
+  190/190 (186 common = 179 pre-QN + 7 new, + 4 Robolectric); run-demo 5/5;
+  verify.sh ALL 6 mandatory gates PASS (device RUN still not run;
   its test APK is assembled as gate 6).
-- Test breakdown: 207 = 204 (music 47 + DSP 27 + state/stream/capture 25 +
-  target-set 4 + UI-state 21 + headless Compose UI 15 + persistence 21 +
-  AppTuner 14 + TunerController 10 + editor/codec/concert/others) + 3
-  PluckedStringRealism (Karplus-Strong sweep 82–659 Hz, 20 dB noise,
-  successive-string tracking).
-  183 android-host = 179 common suite + 4 new host tests (Robolectric sdk=34).
-  Verify per-run via test-results XML, not this snapshot.
+- DSP correctness facts (2026-11-07): Yin.detect now selects between the
+  first-crossing candidate and the global in-band minimum, validated by
+  spectral presence (ratio ≥ 0.25) + fundamental plausibility (no in-band
+  harmonic 2f..24f > 10x own energy); deeper dip wins, tie → smaller lag.
+  StreamingAnalyzer default window = 4096 (93 ms). Pluck fixtures use a
+  physical pluck-shape excitation. Contract at 20 dB: 45/45 notes ×
+  3 flavors, identity 100%/95%/100%, median ≤5¢/5¢/10¢. 10 dB = documented
+  stress limit (identity 41–100% in 87–150 Hz; table in QUALITY_REPORT.md).
+- Test breakdown (verify per-run via test-results XML, not this snapshot):
+  214 jvm = 204 pre-device-follow-up core + 3 PluckedStringRealism + 4 FrequencyMatrix
+  + 3 YinNoiseRobustness. 190 host = same common + 4 Robolectric.
 - Runnable demo: ./scripts/run-demo.sh → :hostDemo (5 assertive scenarios;
   [2] = instrument AUTO → lock E2 → unlock; mandatory verify.sh gate 2/4).
 - Architecture: AppTuner (engine, common: capture orchestration, YIN,

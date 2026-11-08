@@ -80,7 +80,65 @@ class Yin(
             return PitchEstimate(0.0, 0.0)
         }
 
-        // 4) Parabolic interpolation around the minimum for sub-sample precision.
+        var gMin = minLag
+        for (t in minLag..maxLag) if (dNorm[t] < dNorm[gMin]) gMin = t
+
+        // 3b) Two-candidate selection. Two candidates: the first-crossing
+        // descent (fundamental-first, the classic YIN rule) and the global
+        // in-band minimum (the deepest dip). Broadband noise can make a
+        // SHALLOW dip cross the threshold before the true-period dip
+        // (measured: 55 Hz + 10 dB → false dip at lag 741, d'=0.145, beat
+        // the true dip at lag ~796, d'=0.069 → 59.5 Hz, confidence 0.85,
+        // on 20/20 seeds). Each candidate is validated:
+        //   A) spectral presence — real energy at its frequency (kills noise
+        //      dips that carry no tonal content);
+        //   B) fundamental plausibility — no in-band harmonic 2f..24f is
+        //      >10x its own energy. Real strings may be overtone-rich
+        //      (bridge plucks: 4th partial can exceed the fundamental), so
+        //      the margin is wide; subharmonic ARTIFACTS (110 Hz for a
+        //      440 Hz sine, 69.5 Hz for a 903 Hz sine — 13x!) have their
+        //      "harmonics" 100x+ stronger and are disqualified. The range
+        //      2..24 covers every subharmonic lag reachable in the
+        //      55..1200 Hz band (maxLag period = 55.05 Hz).
+        // Survivors: the deeper dip wins; comparable depths (within 25%)
+        // → the smaller lag (fundamental-first, classic YIN behavior).
+        val candidates = (if (gMin == tauMin) listOf(tauMin) else listOf(tauMin, gMin)).distinct()
+        fun isFundamentalCandidate(tau: Int): Boolean {
+            val f = sampleRate.toDouble() / tau
+            val r = energyRatioAt(frame, f, sampleRate)
+            if (r < 0.25) return false
+            for (h in 2..24) {
+                val hf = f * h
+                if (hf > sampleRate / 2.0) break
+                if (energyRatioAt(frame, hf, sampleRate) > 10.0 * r) return false
+            }
+            return true
+        }
+        val survivors = candidates.filter { isFundamentalCandidate(it) }
+        if (survivors.isEmpty()) return PitchEstimate(0.0, 0.0)
+        tauMin = if (survivors.size == 1) {
+            survivors[0]
+        } else {
+            val a = survivors[0]
+            val b = survivors[1]
+            when {
+                dNorm[a] < 0.8 * dNorm[b] -> a
+                dNorm[b] < 0.8 * dNorm[a] -> b
+                else -> minOf(a, b)
+            }
+        }
+
+        // 4) Parabolic interpolation around the minimum for sub-sample
+        //    precision (classic YIN). The correctness sweep investigated a symmetric
+        //    least-squares fit over a wider window to remove the noise-trend
+        //    bias of the 3-point fit (measured −12 cents at 87 Hz @ 10 dB):
+        //    it fixes the tilted low-band dip but shifts clean high-end dips
+        //    (1174 Hz: 1170–1270 Hz errors) because the d′ dip curvature
+        //    over a multi-lag window is not quadratic for sharp dips. The
+        //    3-point form is the proven behavior for the clean/plucked band
+        //    (0-cent locks, plucked-string evidence); the residual low-band
+        //    tilt at 10 dB is a documented known limitation (see
+        //    docs/QUALITY_REPORT.md, DSP correctness map), not hidden by this choice.
         val tau = if (tauMin in 2 until maxLag) {
             val x1 = dNorm[tauMin - 1]
             val x2 = dNorm[tauMin]
@@ -99,6 +157,18 @@ class Yin(
         //    frequency. Rejects subharmonic artifacts from out-of-band content
         //    (e.g. a 3000 Hz tone masquerading as 1000 Hz through a 3x-period
         //    lag) — the classic octave-error shortcut.
+        val ratio = energyRatioAt(frame, frequency, sampleRate)
+        if (ratio < 0.25) return PitchEstimate(0.0, 0.0)
+
+        return PitchEstimate(frequency, confidence)
+    }
+
+    /**
+     * Fraction of the frame's total energy sitting at [frequency]
+     * (|DTFT(f)|² / Σ|frame|²). Used by the spectral guard and the
+     * dip-reselection veto.
+     */
+    private fun energyRatioAt(frame: FloatArray, frequency: Double, sampleRate: Int): Double {
         val omega = 2.0 * PI * frequency / sampleRate
         var re = 0.0
         var im = 0.0
@@ -109,10 +179,7 @@ class Yin(
         }
         var total = 0.0
         for (v in frame) total += v * v
-        val ratio = if (total > 0.0) (re * re + im * im) / total else 0.0
-        if (ratio < 0.25) return PitchEstimate(0.0, 0.0)
-
-        return PitchEstimate(frequency, confidence)
+        return if (total > 0.0) (re * re + im * im) / total else 0.0
     }
 
     companion object {

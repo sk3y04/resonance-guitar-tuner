@@ -582,3 +582,42 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
   adb pm grant RECORD_AUDIO → :androidApp:connectedDebugAndroidTest.
 - Result: androidApp-debug-androidTest.apk (1.1 MB) builds; verify.sh
   6/6 PASS; jvmTest 207/207 + androidHostTest 183/183 unchanged.
+
+## Overnight quality: DSP correctness map (COMPLETE)
+- Goal (unattended night): prove — with a full chromatic matrix — that the
+  DSP is correct across 55..1200 Hz, and fix what the matrix finds.
+- RED: FrequencyMatrixTest (45 semitones A1..D6 × {sine, physical pluck,
+  +20 dB noise}) + YinNoiseRobustnessTest (20-seed 55 Hz @ 10 dB).
+  First run found the headline bug: 55 Hz + 10 dB reads A#1 (58.3 Hz) at
+  confidence 0.85–1.00 on 20/20 seeds. Diagnostic: noise makes a shallow
+  dip (lag 741, d'=0.145) cross the 0.15 threshold before the true-period
+  dip (lag ~796, d'=0.069, 7x deeper).
+- Fix 1 (GREEN): two-candidate selection in Yin.detect — first-crossing
+  descent (fundamental-first) + global in-band minimum, each validated by
+  spectral presence (energy ratio ≥ 0.25) and fundamental plausibility
+  (no in-band harmonic 2f..24f > 10x own energy — kills subharmonic
+  artifacts 110-for-440, 67.8-for-339 (5x), 59.9-for-659 (11x) without
+  rejecting overtone-rich real strings). Deeper dip wins; tie → smaller
+  lag. 20/20 seeds correct.
+- Fix 2: StreamingAnalyzer default window 2048 → 4096 samples (93 ms):
+  at 2048, 110 Hz + 10 dB read 86.3 Hz on 27/27 frames (noise-trend dip
+  7x deeper than true dip). 8192 measured and rejected (moved failures,
+  2x CPU). See docs/QUALITY_REPORT.md.
+- Fix 3 (fixture realism, not a product change): Karplus-Strong test
+  fixtures used white-noise delay-line init (flat spectrum; some seeds put
+  the 4th partial 7x over the fundamental — no physical pluck does that).
+  → pluck-shape excitation (30% displacement), 1/h falloff.
+- Dead end documented (kept as a comment in Yin.kt): symmetric
+  least-squares dip fit removes the noise-trend tilt (measured −12¢ at
+  87 Hz @ 10 dB) but shifts clean high-end dips (non-quadratic d′
+  curvature over multi-lag windows) — net-negative across the matrix;
+  3-point parabola stays. Upgrade path (temporal prior from the state
+  machine) is a documented follow-up, out of tonight's scope.
+- Known limitation (documented, not hidden): 10 dB SNR degrades identity
+  in the 87–150 Hz register (measured 11/27..27/27; full table in
+  QUALITY_REPORT.md). The 20 dB realistic-room contract passes strict:
+  sine 45/45 @ ≤5¢ (worst 2¢), pluck 45/45 @ ≤5¢ (worst 2¢), noisy 20 dB
+  45/45 identity @ ≤10¢ (median 1¢, p90 4¢, worst 10¢ @ 55 Hz).
+- Result: jvmTest 214/214, androidHostTest 190/190 (7 new common tests +
+  suite); verify.sh 6/6. Next: fuzz/property tests, concurrency
+  + soak), contract gates, clean rebuild + report.
