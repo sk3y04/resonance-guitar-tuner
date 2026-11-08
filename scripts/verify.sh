@@ -7,13 +7,23 @@ set -u
 cd "$(dirname "$0")/.."
 FAILED=0
 
-echo "=== 1/6 host unit tests ==="
+echo "=== 1/7 host unit tests ==="
 ./scripts/test-unit.sh || FAILED=1
 
-echo "=== 2/6 runnable host demo (full pipeline, synthetic mic) ==="
+echo "=== 2/7 runnable host demo (full pipeline, synthetic mic) ==="
 ./scripts/run-demo.sh || FAILED=1
 
-echo "=== 3/6 Kotlin/Compose lint (host-visible subset) ==="
+echo "=== 3/7 offline-by-contract (merged manifest: no INTERNET, allowlist only) ==="
+# The offline contract is enforced from the MERGED manifest (app +
+# all library permissions after merging). Adding any non-allowlisted
+# permission — including in a dependency — fails this gate.
+if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
+  ./scripts/check-offline-contract.sh || FAILED=1
+else
+  echo "[verify] BLOCKED: offline-contract (no Android SDK platform)"
+fi
+
+echo "=== 4/7 Kotlin/Compose lint (host-visible subset) ==="
 # lintDebug lives in :androidApp; only available when the Android SDK gate is open.
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
   ./gradlew :androidApp:lintDebug --console=plain || FAILED=1
@@ -21,14 +31,14 @@ else
   echo "[verify] BLOCKED: :androidApp not configured (no Android SDK platform)"
 fi
 
-echo "=== 4/6 debug assembly ==="
+echo "=== 5/7 debug assembly ==="
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
   ./gradlew :androidApp:assembleDebug --console=plain || FAILED=1
 else
   echo "[verify] BLOCKED: debug assembly (no Android SDK platform)"
 fi
 
-echo "=== 5/6 Android host tests (Robolectric: real Context/files on the JVM) ==="
+echo "=== 6/7 Android host tests (Robolectric: real Context/files on the JVM) ==="
 # The androidMain bridge (DataStore, ViewModel/SAF seams) is
 # behavior-tested without a device — the same SDK gate as lint/assemble.
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
@@ -37,7 +47,7 @@ else
   echo "[verify] BLOCKED: android host tests (no Android SDK platform)"
 fi
 
-echo "=== 6/6 instrumented test APK (compile-check; RUN needs a device) ==="
+echo "=== 7/7 instrumented test APK (compile-check; RUN needs a device) ==="
 # The on-device suite (real mic, real UI) must stay buildable even
 # without a device; running it is ./scripts/test-device.sh.
 if [ -n "$(./gradlew -q projects --console=plain 2>/dev/null | grep ':androidApp' || true)" ]; then
