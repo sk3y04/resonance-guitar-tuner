@@ -48,6 +48,15 @@ class TunerStateMachine(
     private var inTune = false
     private var manualTarget: Note? = null
     private val ring = ArrayList<Double>(smoothingWindow)
+    /**
+     * Consecutive frames where the measurement is outside the stable note's
+     * semitone. Bounded by design: a legitimate note transition
+     * stays under the hysteresis window; an unbounded run means the note is
+     * stale (re-locking is being blocked by target resets) and it must
+     * yield. NOT reset by setting changes — a reference change must not
+     * renew a note the measurement has left.
+     */
+    private var staleFrameCount = 0
 
     /** Processes one detector frame at virtual time [nowMs]. */
     fun onPitch(estimate: PitchEstimate, nowMs: Long): TunerReading {
@@ -94,6 +103,40 @@ class TunerStateMachine(
                 concertPitchHz,
             )
             val current = stableNote
+            if (current != null && targetSet == null &&
+                kotlin.math.abs(Cents.deviation(estimate.frequencyHz, current.frequency(concertPitchHz))) > 50.0) {
+                // The measurement is outside the displayed note's
+                // semitone. Nearest matching can never deviate more than
+                // half a semitone from the true match, so this is either a
+                // legitimate transition (bounded by the hysteresis window)
+                // or a stale note kept alive by candidate resets during
+                // rapid target/concert changes. The latter must not display
+                // forever: after one full re-lock window without progress,
+                // the note yields to UNSTABLE. (Instrument AUTO sets are
+                // exempt: a large deviation there means the player is on
+                // the wrong string — correct display.)
+                staleFrameCount++
+                if (staleFrameCount > hysteresisFrames) {
+                    stableNote = null
+                    candidateNote = match.note
+                    candidateCount = 1
+                    staleFrameCount = 0
+                    ring.clear()
+                    inTune = false
+                    lastPitchMs = nowMs
+                    return TunerReading(
+                        status = TunerStatus.UNSTABLE,
+                        note = null,
+                        frequencyHz = 0.0,
+                        cents = 0,
+                        direction = PitchDirection.FLAT,
+                        inTune = false,
+                        confidence = estimate.confidence,
+                    )
+                }
+            } else {
+                staleFrameCount = 0
+            }
             if (current == null || match.note != current) {
                 if (candidateNote == match.note) candidateCount++ else {
                     candidateNote = match.note
@@ -126,6 +169,31 @@ class TunerStateMachine(
             }
         } else {
             inTune = false
+        }
+
+        // Hard backstop: never emit an impossible display. The
+        // raw-frame guard above clears a stale note after one full re-lock
+        // window, but a frame that happens to sit near the displayed note
+        // can reset that counter while the smoothing ring is still dominated
+        // by far values — in that case the DISPLAYED deviation is the
+        // invariant that must hold: beyond 2 semitones the note is not what
+        // the player is hearing, so it yields immediately.
+        if (note != null && manual == null && targetSet == null && kotlin.math.abs(cents) > 200) {
+            stableNote = null
+            candidateNote = null
+            candidateCount = 0
+            staleFrameCount = 0
+            ring.clear()
+            inTune = false
+            return TunerReading(
+                status = TunerStatus.UNSTABLE,
+                note = null,
+                frequencyHz = 0.0,
+                cents = 0,
+                direction = PitchDirection.FLAT,
+                inTune = false,
+                confidence = estimate.confidence,
+            )
         }
 
         val status = if (note == null || candidateNote != null) TunerStatus.UNSTABLE else TunerStatus.MEASURED

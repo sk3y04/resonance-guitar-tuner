@@ -621,3 +621,43 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Result: jvmTest 214/214, androidHostTest 190/190 (7 new common tests +
   suite); verify.sh 6/6. Next: fuzz/property tests, concurrency
   + soak), contract gates, clean rebuild + report.
+
+## Overnight quality: fuzz/property tests
+- Goal (unattended night): property-test every untrusted surface —
+  imported payloads, state-machine inputs, engine CRUD storms.
+- New suites (commonTest, both hosts):
+  - FuzzCodecTest: 400 random byte payloads (only IllegalArgumentException
+    acceptable), round-trip identity x50, deterministic ID-collision
+    renaming, every documented limit at its boundary (64/65 tunings,
+    12/13 strings, 40/41 name, 64/65 id, payload size), builtIn:true in
+    file is skipped, unknown keys ignored.
+  - FuzzStateMachineTest: 20k pseudo-random frames (freq 55..1200 incl.
+    gaps, confidence, backwards/huge clocks, NaN/Inf/negative/1e300
+    frequencies, concert-pitch churn 400..480, target-set and manual-lock
+    churn). Invariants: no throw, note always in active set, in-tune only
+    within exit threshold, direction agrees with cents, garbage never
+    corrupts the machine (clean A4 locks after a 500-frame garbage
+    storm), concert-pitch contract (400..480 accepted, out-of-band IAE).
+  - FuzzCrudTest: 600-op random engine storm (concert/mode/preset/string
+    lock/CRUD/favorite/import), garbage imports (must report error,
+    mutate nothing), built-ins immutable, IDs unique, repo mirror of
+    customs, engine still locks E2 after the storm.
+- Bug found by the state-machine fuzz (RED: StaleNoteYieldTest, A1
+  displayed at 5210¢): the stable note could outlive its pitch
+  indefinitely — rapid target/concert changes reset the hysteresis
+  candidate before a re-lock completes, while the 5-frame smoothing ring
+  filled with the new (far) frequency. Fix in TunerStateMachine (two
+  layers, both gated to chromatic mode — instrument AUTO sets and manual
+  locks may show large deviations by design):
+  1. staleFrameCount: raw measurement >50¢ from the displayed note for
+     more than one full re-lock window (hysteresisFrames) → the note
+     yields to UNSTABLE (a legitimate 3-frame transition is untouched —
+     pre-existing noteSwitchRequiresConsecutiveAgreement still passes).
+  2. Hard backstop: if the SMOOTHED display itself exceeds 200¢ (2
+     semitones) the note yields immediately — a near-boundary frame can
+     reset layer 1's counter while the ring is still far-dominated
+     (caught on the second fuzz pass: A3 at 2307¢ for 5 frames).
+- Result: presentation 52/52 (incl. 20k-frame fuzz + stale-yield test),
+  full jvm + host suites green, verify.sh gates green. Next: concurrency pass
+  (concurrency + soak), contract gates, clean rebuild +
+  report).

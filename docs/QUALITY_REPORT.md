@@ -99,3 +99,43 @@ lock-in behavior tests; not done under the overnight scope.
 `Yin.detect` worst case adds up to 2 candidates × (1 + 23 harmonic checks)
 DTFT energy paths per frame (each O(n)); measured jvm full-suite runtime
 remains ~1 min. On-device profiling (concurrency/clean-rebuild passes) will confirm the budget.
+
+## Fuzz/property tests (COMPLETE)
+
+Three commonTest suites (run on both JVM and Android hosts) property-test
+every untrusted surface:
+
+| suite | what it drives | invariants pinned |
+|---|---|---|
+| `FuzzCodecTest` | 400 random byte payloads + 50 round-trips + every documented limit at its boundary | only `IllegalArgumentException` on garbage; unique IDs; deterministic collision renaming (`x` → `x-import` → `x-import2`); built-ins never importable from file; 64/65 tunings, 12/13 strings, 40/41 name, 64/65 id, size limit |
+| `FuzzStateMachineTest` | 20k pseudo-random frames: 55–1200 Hz + gaps, confidence 0–1, backwards & `Long.MAX_VALUE` clocks, NaN/±Inf/negative/1e300 frequencies, A4 churn 400–480, target-set + manual-lock churn | no throw; note always in active set; in-tune only within exit threshold; direction ↔ cents sign; garbage never corrupts (clean A4 locks after a 500-frame garbage storm); `setConcertPitch` rejects out-of-band with IAE |
+| `FuzzCrudTest` | 600-op random engine storm (concert/mode/preset/string-lock/CRUD/favorite/import) + garbage imports | unique IDs; built-ins intact & immutable; repo mirrors customs; failed imports mutate nothing and report a reason; engine still locks E2 after the storm |
+
+### Bug found (RED → GREEN): stale-note display
+
+The state-machine fuzz produced a reading the old code could emit forever:
+**A1 displayed at +5210¢** while the signal sat ~2 octaves away. Mechanism:
+`setConcertPitch`/`setTargetSet` reset the hysteresis *candidate* counter,
+so if the user keeps nudging settings while the pitch has moved, the old
+stable note never loses — yet the 5-frame smoothing ring refills with the
+new (far) frequency, and cents runs away (first pass: unbounded 5210¢;
+second pass after the initial fix: a 5-frame 2307¢ run via a
+near-boundary frame resetting the counter while the ring stayed
+far-dominated).
+
+Fix in `TunerStateMachine` (chromatic mode only — instrument AUTO sets and
+manual locks may show large deviations by design):
+
+1. **Bounded staleness** (`staleFrameCount`): raw measurement >50¢ from the
+   displayed note for more than one full re-lock window (`hysteresisFrames`)
+   → the note yields to UNSTABLE. A legitimate 3-frame note transition is
+   untouched (pre-existing `noteSwitchRequiresConsecutiveAgreement` passes
+   unchanged); setting changes do NOT renew a stale note.
+2. **Hard backstop**: if the *smoothed display itself* exceeds 200¢
+   (2 semitones), the note yields immediately — the display invariant
+   cannot be violated by any counter-interaction.
+
+`StaleNoteYieldTest` pins both the repro and the bounded contract.
+Pinned result after fix: an out-of-semitone display lasts at most a couple
+of frames in the worst constructed case; the 20k-frame fuzz shows zero
+>200¢ displays.

@@ -1,17 +1,21 @@
 # STATE — Resonance
 
-- Device/SDK follow-up COMPLETE + overnight quality: DSP correctness map
-  COMPLETE. 214/214 jvmTest + 190/190 android host + demo 5/5 +
-  instrumented test APK builds; verify.sh 6/6 gates PASS. The correctness pass found and
-  fixed a real low-E-at-noise DSP bug (+ subharmonic fragility); 10 dB
-  low-register stress documented in docs/QUALITY_REPORT.md. Device day =
-  attach device, ./scripts/test-device.sh. The fuzz/concurrency/contract/rebuild passes follow the same night
-  (fuzz/property → concurrency+soak → contract gates → clean rebuild).
-- Last green checkpoint: :shared:jvmTest 214/214 (207 baseline + 4
-  FrequencyMatrix + 3 YinNoiseRobustness); :shared:testAndroidHostTest
-  190/190 (186 common = 179 pre-QN + 7 new, + 4 Robolectric); run-demo 5/5;
-  verify.sh ALL 6 mandatory gates PASS (device RUN still not run;
-  its test APK is assembled as gate 6).
+- Device/SDK follow-up COMPLETE + DSP correctness map + fuzz/property
+  COMPLETE. 227/227 jvmTest + 203/203 android host + demo 5/5 +
+  instrumented test APK builds; verify.sh 6/6 gates PASS. The correctness pass fixed a
+  real low-E-at-noise DSP bug (+ subharmonic fragility); the fuzz pass found +
+  fixed a stale-note display bug (a locked note could outlive its pitch
+  indefinitely under rapid setting changes — 5210¢ displays) via a
+  bounded-staleness guard + hard backstop. 10 dB low-register stress
+  documented in docs/QUALITY_REPORT.md. Device day = attach device,
+  ./scripts/test-device.sh. The remaining quality passes follow the same night (concurrency
+  + soak → contract gates → clean rebuild).
+- Last green checkpoint: :shared:jvmTest 227/227 (214 + 13 fuzz:
+  FuzzCodec 5 + FuzzStateMachine 4 + FuzzCrud 3 + StaleNoteYield 1);
+  :shared:testAndroidHostTest 203/203 (199 common = 186 pre-QN02 + 13 new,
+  + 4 Robolectric);
+  run-demo 5/5; verify.sh ALL 6 mandatory gates PASS (device RUN still
+  not run; its test APK is assembled as gate 6).
 - DSP correctness facts (2026-11-07): Yin.detect now selects between the
   first-crossing candidate and the global in-band minimum, validated by
   spectral presence (ratio ≥ 0.25) + fundamental plausibility (no in-band
