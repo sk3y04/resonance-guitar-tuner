@@ -91,7 +91,9 @@ fun InstrumentStringSelector(
                                     Text(
                                         text = label,
                                         style = InstrumentType.keyLabel.copy(
-                                            color = if (active) p.ivory else p.textMuted,
+                                            // String names stay readable even when
+                                            // not the active target (numbers stay muted).
+                                            color = if (active) p.ivory else p.ivory.copy(alpha = 0.82f),
                                         ),
                                         maxLines = 1,
                                     )

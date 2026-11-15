@@ -24,17 +24,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.presentation.MainScreenUiState
-import dev.anima.resonance.presentation.MicPermissionState
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.ResonanceType
 import kotlin.math.abs
 
 /**
- * The note + measurement readout — one compact recessed instrument
- * strip, not a card. Note + octave on the left; signed cents, frequency
- * and the jewel status on the right. Height is driven by the glyphs with
- * a small floor, so the no-signal state never leaves a dead zone. The
- * semantic contract (tags and spoken descriptions) is unchanged.
+ * The note + measurement readout — one compact recessed strip adjoining
+ * the meter. While tracking: large note + octave, signed cents, frequency and
+ * the jewel status. With no reliable reading: ONE short primary message
+ * ("Play a note" / "Signal lost — play again" / …) plus intentional dash
+ * placeholders — never a fake zero, never a "NO SIGNAL" repeated over the
+ * meter face. The semantic contract (tags + spoken descriptions) is unchanged.
  */
 @Composable
 fun NoteReadout(
@@ -44,10 +44,12 @@ fun NoteReadout(
     largeText: Boolean,
     modifier: Modifier = Modifier,
     fillHeight: Boolean = false,
+    onRetryCapture: () -> Unit = {},
 ) {
     val p = InstrumentTheme.palette
+    val tracking = state.meterActive
     val centsDescription = when {
-        !state.meterActive || state.centsText == null -> "No current reading"
+        !tracking || state.centsText == null -> "No current reading"
         state.inTune -> "In tune"
         state.directionText == "Tune up" ->
             "${abs(state.centsText.toIntOrNull() ?: 0)} cents flat, tune up"
@@ -63,8 +65,8 @@ fun NoteReadout(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Detected note + octave (reserved width keeps the strip stable
-            // between readings; empty when there is no reliable note).
+            // Detected note + octave. A muted dash placeholder keeps the strip
+            // stable when there is no reliable note (never a fake glyph).
             Box(
                 modifier = Modifier
                     .widthIn(min = 72.dp)
@@ -105,6 +107,16 @@ fun NoteReadout(
                             )
                         }
                     }
+                } else {
+                    Text(
+                        text = "—",
+                        style = ResonanceType.noteGlyph.copy(
+                            fontSize = noteSize,
+                            color = p.textMuted.copy(alpha = 0.55f),
+                        ),
+                        maxLines = 1,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
                 }
             }
             Spacer(Modifier.size(12.dp))
@@ -113,59 +125,78 @@ fun NoteReadout(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Signed cents — the primary numeric feedback.
-                Row(verticalAlignment = Alignment.Bottom) {
+                if (tracking) {
+                    // Signed cents — the primary numeric feedback.
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = state.centsText ?: "—",
+                            style = ResonanceType.cents.copy(fontSize = centsSize, color = p.ivory),
+                            modifier = Modifier
+                                .testTag("resonance.cents")
+                                .semantics { contentDescription = centsDescription },
+                        )
+                        Spacer(Modifier.size(4.dp))
+                        Text(
+                            "cents",
+                            style = InstrumentType.engraved,
+                            modifier = Modifier
+                                .padding(bottom = 3.dp)
+                                .clearAndSetSemantics {},
+                        )
+                    }
+                    if (largeText) {
+                        state.frequencyText?.let {
+                            Text(it, style = InstrumentType.readoutSmall, modifier = Modifier.testTag("resonance.frequency"))
+                        }
+                        TuningStatusIndicator(state)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            state.frequencyText?.let {
+                                Text(it, style = InstrumentType.readoutSmall, modifier = Modifier.testTag("resonance.frequency"))
+                                Spacer(Modifier.size(10.dp))
+                            }
+                            TuningStatusIndicator(state)
+                        }
+                    }
+                    // A secondary coaching hint only when tracking needs it
+                    // (e.g. "Hold the note steady", far-from-target).
+                    state.statusHint?.let { hint ->
+                        Text(
+                            text = hint,
+                            style = InstrumentType.readoutSmall,
+                            modifier = Modifier
+                                .testTag("resonance.hint")
+                                .semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                } else {
+                    // No reliable reading: ONE short primary message, then a
+                    // muted dash placeholder for cents. No fake measurement.
                     Text(
-                        text = if (state.meterActive && state.centsText != null) {
-                            state.centsText
-                        } else {
-                            // A muted dash — never a zero that could read as
-                            // a valid "0 cents" measurement.
-                            "—"
-                        },
+                        text = state.statusHint ?: "Play a note",
+                        style = InstrumentType.keyLabel.copy(fontSize = 16.sp, color = p.ivory),
+                        maxLines = 2,
+                        modifier = Modifier
+                            .testTag("resonance.hint")
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                    Text(
+                        text = "—",
                         style = ResonanceType.cents.copy(
                             fontSize = centsSize,
-                            color = if (state.meterActive && state.centsText != null) {
-                                p.ivory
-                            } else {
-                                p.textMuted
-                            },
+                            color = p.textMuted.copy(alpha = 0.7f),
                         ),
                         modifier = Modifier
                             .testTag("resonance.cents")
                             .semantics { contentDescription = centsDescription },
                     )
-                    Spacer(Modifier.size(4.dp))
-                    Text(
-                        "cents",
-                        style = InstrumentType.engraved,
-                        modifier = Modifier
-                            .padding(bottom = 3.dp)
-                            .clearAndSetSemantics {},
-                    )
-                }
-                // Frequency + tuning status share one line normally; at
-                // large font scales they stack so nothing clips.
-                if (largeText) {
-                    state.frequencyText?.let {
-                        Text(
-                            text = it,
-                            style = InstrumentType.readoutSmall,
-                            modifier = Modifier.testTag("resonance.frequency"),
-                        )
-                    }
-                    TuningStatusIndicator(state)
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        state.frequencyText?.let {
-                            Text(
-                                text = it,
-                                style = InstrumentType.readoutSmall,
-                                modifier = Modifier.testTag("resonance.frequency"),
-                            )
-                            Spacer(Modifier.size(10.dp))
-                        }
-                        TuningStatusIndicator(state)
+                    if (!state.captureActive) {
+                        InstrumentKey(
+                            onClick = onRetryCapture,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("resonance.start"),
+                        ) { Text("Start listening", style = InstrumentType.keyLabel) }
                     }
                 }
             }
@@ -174,10 +205,10 @@ fun NoteReadout(
 }
 
 /**
- * Jewel lamp + text state. Color is never the only carrier: the lamp is
- * always paired with a word (In tune / Tune up / NO SIGNAL / MIC OFF…).
- * When the state provides a direction, that exact text keeps the tested
- * `resonance.direction` tag and polite live region.
+ * Jewel lamp + direction text while tracking. Color is never the only
+ * carrier: the lamp is paired with a word (In tune / Tune up / Tune down).
+ * The exact direction text keeps the tested `resonance.direction` tag and
+ * polite live region.
  */
 @Composable
 fun TuningStatusIndicator(
@@ -185,50 +216,22 @@ fun TuningStatusIndicator(
     modifier: Modifier = Modifier,
 ) {
     val p = InstrumentTheme.palette
-    val granted = state.permission == MicPermissionState.GRANTED
-    val lampColor: androidx.compose.ui.graphics.Color
-    val lit: Boolean
-    val fallbackWord: String
-    when {
-        state.captureError -> {
-            lampColor = p.lampRed; lit = true; fallbackWord = "MIC ERROR"
-        }
-        !granted || !state.captureActive -> {
-            lampColor = p.lampOff; lit = false; fallbackWord = "MIC OFF"
-        }
-        !state.meterActive -> {
-            lampColor = p.lampAmber; lit = true; fallbackWord = "NO SIGNAL"
-        }
-        state.inTune -> {
-            lampColor = p.lampGreen; lit = true; fallbackWord = "IN TUNE"
-        }
-        else -> {
-            lampColor = p.lampAmber; lit = true; fallbackWord = "OUT OF TUNE"
-        }
-    }
+    val lampColor = if (state.inTune) p.lampGreen else p.lampAmber
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        JewelLamp(lit = lit, color = lampColor, size = 11.dp)
+        JewelLamp(lit = true, color = lampColor, size = 11.dp)
         Spacer(Modifier.size(7.dp))
-        val direction = state.directionText
-        if (direction != null) {
-            Text(
-                text = direction,
-                style = InstrumentType.keyLabel.copy(
-                    fontSize = 15.sp,
-                    color = if (state.inTune) p.lampGreen else p.ivory,
-                ),
-                modifier = Modifier
-                    .testTag("resonance.direction")
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        } else {
-            Text(
-                text = fallbackWord,
-                style = InstrumentType.engraved,
-            )
-        }
+        Text(
+            text = state.directionText ?: "—",
+            style = InstrumentType.keyLabel.copy(
+                fontSize = 15.sp,
+                color = if (state.inTune) p.lampGreen else p.ivory,
+            ),
+            modifier = Modifier
+                .testTag("resonance.direction")
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
     }
 }

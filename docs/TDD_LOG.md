@@ -1147,3 +1147,58 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
 - Known limits: vision intermittently rate-limited (429) — overlay aesthetic
   verdict relies on tests + PIL rather than a model review. The real-device
   mic/screen-reader pass and live-guitar G3 confirmation remain open.
+
+## Focused layout + no-signal correction (2026-11-15)
+- Report: the faceplate/composition passes repeatedly left large empty vertical bands; the no-signal
+  state showed "Listening" + meter "NO SIGNAL" + a hint + readout "NO SIGNAL"
+  + a needle parked at the flat end. Goal: fix the layout at its source and
+  make no-signal one coherent presentation. Settings overlay structure left
+  intact (only verified). DSP untouched.
+- Layout root cause (read from the source, not guessed): in `TunerScreen.kt`
+  the controls were wrapped in `Column(Modifier.weight(1f))` containing TWO
+  `Spacer(Modifier.weight(1f))` (above the mode selector and above the
+  settings key). Those weighted spacers distributed ALL leftover height as
+  empty bands between groups; the meter assembly was sized to `innerH −
+  controls` so it never received the surplus.
+- Structural fix: one top-aligned `Column(spacedBy(10.dp))` — LabelStrip,
+  MeterAssembly, MechanicalModeSelector, InstrumentStringSelector, settings
+  key — each at its natural height with small consistent gaps. The meter
+  assembly takes surplus up to its arc-filling limit (`MeterAssemblyLayout`
+  readout cap raised to 200dp so the readout absorbs spare height with a
+  larger note); a SINGLE `Spacer(weight(1f))` after the settings key is the
+  one intentional bottom enclosure margin. No distributed internal gaps.
+  The gauge stays width-bound/arc-filling (a semicircle cannot grow taller
+  without empty ivory — verified geometrically), so surplus goes to the
+  readout, then to the one enclosure margin.
+- No-signal correction (TDD):
+  - `AnalogMeterGeometry.needleShown(active)` + test: with no reliable reading
+    the needle is HIDDEN (fades out, brass hub stays), never parked at the
+    flat stop. `REST_ANGLE` kept as the mechanical-stop constant; the old
+    "rest at left stop" test repurposed to assert the hidden-needle behavior.
+  - `AnalogTuningMeter`: needle alpha animates to 0 when inactive (position
+    still animates to centre while hidden so a new note fades in smoothly);
+    removed the "NO SIGNAL" face text — the face is scale + FLAT/SHARP only.
+  - `MainScreenUi`: concise per-state primary messages ("Play a note",
+    "Signal lost — play again.", "Signal too weak — move closer.", "Signal
+    clipping — lower the volume."); existing keyword contract preserved.
+    `NoSignalPresentationTest` (4) pins conciseness + no fake reading.
+  - `NoteReadout`: while tracking → note+cents+frequency+status (unchanged);
+    with no reliable reading → ONE primary message (`resonance.hint`) + dash
+    placeholders for note/cents (never a fake zero), and the Start-listening
+    key when capture is off. The hint/start moved out of the meter overlay
+    into the readout (no text over the hub/needle/scale). `MeterAssembly`
+    gauge now holds only the meter.
+- Legibility: inactive string names → ivory 0.82α (numbers stay muted 9sp);
+  idle mode labels → ivory 0.78α (engaged key proud + lit amber jewel + full
+  ivory). Selected/manual (LOCKED amber, raised) vs AUTO (green) unchanged.
+- Evidence: :shared:jvmTest 328/328, :shared:testAndroidHostTest 285/285,
+  run-demo 5/5, verify.sh 7/7 PASS. No-signal needle pixel-confirmed hidden
+  (radial-continuity span 25→7, hub stays); tracking needle maps correctly.
+  Vision confirmed the no-signal render (no flat-stop needle, no face text,
+  one readout message). Internal group gaps now spacedBy 10dp; small phone
+  360×640dp unclipped. APK installed on the ASUS phone.
+- Known limits: on-device screenshot blocked this pass by the secure lock
+  screen ( NotificationShade focus, display cycling off ) — headless renders
+  + tests stand in; the bottom enclosure margin is larger in the no-inset
+  headless render and in chromatic mode (no string grid). The real-device
+  mic/screen-reader and live-guitar G3 confirmation remain open.

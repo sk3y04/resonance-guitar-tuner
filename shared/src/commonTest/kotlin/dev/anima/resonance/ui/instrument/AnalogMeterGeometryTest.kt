@@ -102,10 +102,17 @@ class AnalogMeterGeometryTest {
     }
 
     @Test
-    fun restPositionIsTheLeftStopNeverTheCenter() {
-        // With no reliable reading the needle parks at the flat-side stop,
-        // like a real moving-coil meter at rest — never at centered zero.
+    fun restAngleIsTheFlatMechanicalStop() {
+        // The mechanical rest stop is the flat side (a geometric constant)…
         assertEquals(-45.0, AnalogMeterGeometry.REST_ANGLE, 1e-9)
         assertTrue(AnalogMeterGeometry.REST_ANGLE < 0.0)
+    }
+
+    @Test
+    fun noSignalHidesTheNeedleRatherThanParkingAtFlatStop() {
+        // …but with no reliable reading the needle is HIDDEN (hub stays),
+        // so the meter never implies a flat pitch. Only a live reading shows it.
+        assertFalse(AnalogMeterGeometry.needleShown(active = false))
+        assertTrue(AnalogMeterGeometry.needleShown(active = true))
     }
 }

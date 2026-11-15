@@ -79,12 +79,11 @@ object MainScreenUi {
             !granted -> null
             captureError -> "Microphone unavailable — check your input, then retry."
             !captureActive -> "Microphone is off."
-            status == TunerStatus.CLIPPING ->
-                "Signal is clipping — lower the volume or move away."
-            status == TunerStatus.STALE ->
-                "Signal lost — play again."
-            status == TunerStatus.INSUFFICIENT_SIGNAL ->
-                "Signal too weak — move closer to the microphone and play a clear note."
+            // One short, readable primary message per no-signal state
+            // (shown in the readout, never repeated over the meter face).
+            status == TunerStatus.CLIPPING -> "Signal clipping — lower the volume."
+            status == TunerStatus.STALE -> "Signal lost — play again."
+            status == TunerStatus.INSUFFICIENT_SIGNAL -> "Signal too weak — move closer."
             status == TunerStatus.MEASURED ->
                 if (inInstrument && abs(cents) > 100) {
                     "Check the target string — this note is far from the highlighted string."
@@ -92,7 +91,7 @@ object MainScreenUi {
                     null
                 }
             status == TunerStatus.UNSTABLE -> "Hold the note steady…"
-            else -> "Play a note near the microphone."
+            else -> "Play a note"
         }
 
         val directionText = when {

@@ -1,6 +1,21 @@
 # STATE — Resonance
 
-- Phase: 13 COMPLETE — spatial composition + overlay refinement (2026-11-15).
+- Phase: 14 COMPLETE — focused layout + no-signal correction (2026-11-15).
+  Root cause of the recurring empty bands found in the source: the controls
+  sat in a `Column(weight(1f))` with TWO `Spacer(weight(1f))` that distributed
+  all leftover height as gaps between groups (TunerScreen.kt). Replaced with
+  one top-aligned column, small consistent `spacedBy(10dp)` group gaps, the
+  meter assembly taking surplus up to its arc-filling limit, and ONE bottom
+  enclosure margin — no distributed internal gaps. No-signal corrected: the
+  needle is now HIDDEN (faded, hub stays) instead of parked at the flat stop
+  (`AnalogMeterGeometry.needleShown` + test); the "NO SIGNAL" face text is
+  removed; the readout shows ONE short primary message ("Play a note" /
+  "Signal lost — play again" / "Signal too weak — move closer" / "Signal
+  clipping") + dash placeholders, never a fake reading. Legibility: brighter
+  inactive string names + idle mode labels. Settings overlay structure left
+  intact. DSP/state/permissions/persistence + semantic contract unchanged.
+  Details: docs/TDD_LOG.md (focused layout + no-signal).
+- Prior: milestone COMPLETE — spatial composition + overlay refinement (2026-11-15).
   Main screen: the meter+readout are ONE brass-rimmed measurement assembly
   (`MeterAssembly`, height-aware `MeterAssemblyLayout` pure logic + tests) —
   the ivory gauge keeps a natural arc-filling aspect, the readout adjoins it
@@ -57,7 +72,21 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, spatial composition): :shared:jvmTest 323/323,
+- Last green checkpoint (2026-11-15, layout/no-signal): :shared:jvmTest 328/328,
+  :shared:testAndroidHostTest 285/285, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). New tests: needleShown (geometry) +
+  NoSignalPresentationTest 4 (concise no-signal messages). No-signal needle
+  pixel-confirmed HIDDEN (radial-continuity span drops 25→7, hub stays);
+  tracking needle still maps 0¢→~0°, +120¢→stop. Vision confirmed the
+  no-signal render: no needle at flat stop, no "NO SIGNAL" on the face, one
+  primary message in the readout. Internal group gaps reduced to spacedBy
+  10dp (the two weighted spacers removed); one bottom enclosure margin
+  remains (larger in the no-inset headless render and in chromatic mode,
+  which has no string grid). APK installed on the ASUS phone; on-device
+  screenshot blocked this pass by the secure lock screen (headless renders +
+  tests stand in). Real-device verification (mic/screen reader) + live-guitar G3
+  remain unverified.
+- Prior checkpoint (2026-11-15, spatial composition): :shared:jvmTest 323/323,
   :shared:testAndroidHostTest 280/280, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). New tests: MeterAssemblyLayoutTest 8,
   ReferencePitchValueTest 3. Needle pixel-reverified in the embedded gauge:
@@ -66,8 +95,7 @@
   small phone 360×640 dp unclipped (128 px bottom margin). APK installed
   on the ASUS phone (Android 15) and the new layout confirmed on-device.
   Vision review of the main render positive (rate-limited intermittently);
-  overlay verified via semantics tests + PIL. Real-device verification (mic/screen
-  reader) remains the only external gate; live-guitar G3 still unverified.
+  overlay verified via semantics tests + PIL.
 - Prior checkpoint (2026-11-15, faceplate redesign): :shared:jvmTest 312/312,
   :shared:testAndroidHostTest 269/269, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). Needle pixel-reverified in the

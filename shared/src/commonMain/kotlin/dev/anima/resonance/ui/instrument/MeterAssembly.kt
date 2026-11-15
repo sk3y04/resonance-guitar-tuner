@@ -59,9 +59,9 @@ fun MeterAssembly(
         val spec = MeterAssemblyLayout.compute(maxWidth.value, availableHeightDp)
         val gaugeH = spec.gaugeHeightDp.dp
         val readoutH = spec.readoutHeightDp.dp
-        val noteSp = (readoutH.value * 0.62f).coerceIn(40f, 72f)
-        val noteSize = (noteSp / fontScale).coerceAtMost(72f).sp
-        val centsSize = (noteSp * 0.5f / fontScale).coerceAtMost(34f).sp
+        val noteSp = (readoutH.value * 0.55f).coerceIn(40f, 96f)
+        val noteSize = (noteSp / fontScale).coerceAtMost(96f).sp
+        val centsSize = (noteSp * 0.45f / fontScale).coerceAtMost(34f).sp
 
         Box(
             modifier = Modifier
@@ -88,7 +88,7 @@ fun MeterAssembly(
                 },
         ) {
             Column(Modifier.fillMaxWidth()) {
-                // ── Ivory gauge ──────────────────────────────────────────
+                // ── Ivory gauge (scale + needle only; messages live below) ──
                 Box(Modifier.fillMaxWidth().height(gaugeH)) {
                     AnalogTuningMeter(
                         position = state.meterPosition,
@@ -99,26 +99,6 @@ fun MeterAssembly(
                         aspectRatio = null,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    state.statusHint?.let { hint ->
-                        Text(
-                            text = hint,
-                            style = InstrumentType.readoutSmall.copy(fontSize = 12.sp, color = p.inkSoft),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp)
-                                .testTag("resonance.hint"),
-                        )
-                    }
-                    if (!state.captureActive) {
-                        InstrumentKey(
-                            onClick = onRetryCapture,
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .testTag("resonance.start"),
-                        ) { Text("Start listening", style = InstrumentType.keyLabel) }
-                    }
                 }
                 // Hairline brass divider between the two recessed surfaces.
                 Box(
@@ -127,13 +107,14 @@ fun MeterAssembly(
                         .height(1.5.dp)
                         .background(p.brassDark.copy(alpha = 0.7f)),
                 )
-                // ── Note readout (adjoining recess) ──────────────────────
+                // ── Note readout (adjoining recess; carries the message) ──
                 NoteReadout(
                     state = state,
                     noteSize = noteSize,
                     centsSize = centsSize,
                     largeText = largeText,
                     fillHeight = true,
+                    onRetryCapture = onRetryCapture,
                     modifier = Modifier.fillMaxWidth().height(readoutH),
                 )
             }

@@ -14,9 +14,9 @@ package dev.anima.resonance.ui.instrument
  */
 object MeterAssemblyLayout {
     const val MIN_READOUT_DP = 76f
-    const val MAX_READOUT_DP = 130f
+    const val MAX_READOUT_DP = 200f
     const val MIN_NOTE_SP = 40f
-    const val MAX_NOTE_SP = 88f
+    const val MAX_NOTE_SP = 96f
 
     /** Natural gauge width:height — the semicircular scale fills this. */
     const val GAUGE_ASPECT = 1.6f

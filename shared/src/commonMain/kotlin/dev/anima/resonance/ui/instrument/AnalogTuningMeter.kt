@@ -59,11 +59,19 @@ fun AnalogTuningMeter(
     embedded: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
-    val target = (if (active) position.coerceIn(-1.0, 1.0) else -1.0).toFloat()
+    // With no reliable reading the needle fades out (hub stays) — it is
+    // never parked at the flat stop as if it were a measurement. The position
+    // still animates to centre while hidden so a new note fades in smoothly.
+    val target = (if (active) position.coerceIn(-1.0, 1.0) else 0.0).toFloat()
     val needleState = animateFloatAsState(
         targetValue = target,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
         label = "meter-needle",
+    )
+    val needleAlpha = animateFloatAsState(
+        targetValue = if (AnalogMeterGeometry.needleShown(active)) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220),
+        label = "meter-needle-alpha",
     )
     val measurer = rememberTextMeasurer()
 
@@ -148,12 +156,6 @@ fun AnalogTuningMeter(
                 letterSpacing = 1.2.dp.toSp(),
                 color = p.ink,
             )
-            val noSignalStyle = TextStyle(
-                fontSize = 10.dp.toSp(),
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.2.dp.toSp(),
-                color = p.inkSoft,
-            )
             data class Mark(val text: String, val style: TextStyle, val center: Offset, val halfW: Float, val halfH: Float)
             val marks = (-50..50 step 10).map { cents ->
                 val text = if (cents > 0) "+$cents" else "$cents"
@@ -167,7 +169,6 @@ fun AnalogTuningMeter(
             }
             val flatSize = measurer.measure("FLAT", sideLabelStyle).size
             val sharpSize = measurer.measure("SHARP", sideLabelStyle).size
-            val noSignalSize = measurer.measure("NO SIGNAL", noSignalStyle).size
 
             data class Tick(val start: Offset, val end: Offset, val width: Float, val color: Color)
             val ticks = (-50..50 step 5).map { cents ->
@@ -307,51 +308,44 @@ fun AnalogTuningMeter(
                     ),
                     style = sideLabelStyle,
                 )
-                if (!active) {
-                    drawText(
-                        textMeasurer = measurer,
-                        text = "NO SIGNAL",
-                        topLeft = Offset(
-                            w / 2f - noSignalSize.width / 2f,
-                            pivot.y - radius * 0.5f - noSignalSize.height / 2f,
-                        ),
-                        style = noSignalStyle,
+                // ── Needle (the only per-frame state reads) ──────────────
+                // Hidden (faded out) when there is no reliable reading;
+                // the brass hub below stays visible. Never a flat-stop needle.
+                val needleVis = needleAlpha.value
+                if (needleVis > 0.02f) {
+                    val animated = needleState.value
+                    if (active && clamped) {
+                        val stopAngle = if (animated >= 0f) sweep / 2f else -sweep / 2f
+                        drawCircle(p.inkSoft.copy(alpha = needleVis), radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
+                    }
+                    val angle = AnalogMeterGeometry.needleAngle(animated.toDouble()).toFloat()
+                    val u = unit(angle)
+                    val perp = Offset(u.y, -u.x)
+                    val len = radius * 0.985f
+                    val tail = radius * 0.14f
+                    val tip = pivot + u * len
+                    val baseL = pivot + perp * 1.7.dp.toPx()
+                    val baseR = pivot - perp * 1.7.dp.toPx()
+                    val tailL = pivot - u * tail + perp * 2.8.dp.toPx()
+                    val tailR = pivot - u * tail - perp * 2.8.dp.toPx()
+                    fun needlePath(dx: Float, dy: Float): Path = Path().apply {
+                        moveTo(tip.x + dx, tip.y + dy)
+                        lineTo(baseL.x + dx, baseL.y + dy)
+                        lineTo(tailL.x + dx, tailL.y + dy)
+                        lineTo(tailR.x + dx, tailR.y + dy)
+                        lineTo(baseR.x + dx, baseR.y + dy)
+                        close()
+                    }
+                    drawPath(needlePath(1.dp.toPx(), 1.8.dp.toPx()), p.ink.copy(alpha = 0.16f * needleVis))
+                    drawPath(needlePath(0f, 0f), p.ink.copy(alpha = needleVis))
+                    // Fine metal sheen along one edge of the pointer.
+                    drawLine(
+                        color = p.ivory.copy(alpha = 0.22f * needleVis),
+                        start = pivot + u * (radius * 0.12f) + perp * 0.5.dp.toPx(),
+                        end = pivot + u * (radius * 0.9f) + perp * 0.5.dp.toPx(),
+                        strokeWidth = 0.6.dp.toPx(),
                     )
                 }
-
-                // ── Needle (the only per-frame state read) ───────────────
-                val animated = needleState.value
-                if (active && clamped) {
-                    val stopAngle = if (animated >= 0f) sweep / 2f else -sweep / 2f
-                    drawCircle(p.inkSoft, radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
-                }
-                val angle = AnalogMeterGeometry.needleAngle(animated.toDouble()).toFloat()
-                val u = unit(angle)
-                val perp = Offset(u.y, -u.x)
-                val len = radius * 0.985f
-                val tail = radius * 0.14f
-                val tip = pivot + u * len
-                val baseL = pivot + perp * 1.7.dp.toPx()
-                val baseR = pivot - perp * 1.7.dp.toPx()
-                val tailL = pivot - u * tail + perp * 2.8.dp.toPx()
-                val tailR = pivot - u * tail - perp * 2.8.dp.toPx()
-                fun needlePath(dx: Float, dy: Float): Path = Path().apply {
-                    moveTo(tip.x + dx, tip.y + dy)
-                    lineTo(baseL.x + dx, baseL.y + dy)
-                    lineTo(tailL.x + dx, tailL.y + dy)
-                    lineTo(tailR.x + dx, tailR.y + dy)
-                    lineTo(baseR.x + dx, baseR.y + dy)
-                    close()
-                }
-                drawPath(needlePath(1.dp.toPx(), 1.8.dp.toPx()), p.ink.copy(alpha = 0.16f))
-                drawPath(needlePath(0f, 0f), p.ink)
-                // Fine metal sheen along one edge of the pointer.
-                drawLine(
-                    color = p.ivory.copy(alpha = 0.22f),
-                    start = pivot + u * (radius * 0.12f) + perp * 0.5.dp.toPx(),
-                    end = pivot + u * (radius * 0.9f) + perp * 0.5.dp.toPx(),
-                    strokeWidth = 0.6.dp.toPx(),
-                )
 
                 // Brass pivot: seat shadow, ring, domed cap, slot, specular.
                 drawCircle(

@@ -27,7 +27,7 @@ class MeterAssemblyLayoutTest {
     @Test
     fun surplusBeyondCapacityIsCappedNotStretched() {
         val cap = MeterAssemblyLayout.maxHeightDp(w)
-        for (h in listOf(360f, 410f, 560f, 700f)) {
+        for (h in listOf(cap + 40f, cap + 100f, cap + 200f, cap + 340f)) {
             val s = MeterAssemblyLayout.compute(w, h)
             assertEquals(cap, s.gaugeHeightDp + s.readoutHeightDp, 0.01f, "assembly caps at h=$h")
             assertTrue(s.gaugeHeightDp + s.readoutHeightDp < h, "surplus left for the controls at h=$h")

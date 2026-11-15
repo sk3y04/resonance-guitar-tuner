@@ -31,6 +31,15 @@ object AnalogMeterGeometry {
      */
     const val REST_ANGLE: Double = -HALF_SWEEP
 
+    /**
+     * Whether the needle is drawn at all. With no reliable reading the
+     * needle is hidden (the brass hub stays visible) so the meter never implies
+     * a flat — or any — pitch while nothing is being measured. A live reading
+     * shows the needle. The mechanical [REST_ANGLE] remains a geometric
+     * constant but is no longer presented as a "reading" at rest.
+     */
+    fun needleShown(active: Boolean): Boolean = active
+
     /** Needle angle (degrees from vertical) for a normalized position. */
     fun needleAngle(position: Double): Double =
         (position.coerceIn(-1.0, 1.0) * HALF_SWEEP)

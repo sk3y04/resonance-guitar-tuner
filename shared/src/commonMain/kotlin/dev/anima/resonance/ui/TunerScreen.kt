@@ -121,11 +121,13 @@ fun TunerScreen(
                         else -> 1
                     }
                     val stringsH = if (stringRows == 0) 0.dp else (stringRows * 58 + (stringRows - 1) * 6).dp
-                    // The measurement assembly is height-aware — its gauge
-                    // shrinks to fit short screens and stays natural on tall
-                    // ones; the lower controls take any surplus height.
-                    val controlsMinH = 56.dp + stringsH + 52.dp + 20.dp
-                    val availableAssemblyH = innerH - 24.dp - controlsMinH - 40.dp
+                    // Continuous composition — status, meter+readout, mode,
+                    // strings, settings, each at its natural height with small
+                    // consistent gaps. Surplus height goes to the meter assembly
+                    // (up to its arc-filling limit); whatever remains is ONE
+                    // bottom enclosure margin, never distributed internal gaps.
+                    val controlsNaturalH = 56.dp + stringsH + 48.dp
+                    val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 50.dp
                     // Main-screen guarantee: fixed layout when the gauge has
                     // real room at normal scale; otherwise a scrolling fallback.
                     val fallback = largeText || availableAssemblyH < 120.dp
@@ -169,40 +171,34 @@ fun TunerScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            // The lower controls absorb the surplus height:
-                            // mode + strings grouped compactly, settings anchored
-                            // to the bottom of the faceplate (nothing squeezed,
-                            // no empty bands around the meter).
-                            Column(
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                            ) {
-                                Spacer(Modifier.weight(1f))
-                                MechanicalModeSelector(
-                                    mode = state.mode,
-                                    onModeSelect = onModeSelect,
-                                    largeText = false,
-                                    modifier = Modifier.fillMaxWidth(),
+                            // Controls at their natural heights; the outer
+                            // spacedBy gives small, consistent group gaps.
+                            MechanicalModeSelector(
+                                mode = state.mode,
+                                onModeSelect = onModeSelect,
+                                largeText = false,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (state.targetLabels.isNotEmpty()) {
+                                InstrumentStringSelector(
+                                    targetLabels = state.targetLabels,
+                                    activeStringIndex = state.activeStringIndex,
+                                    stringLocked = state.stringLocked,
+                                    onStringSelect = onStringSelect,
                                 )
-                                if (state.targetLabels.isNotEmpty()) {
-                                    Spacer(Modifier.height(10.dp))
-                                    InstrumentStringSelector(
-                                        targetLabels = state.targetLabels,
-                                        activeStringIndex = state.activeStringIndex,
-                                        stringLocked = state.stringLocked,
-                                        onStringSelect = onStringSelect,
-                                    )
-                                }
-                                Spacer(Modifier.weight(1f))
-                                InstrumentKey(
-                                    onClick = onOpenSheet,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
-                                        .testTag("resonance.openSheet"),
-                                ) {
-                                    Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
-                                }
                             }
+                            InstrumentKey(
+                                onClick = onOpenSheet,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("resonance.openSheet"),
+                            ) {
+                                Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
+                            }
+                            // ONE intentional bottom enclosure margin absorbs the
+                            // surplus height — never distributed internal gaps.
+                            Spacer(Modifier.weight(1f))
                         }
                     }
                 }
@@ -325,16 +321,6 @@ private fun FallbackLayout(
                 onRetryCapture = onRetryCapture,
             )
         } else {
-            state.statusHint?.let { hint ->
-                Text(
-                    text = hint,
-                    style = InstrumentType.readoutSmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("resonance.hint"),
-                )
-            }
             AnalogTuningMeter(
                 position = state.meterPosition,
                 inTune = state.inTune,
@@ -346,20 +332,12 @@ private fun FallbackLayout(
                     .fillMaxWidth()
                     .align(Alignment.CenterHorizontally),
             )
-            if (granted && !state.captureActive) {
-                InstrumentKey(
-                    onClick = onRetryCapture,
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .testTag("resonance.start"),
-                ) { Text("Start listening", style = InstrumentType.keyLabel) }
-            }
             NoteReadout(
                 state = state,
                 noteSize = noteSize,
                 centsSize = centsSize,
                 largeText = largeText,
+                onRetryCapture = onRetryCapture,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
