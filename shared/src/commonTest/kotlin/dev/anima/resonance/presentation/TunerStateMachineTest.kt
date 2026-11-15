@@ -18,6 +18,9 @@ class TunerStateMachineTest {
 
     private fun noPitch(conf: Double = 0.0): PitchEstimate = PitchEstimate(0.0, conf)
 
+    private fun hz(frequencyHz: Double, conf: Double = 1.0): PitchEstimate =
+        PitchEstimate(frequencyHz, conf)
+
     private fun machine() = TunerStateMachine(
         hysteresisFrames = 3,
         staleMs = 600,
@@ -177,5 +180,61 @@ class TunerStateMachineTest {
         m.setManualTarget(null)
         val after = m.feed(List(6) { i -> PitchEstimate(440.0, 1.0) to (300L + i * 20L) }).last()
         assertEquals(Note.fromLabel("A4"), after.note, "chromatic matching resumes after clear")
+    }
+
+    // G4 (392 Hz) on a guitar can excite the open G string (196 Hz, one
+    // octave below) sympathetically. The combined waveform is periodic at
+    // 196 Hz, so the detector reports the subharmonic while the player is
+    // still holding G4. A continuous octave-down measurement must not steal
+    // a lock the player already established; a real octave change (after a
+    // playing gap) still must.
+
+    @Test
+    fun continuousOctaveBelowKeepsTheUpperStringLocked() {
+        val m = machine()
+        m.feed(List(3) { i -> hz(392.0) to i * 20L })
+        val r = m.feed(List(30) { i -> hz(196.0) to (60L + i * 20L) })
+        assertTrue(
+            r.all { it.note == Note.fromLabel("G4") },
+            "octave-down bleed must not steal the lock: ${r.map { it.note }}",
+        )
+        assertEquals(392.0, r.last().frequencyHz, 2.0)
+        assertEquals(TunerStatus.MEASURED, r.last().status)
+    }
+
+    @Test
+    fun shortNoPitchHoleDoesNotDisableOctaveFold() {
+        val m = machine()
+        m.feed(List(3) { i -> hz(392.0) to i * 20L })
+        m.feed(listOf(noPitch() to 80L)) // 40 ms hole, still the same note
+        val r = m.feed(List(5) { i -> hz(196.0) to (100L + i * 20L) })
+        assertEquals(Note.fromLabel("G4"), r.last().note)
+        assertEquals(TunerStatus.MEASURED, r.last().status)
+    }
+
+    @Test
+    fun realOctaveDropAfterAPlayingGapSwitches() {
+        val m = machine()
+        m.feed(List(3) { i -> hz(392.0) to i * 20L })
+        m.feed(listOf(noPitch() to 80L, noPitch() to 500L)) // 460 ms gap
+        val r = m.feed(List(7) { i -> hz(196.0) to (520L + i * 20L) })
+        assertEquals(Note.fromLabel("G3"), r.last().note, "a real octave drop must be followed")
+    }
+
+    @Test
+    fun nonOctaveChangeStillSwitchesWhilePlaying() {
+        val m = machine()
+        m.feed(List(3) { i -> hz(392.0) to i * 20L })
+        val r = m.feed(List(7) { i -> hz(370.0) to (60L + i * 20L) }) // F#4
+        assertEquals(Note.fromLabel("F#4"), r.last().note)
+    }
+
+    @Test
+    fun manualTargetAlsoRejectsOctaveBelowBleed() {
+        val m = machine()
+        m.setManualTarget(Note.fromLabel("G4"))
+        val r = m.feed(List(6) { i -> hz(196.0) to (i * 20L) })
+        assertEquals(Note.fromLabel("G4"), r.last().note)
+        assertEquals(392.0, r.last().frequencyHz, 2.0)
     }
 }

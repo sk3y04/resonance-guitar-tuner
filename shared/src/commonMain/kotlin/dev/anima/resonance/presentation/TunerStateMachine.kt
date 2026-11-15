@@ -30,6 +30,17 @@ class TunerStateMachine(
     val inTuneCents: Double = 5.0,
     val inTuneExitCents: Double = 8.0,
     val minConfidence: Double = 0.5,
+    /**
+     * Octave-bleed guard. A guitar note can excite a string one octave
+     * below it (e.g. G4 → open G3); the combined waveform is periodic at the
+     * lower octave, so the detector may report 196 Hz while the player holds
+     * G4. If a measurement is within [octaveFoldTolerance] (relative) of
+     * half the current target, and there was no playing gap longer than
+     * [octaveFoldGapMs], it is folded up to the established note instead of
+     * stealing the lock. A real octave change after a gap is still followed.
+     */
+    val octaveFoldTolerance: Double = 0.02,
+    val octaveFoldGapMs: Long = 300,
     private var targets: List<Note> = ChromaticTargets.inRange(440.0),
     /**
      * Instrument-mode AUTO selection: when non-null, nearest matching is
@@ -58,6 +69,14 @@ class TunerStateMachine(
      */
     private var staleFrameCount = 0
 
+    /**
+     * Set by a playing gap longer than [octaveFoldGapMs]. While set, a
+     * measurement exactly one octave below the established note is treated
+     * as a real note change, not as sympathetic octave bleed. Cleared when a
+     * fresh measurement agrees with the established note or a new note locks.
+     */
+    private var octaveFoldSuppressed = false
+
     /** Processes one detector frame at virtual time [nowMs]. */
     fun onPitch(estimate: PitchEstimate, nowMs: Long): TunerReading {
         val present = estimate.frequencyHz > 0.0
@@ -68,6 +87,11 @@ class TunerStateMachine(
             ring.clear()
             inTune = false
             val last = lastPitchMs
+            if (last != null && nowMs - last > octaveFoldGapMs) {
+                // A real playing gap: the next octave-down measurement is a
+                // string change, not sympathetic bleed from the old note.
+                octaveFoldSuppressed = true
+            }
             val status = when {
                 !present && last == null -> TunerStatus.LISTENING
                 !present -> if (nowMs - (last ?: nowMs) > staleMs) TunerStatus.STALE else TunerStatus.UNSTABLE
@@ -89,6 +113,23 @@ class TunerStateMachine(
 
         lastPitchMs = nowMs
         val manual = manualTarget
+        val rawHz = estimate.frequencyHz
+        // Fold continuous octave-down bleed into the established note.
+        // The detector can legitimately report the lower octave because the
+        // combined waveform is periodic there; the player's intent is the
+        // note that was already locked before the bleed appeared.
+        val referenceHz = manual?.frequency(concertPitchHz)
+            ?: stableNote?.frequency(concertPitchHz)
+        val octaveBelow = referenceHz != null && !octaveFoldSuppressed &&
+            kotlin.math.abs(rawHz * 2.0 - referenceHz) / referenceHz <= octaveFoldTolerance
+        val measuredHz = if (octaveBelow) rawHz * 2.0 else rawHz
+        if (!octaveBelow && referenceHz != null &&
+            kotlin.math.abs(rawHz - referenceHz) / referenceHz <= octaveFoldTolerance
+        ) {
+            // The original note is confirmed again; a later octave bleed may
+            // be folded normally.
+            octaveFoldSuppressed = false
+        }
         val note: Note?
         val targetHz: Double
 
@@ -101,13 +142,13 @@ class TunerStateMachine(
             targetHz = manual.frequency(concertPitchHz)
         } else {
             val match = TargetMatcher.nearest(
-                estimate.frequencyHz,
+                measuredHz,
                 targetSet ?: targets,
                 concertPitchHz,
             )
             val current = stableNote
             if (current != null && targetSet == null &&
-                kotlin.math.abs(Cents.deviation(estimate.frequencyHz, current.frequency(concertPitchHz))) > 50.0) {
+                kotlin.math.abs(Cents.deviation(measuredHz, current.frequency(concertPitchHz))) > 50.0) {
                 // The measurement is outside the displayed note's
                 // semitone. Nearest matching can never deviate more than
                 // half a semitone from the true match, so this is either a
@@ -121,6 +162,7 @@ class TunerStateMachine(
                 staleFrameCount++
                 if (staleFrameCount > hysteresisFrames) {
                     stableNote = null
+                    octaveFoldSuppressed = false
                     candidateNote = match.note
                     candidateCount = 1
                     staleFrameCount = 0
@@ -147,6 +189,7 @@ class TunerStateMachine(
                 }
                 if (candidateCount >= hysteresisFrames) {
                     stableNote = candidateNote
+                    octaveFoldSuppressed = false
                     candidateNote = null
                     candidateCount = 0
                 }
@@ -159,7 +202,7 @@ class TunerStateMachine(
         }
 
         // Time-aware smoothing: bounded median over recent raw pitches.
-        ring.add(estimate.frequencyHz)
+        ring.add(measuredHz)
         if (ring.size > smoothingWindow) ring.removeAt(0)
         val smoothed = median(ring)
 
@@ -183,6 +226,7 @@ class TunerStateMachine(
         // the player is hearing, so it yields immediately.
         if (note != null && manual == null && targetSet == null && kotlin.math.abs(cents) > 200) {
             stableNote = null
+            octaveFoldSuppressed = false
             candidateNote = null
             candidateCount = 0
             staleFrameCount = 0
@@ -223,6 +267,7 @@ class TunerStateMachine(
      */
     fun setManualTarget(note: Note?) {
         manualTarget = note
+        octaveFoldSuppressed = false
         candidateNote = null
         candidateCount = 0
     }
@@ -234,6 +279,7 @@ class TunerStateMachine(
      */
     fun setTargetSet(notes: List<Note>?) {
         targetSet = notes?.takeIf { it.isNotEmpty() }
+        octaveFoldSuppressed = false
         candidateNote = null
         candidateCount = 0
     }
@@ -252,6 +298,7 @@ class TunerStateMachine(
         // re-applies it via setTargetSet right after this call.
         targetSet = null
         // No stale estimate may survive a scale change.
+        octaveFoldSuppressed = false
         candidateNote = null
         candidateCount = 0
         ring.clear()

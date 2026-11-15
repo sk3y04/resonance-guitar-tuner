@@ -862,3 +862,38 @@ CMP's headless `ImageComposeScene` (dark/light, listening, flat/in-tune,
 permission denial, full sheet, custom row, editor, 2× text at 320 dp).
 They were inspected during this audit. This is a host Skia render, not an
 emulator/device screenshot; real-device rendering remains the real-device gate.
+
+## G4 octave-bleed fix (2026-11-15)
+- Report: playing G4, the app locked briefly then lost it (and sometimes
+  showed G3); other notes held normally.
+- Mechanism: G4 is 392 Hz and the open G string is 196 Hz — exactly one
+  octave below. Plucking G4 excites the open G sympathetically, so the
+  combined waveform is periodic at 196 Hz. A synthetic sweep of a 196 Hz
+  component at −30..0 dB relative to 392 measured: correct 392 Hz down to
+  −11 dB, **no pitch at −10 dB**, and G3 from −9..0 dB. The state
+  machine's 50-cent stale guard then cleared the G4 lock and re-locked G3.
+- RED:
+  - `TunerStateMachineTest`: continuous 196 after a locked G4 must keep
+    G4; a >300 ms playing gap before 196 must still switch to G3; a
+    non-octave change must still switch; a manual G4 lock must also hold.
+  - `YinOctaveRecoveryTest`: 392 + 196@−10 dB must recover 392; a true
+    196 + 392@−10 dB must stay 196; 20 deterministic noise frames must
+    not become a confident pitch.
+- GREEN:
+  - `TunerStateMachine`: a continuous measurement within 2% of half the
+    established note is folded up to that note. A playing gap longer than
+    300 ms suppresses the fold so a real octave change is followed.
+    Suppression clears when the established note is confirmed again or a
+    new note locks.
+  - `Yin`: when no candidate survives, look one octave up from each
+    rejected candidate (local dip d′ < 0.35, fundamental plausibility,
+    and strong tonal energy ratio ≥ 10 to exclude noise) and recover it
+    instead of returning no pitch. Existing thresholds are unchanged.
+- Evidence: `:shared:jvmTest` 278/278, `:shared:testAndroidHostTest`
+  241/241, headless UI suite PASS, demo 5/5. A synthetic G4 replay stays
+  on G4 for the whole sympathetic decay instead of blanking and showing
+  G3. The fixed APK was installed on the phone (wireless adb) for the
+  musical check.
+- Known limit: the fold relies on temporal continuity. A real G4→G3
+  change with no >300 ms playing gap is acoustically identical to the
+  bleed and stays G4 until a gap; a normal string change has that gap.

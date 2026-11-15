@@ -1,18 +1,25 @@
 # STATE — Resonance
 
-- Phase: 8 COMPLETE — UX/accessibility/reliability/QA audit
+- Phase: 9 COMPLETE — G4 octave-bleed fix (2026-11-15). Playing G4
+  (392 Hz) excited the open G string (196 Hz) sympathetically; the detector
+  returned 196 Hz or no pitch at −10 dB and the stale guard dropped the G4
+  lock. Added a continuous octave-fold in `TunerStateMachine` (a >300 ms
+  playing gap still allows a real octave change) and an upper-octave
+  recovery in `Yin.detect` when the lower candidate is rejected. Details:
+  docs/TDD_LOG.md (G4 octave-bleed fix) + docs/QUALITY_REPORT.md (G4 octave-bleed section). Existing DSP thresholds
+  unchanged.
+- Prior: milestone COMPLETE — UX/accessibility/reliability/QA audit
   (2026-11-15). 18 verified defects fixed (persistence restore, false
   zero readings, permission/lifecycle, string lock/favorites, flat-note
   editing, theme, responsive layout, a11y names, import I/O bounds,
   ID collisions, destructive delete). Details: docs/TDD_LOG.md (UX/accessibility/QA audit) +
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
-  screen reader) is the only remaining external gate. No DSP algorithm
-  or threshold changed.
-- Last green checkpoint (2026-11-15): :shared:jvmTest 270/270,
-  :shared:testAndroidHostTest 233/233, run-demo 5/5, lint green,
-  debug APK + instrumented test APK build, verify.sh 7/7 mandatory
-  locally-available gates PASS (device RUN still not run).
+  screen reader) is the only remaining external gate.
+- Last green checkpoint (2026-11-15, G4 octave fix): :shared:jvmTest 278/278,
+  :shared:testAndroidHostTest 241/241, run-demo 5/5, headless UI PASS,
+  debug APK installed on the phone (Android 15) and the API 36 emulator;
+  verify.sh gates were last run at the QA audit (see below).
 - Prior: device/SDK follow-up COMPLETE + overnight quality program (all five passes)
   (2026-11-08) fixed five DSP/engine/contract bugs (low-E noise,
   subharmonic, stale-note display, two-thread race, offline gate).
@@ -73,6 +80,11 @@
   user-local 9.7.0; SDK at ANDROID_HOME (platforms:
   android-36; ANDROID_HOME must be exported for builds).
 - Blockers: Android SDK RESOLVED; headless host renders RESOLVED
-  (ImageComposeScene; real-device visual/audio still pending);
-  no device (only remaining gate).
-- Failing test: none.
+  (ImageComposeScene); device now attached (ASUS Android 15 over
+  wireless adb + API 36 emulator), but the instrumented
+  `RealMicSmokeTest` is structurally invalid — it builds
+  `CaptureOrchestrator` directly and never calls `poll()`, so it fails on
+  both phone and emulator (found 2026-11-15, not fixed here). Real-guitar
+  audio/route/screen-reader checks remain manual.
+- Failing test: none in the host suites. Device suite: `RealMicSmokeTest`
+  fails everywhere for the missing pump (see device-gate note).

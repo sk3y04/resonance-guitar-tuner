@@ -295,3 +295,47 @@ performance. Audio source is still `VOICE_RECOGNITION` at 48 kHz with no
 sample-rate fallback — device-dependent risks, deliberately not changed
 without measurement. The editor cycles notes upward only (reported as an
 optional enhancement).
+
+## G4 / sympathetic-octave drop-out (2026-11-15)
+
+**Report:** G4 locked for about a second, then the display lost it (and
+sometimes briefly showed G3); every other note held normally.
+
+**Cause:** G4 (392 Hz) excites the open G string (196 Hz, one octave below)
+sympathetically. The combined waveform is periodic at 196 Hz, so the
+detector's first-crossing candidate is the lower octave. With the 196 Hz
+component around −10 dB relative to 392, that candidate is rejected by the
+10× harmonic rule while the true 392 Hz dip is too shallow for the 0.15
+absolute threshold — the detector returned **no pitch**. From −9 dB up it
+returned G3. The state machine's 50-cent stale guard then cleared the G4
+lock. Measured on the production 4096-sample/48 kHz path:
+
+```
+196 component   YIN result
+-30 .. -11 dB   392 Hz (correct)
+-10 dB          no pitch
+-9 .. 0 dB      196 Hz (G3)
+```
+
+**Fix (two layers):**
+1. `TunerStateMachine` folds a continuous measurement within 2% of half the
+   established note back up to that note (G3 bleed → G4). A playing gap
+   >300 ms suppresses the fold, so a real octave change is still followed;
+   suppression clears when the established note is confirmed or a new note
+   locks.
+2. `Yin.detect`, when no candidate survives, looks one octave up from each
+   rejected candidate and accepts it only with a local dip (d′ < 0.35),
+   fundamental plausibility, and a strong tonal energy ratio (≥10; noise is
+   ~1). This closes the −10 dB "no pitch" hole.
+
+**Regression evidence:** `YinOctaveRecoveryTest` (3 tests: bleed recovery,
+inverse true-low-note case, noise), five new `TunerStateMachineTest` cases
+(continuous bleed, short hole, real octave drop after a gap, non-octave
+change, manual lock). Full `:shared:jvmTest` 278/278,
+`:shared:testAndroidHostTest` 241/241, headless UI suite PASS, demo 5/5.
+Synthetic G4 replay holds G4 through the whole sympathetic decay.
+
+**Limits:** the fold is temporal, not spectral — a real G4→G3 change with
+no playing gap is indistinguishable from the bleed and stays G4 until a
+gap. The real-phone capture attempts were inconclusive (near-silent input),
+so the musical confirmation is the installed build, not a recorded fixture.

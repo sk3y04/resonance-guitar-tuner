@@ -115,16 +115,43 @@ class Yin(
             return true
         }
         val survivors = candidates.filter { isFundamentalCandidate(it) }
-        if (survivors.isEmpty()) return PitchEstimate(0.0, 0.0)
-        tauMin = if (survivors.size == 1) {
-            survivors[0]
+        if (survivors.isEmpty()) {
+            // Octave-bleed recovery. The first-crossing/global minimum
+            // can be an octave-below component (sympathetic string, body
+            // resonance) whose own 2nd harmonic is >10x stronger — rejected
+            // as a fundamental — while the true upper note's dip was too
+            // shallow to cross [absoluteThreshold]. Returning "no pitch"
+            // made a ringing G4 + open G3 drop out. Look one octave up from
+            // each rejected candidate, require a real local dip and strong
+            // tonal energy at the recovered frequency (noise ratios are
+            // ~1; a tonal candidate is orders of magnitude higher).
+            var recovered = -1
+            var recoveredD = Double.MAX_VALUE
+            for (candidate in candidates) {
+                val approx = candidate / 2
+                for (tau in (approx - 1)..(approx + 1)) {
+                    if (tau !in minLag..maxLag) continue
+                    if (dNorm[tau] >= 0.35 || dNorm[tau] >= recoveredD) continue
+                    if (!isFundamentalCandidate(tau)) continue
+                    val f = sampleRate.toDouble() / tau
+                    if (energyRatioAt(frame, f, sampleRate) < 10.0) continue
+                    recovered = tau
+                    recoveredD = dNorm[tau]
+                }
+            }
+            if (recovered == -1) return PitchEstimate(0.0, 0.0)
+            tauMin = recovered
         } else {
-            val a = survivors[0]
-            val b = survivors[1]
-            when {
-                dNorm[a] < 0.8 * dNorm[b] -> a
-                dNorm[b] < 0.8 * dNorm[a] -> b
-                else -> minOf(a, b)
+            tauMin = if (survivors.size == 1) {
+                survivors[0]
+            } else {
+                val a = survivors[0]
+                val b = survivors[1]
+                when {
+                    dNorm[a] < 0.8 * dNorm[b] -> a
+                    dNorm[b] < 0.8 * dNorm[a] -> b
+                    else -> minOf(a, b)
+                }
             }
         }
 
