@@ -1,6 +1,8 @@
 package dev.anima.resonance.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -44,6 +47,7 @@ import dev.anima.resonance.music.Spelling
 import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.MainScreenUiState
 import dev.anima.resonance.presentation.PresetRowUi
+import dev.anima.resonance.presentation.PresetSheetUi
 import dev.anima.resonance.ui.instrument.CalibrationControls
 import dev.anima.resonance.ui.instrument.InstrumentKey
 import dev.anima.resonance.ui.instrument.InstrumentTheme
@@ -52,13 +56,13 @@ import dev.anima.resonance.ui.instrument.RecessedPanel
 import dev.anima.resonance.ui.instrument.SpellingKeys
 
 /**
- * The configuration overlay — one coherent modal surface over the
- * instrument (which stays in place behind it). Carries the full existing
- * configuration contract: tuning selection + favorites, A4 reference with
- * coarse/fine steps, accidentals, new/import/export, and the custom-tuning
- * editor. The overlay scrolls; the main instrument does not. Dismiss via
- * the Close key, the scrim, or platform back (wired by the shell through
- * [platformBack]). All tags/semantics of the former inline sheet are kept.
+ * The configuration overlay — a configuration panel belonging to the
+ * wooden instrument, not a full-screen settings page. Three regions: a compact
+ * header (title + Close), scrolling content grouped into CALIBRATION and
+ * TUNINGS sections on one shared dark panel, and a compact action footer
+ * (New / Import / Export). A restrained brass rim ties it to the instrument;
+ * the dimmed instrument stays visible behind it. Dismiss via Close, the scrim,
+ * or platform back. All tags/semantics of the former sheet are preserved.
  */
 @Composable
 fun TuningsOverlay(
@@ -109,14 +113,16 @@ fun TuningsOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = maxSheetHeight)
+                    .border(1.dp, p.brassDark.copy(alpha = 0.85f), RoundedCornerShape(14.dp))
                     .testTag("resonance.overlay"),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Column {
+                    // ── Header (fixed) ───────────────────────────────────
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 14.dp, top = 10.dp, end = 10.dp, bottom = 6.dp),
+                            .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -125,7 +131,7 @@ fun TuningsOverlay(
                             } else {
                                 "Tunings & settings"
                             },
-                            style = InstrumentType.engravedStrong,
+                            style = InstrumentType.engravedStrong.copy(fontSize = 16.sp),
                             modifier = Modifier
                                 .weight(1f)
                                 .semantics { heading() }
@@ -137,16 +143,18 @@ fun TuningsOverlay(
                                 .heightIn(min = 48.dp)
                                 .testTag("resonance.overlay.close")
                                 .semantics { contentDescription = "Close tunings and settings" },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                         ) { Text("Close", style = InstrumentType.keyLabel) }
                     }
+                    HairlineDivider()
+                    // ── Content (scrolls) ────────────────────────────────
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState())
                             .testTag("resonance.overlay.scroll")
-                            .padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
+                            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                     ) {
                         if (editor != null) {
                             CustomEditorSheet(
@@ -162,7 +170,6 @@ fun TuningsOverlay(
                         } else {
                             SheetBody(
                                 state = state,
-                                largeText = largeText,
                                 onConcertStep = onConcertStep,
                                 onConcertStepCoarse = onConcertStepCoarse,
                                 onSpellingSelect = onSpellingSelect,
@@ -170,10 +177,37 @@ fun TuningsOverlay(
                                 onToggleFavorite = onToggleFavorite,
                                 onEditTuning = onEditTuning,
                                 onDeleteTuning = onDeleteTuning,
-                                onAddTuning = onAddTuning,
-                                onImportRequested = onImportRequested,
-                                onExportRequested = onExportRequested,
                             )
+                        }
+                    }
+                    // ── Footer (fixed, secondary actions) ────────────────
+                    if (editor == null) {
+                        HairlineDivider()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (largeText) {
+                                FooterAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.fillMaxWidth())
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    FooterAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
+                                    FooterAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    FooterAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.weight(1f))
+                                    FooterAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
+                                    FooterAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
@@ -182,11 +216,10 @@ fun TuningsOverlay(
     }
 }
 
-/** The configuration body (former inline sheet), unchanged contract. */
+/** The configuration body: CALIBRATION then TUNINGS, one shared surface. */
 @Composable
 private fun SheetBody(
     state: MainScreenUiState,
-    largeText: Boolean,
     onConcertStep: (Boolean) -> Unit,
     onConcertStepCoarse: (Boolean) -> Unit,
     onSpellingSelect: (Spelling) -> Unit,
@@ -194,167 +227,37 @@ private fun SheetBody(
     onToggleFavorite: (String) -> Unit,
     onEditTuning: (String) -> Unit,
     onDeleteTuning: (String) -> Unit,
-    onAddTuning: () -> Unit,
-    onImportRequested: () -> Unit,
-    onExportRequested: () -> Unit,
 ) {
     val p = InstrumentTheme.palette
     Column(Modifier.testTag("resonance.sheet")) {
-        // Coarse ±1 Hz + fine ±0.1 Hz reference steppers.
+        SectionLabel("CALIBRATION")
+        Spacer(Modifier.size(8.dp))
         CalibrationControls(
-            concertLabel = state.concertLabel,
+            concertValue = PresetSheetUi.referencePitchValue(state.concertPitchHz),
             concertError = state.concertError,
             onConcertStep = onConcertStep,
             onConcertStepCoarse = onConcertStepCoarse,
-            largeText = largeText,
+            largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f,
         )
-
-        if (largeText) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp)
-                    .testTag("resonance.sheet.spelling"),
-            ) {
-                Text("Accidentals", style = InstrumentType.readoutSmall)
-                Spacer(Modifier.size(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) { SpellingKeys(state.accidentalSpelling, onSpellingSelect) }
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp)
-                    .testTag("resonance.sheet.spelling"),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Accidentals",
-                    style = InstrumentType.readoutSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                SpellingKeys(state.accidentalSpelling, onSpellingSelect)
-            }
+        Spacer(Modifier.size(14.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("resonance.sheet.spelling"),
+        ) {
+            Text("Accidental display", style = InstrumentType.engraved)
+            Spacer(Modifier.size(6.dp))
+            SpellingKeys(state.accidentalSpelling, onSpellingSelect, Modifier.fillMaxWidth())
         }
 
+        Spacer(Modifier.size(16.dp))
+        HairlineDivider()
+        Spacer(Modifier.size(16.dp))
+
+        SectionLabel("TUNINGS")
+        Spacer(Modifier.size(8.dp))
         state.presetRows.forEach { row ->
-            Surface(
-                onClick = { onPresetSelect(row.id) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp)
-                    .testTag("resonance.sheet.row.${row.id}")
-                    .semantics {
-                        contentDescription = "Tuning ${row.name}" +
-                            (if (row.selected) ", selected" else "") +
-                            (if (row.favorite) ", favorite" else "")
-                    },
-                shape = RoundedCornerShape(8.dp),
-                color = if (row.selected) p.walnut else p.recess,
-                border = if (row.selected) {
-                    androidx.compose.foundation.BorderStroke(1.dp, p.brass)
-                } else {
-                    null
-                },
-            ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = row.name,
-                            style = InstrumentType.keyLabel.copy(
-                                color = p.ivory,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (row.selected) {
-                            Text(
-                                text = "●",
-                                color = p.brassLight,
-                                style = InstrumentType.readoutSmall,
-                                modifier = Modifier
-                                    .padding(start = 6.dp)
-                                    .clearAndSetSemantics {},
-                            )
-                        }
-                        TextButton(
-                            onClick = { onToggleFavorite(row.id) },
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag("resonance.sheet.row.${row.id}.favorite")
-                                .semantics {
-                                    contentDescription = if (row.favorite) {
-                                        "Remove ${row.name} from favorites"
-                                    } else {
-                                        "Add ${row.name} to favorites"
-                                    }
-                                },
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (row.favorite) p.brassLight else p.textMuted,
-                            ),
-                        ) {
-                            Text(text = if (row.favorite) "★" else "☆", fontSize = 18.sp)
-                        }
-                    }
-                    if (largeText) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(row.stringsPreview, style = InstrumentType.readoutSmall)
-                            if (!row.builtIn) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                ) { RowEditDelete(row, onEditTuning, onDeleteTuning) }
-                            }
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = row.stringsPreview,
-                                style = InstrumentType.readoutSmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (!row.builtIn) {
-                                RowEditDelete(row, onEditTuning, onDeleteTuning)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (largeText) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SheetAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.fillMaxWidth())
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    SheetAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                    SheetAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SheetAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.weight(1f))
-                SheetAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                SheetAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-            }
+            TuningRow(row, onPresetSelect, onToggleFavorite, onEditTuning, onDeleteTuning)
         }
         state.importResultText?.let { message ->
             Text(
@@ -363,10 +266,141 @@ private fun SheetBody(
                 color = p.brassLight,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .padding(top = 6.dp)
                     .testTag("resonance.sheet.importResult")
                     .semantics { liveRegion = LiveRegionMode.Polite },
             )
+        }
+    }
+}
+
+/** One tuning: name + ordered string notes, active highlight, separate favorite. */
+@Composable
+private fun TuningRow(
+    row: PresetRowUi,
+    onPresetSelect: (String) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    onEditTuning: (String) -> Unit,
+    onDeleteTuning: (String) -> Unit,
+) {
+    val p = InstrumentTheme.palette
+    Surface(
+        onClick = { onPresetSelect(row.id) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            .testTag("resonance.sheet.row.${row.id}")
+            .semantics {
+                contentDescription = "Tuning ${row.name}" +
+                    (if (row.selected) ", selected" else "") +
+                    (if (row.favorite) ", favorite" else "")
+            },
+        shape = RoundedCornerShape(8.dp),
+        color = if (row.selected) p.walnutLight.copy(alpha = 0.45f) else p.recess,
+        border = if (row.selected) BorderStroke(1.dp, p.brass.copy(alpha = 0.9f)) else null,
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = row.name,
+                    style = InstrumentType.keyLabel.copy(color = p.ivory, fontWeight = FontWeight.Medium),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (row.selected) {
+                    Text(
+                        text = "●",
+                        color = p.brassLight,
+                        style = InstrumentType.readoutSmall,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .clearAndSetSemantics {},
+                    )
+                }
+                TextButton(
+                    onClick = { onToggleFavorite(row.id) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.sheet.row.${row.id}.favorite")
+                        .semantics {
+                            contentDescription = if (row.favorite) {
+                                "Remove ${row.name} from favorites"
+                            } else {
+                                "Add ${row.name} to favorites"
+                            }
+                        },
+                    contentPadding = PaddingValues(horizontal = 10.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (row.favorite) p.brassLight else p.textMuted,
+                    ),
+                ) {
+                    Text(text = if (row.favorite) "★" else "☆", fontSize = 20.sp)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = row.stringsPreview,
+                    style = InstrumentType.readoutSmall.copy(
+                        fontSize = 15.sp,
+                        color = p.ivory.copy(alpha = 0.82f),
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                if (!row.builtIn) {
+                    RowEditDelete(row, onEditTuning, onDeleteTuning)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    val p = InstrumentTheme.palette
+    Text(
+        text = text,
+        style = InstrumentType.engraved.copy(
+            color = p.brassLight,
+            fontSize = 11.sp,
+            letterSpacing = 2.sp,
+        ),
+        modifier = Modifier.semantics { heading() },
+    )
+}
+
+@Composable
+private fun HairlineDivider() {
+    val p = InstrumentTheme.palette
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(p.brassDark.copy(alpha = 0.45f)),
+    )
+}
+
+/** A secondary, outlined footer action (visually lighter than the tuning list). */
+@Composable
+private fun FooterAction(
+    text: String,
+    tag: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    val p = InstrumentTheme.palette
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .testTag(tag),
+        shape = RoundedCornerShape(6.dp),
+        color = Color.Transparent,
+        contentColor = p.ivory,
+        border = BorderStroke(1.dp, p.brassDark.copy(alpha = 0.9f)),
+    ) {
+        Box(Modifier.padding(horizontal = 8.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+            Text(text, style = InstrumentType.keyLabel, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -396,22 +430,4 @@ private fun RowEditDelete(
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = p.lampRed),
     ) { Text("Delete") }
-}
-
-@Composable
-private fun SheetAction(
-    text: String,
-    tag: String,
-    onClick: () -> Unit,
-    modifier: Modifier,
-) {
-    InstrumentKey(
-        onClick = onClick,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .testTag(tag),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-    ) {
-        Text(text, style = InstrumentType.keyLabel, maxLines = 1, softWrap = false)
-    }
 }

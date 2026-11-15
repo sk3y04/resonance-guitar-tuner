@@ -1,6 +1,22 @@
 # STATE — Resonance
 
-- Phase: 12 COMPLETE — structural faceplate redesign + G3 tracking fix
+- Phase: 13 COMPLETE — spatial composition + overlay refinement (2026-11-15).
+  Main screen: the meter+readout are ONE brass-rimmed measurement assembly
+  (`MeterAssembly`, height-aware `MeterAssemblyLayout` pure logic + tests) —
+  the ivory gauge keeps a natural arc-filling aspect, the readout adjoins it
+  directly, and the lower controls absorb surplus height (settings anchored
+  low). This removes the empty bands above/below the meter at their source
+  (the old width-capped, centre-aligned meter in an oversized weight slot).
+  Scale labels enlarged (13dp / FLAT-SHARP 12dp), longer ticks; stronger
+  walnut grain on the exposed rails; faceplate width capped (480dp) so the
+  gauge stays arc-filling on wide screens. Overlay: three regions (header /
+  scrolling CALIBRATION+TUNINGS content / fixed New-Import-Export footer),
+  clear "A4 · 440 Hz" reference value with labelled ±1 Hz / ±0.1 Hz stepper
+  groups, segmented Sharps ♯ / Flats ♭, refined tuning rows (bigger note
+  text, brass active highlight, separate star favorite), brass rim. DSP /
+  state / permissions / persistence and the semantic contract unchanged.
+  Details: docs/TDD_LOG.md (spatial composition + overlay).
+- Prior: milestone COMPLETE — structural faceplate redesign + G3 tracking fix
   (2026-11-15). G3 dropout fix (DSP, the G3 dropout fix): G3 dropped after ~1 s because
   sympathetic D3 makes the ~4:3 mix aperiodic and the YIN dip never
   crossed 0.15; added a guarded sub-threshold recovery + spectral-peak
@@ -41,16 +57,26 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, faceplate redesign): :shared:jvmTest 312/312,
+- Last green checkpoint (2026-11-15, spatial composition): :shared:jvmTest 323/323,
+  :shared:testAndroidHostTest 280/280, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). New tests: MeterAssemblyLayoutTest 8,
+  ReferencePitchValueTest 3. Needle pixel-reverified in the embedded gauge:
+  0¢→+1°, −3¢→−2°, +120¢→+46° (stop), no-signal→−46° (rest). Main screen
+  pixel-checked: no empty bands around the meter, meter+readout contiguous,
+  small phone 360×640 dp unclipped (128 px bottom margin). APK installed
+  on the ASUS phone (Android 15) and the new layout confirmed on-device.
+  Vision review of the main render positive (rate-limited intermittently);
+  overlay verified via semantics tests + PIL. Real-device verification (mic/screen
+  reader) remains the only external gate; live-guitar G3 still unverified.
+- Prior checkpoint (2026-11-15, faceplate redesign): :shared:jvmTest 312/312,
   :shared:testAndroidHostTest 269/269, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). Needle pixel-reverified in the
   faceplate (radial-continuity isolation): 0¢→+1°, −3¢→−2°, +120¢→+44°
   (stop), no-signal→−48° (rest). Small phone 360×640 dp fixed, content
-  ends at 93.6% height (no clipping). Device QA NOT run this pass: the
-  ASUS phone dropped off wireless adb and is not rediscoverable; the
-  vision model was rate-limited (429), so UI evidence is headless Skia
-  renders + PIL geometry checks. Real-device verification (mic/screen reader)
-  remains the only external gate.
+  ends at 93.6% height (no clipping). Device QA NOT run that pass: the
+  ASUS phone dropped off wireless adb and was not rediscoverable; the
+  vision model was rate-limited (429), so UI evidence was headless Skia
+  renders + PIL geometry checks.
 - Prior checkpoint (2026-11-15, instrument refinement): :shared:jvmTest 300/300,
   :shared:testAndroidHostTest 258/258, run-demo 5/5, verify.sh 7/7 PASS.
   Needle mapping pixel-reverified after refinement: 0¢→−0.05°,

@@ -46,6 +46,7 @@ import dev.anima.resonance.ui.instrument.InstrumentTheme
 import dev.anima.resonance.ui.instrument.InstrumentType
 import dev.anima.resonance.ui.instrument.JewelLamp
 import dev.anima.resonance.ui.instrument.MechanicalModeSelector
+import dev.anima.resonance.ui.instrument.MeterAssembly
 import dev.anima.resonance.ui.instrument.NoteReadout
 import dev.anima.resonance.ui.instrument.RecessedPanel
 import dev.anima.resonance.ui.instrument.WoodenEnclosure
@@ -100,12 +101,14 @@ fun TunerScreen(
             Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(10.dp),
+                .padding(12.dp),
         ) {
             InstrumentFaceplate(Modifier.fillMaxSize()) {
                 BoxWithConstraints(
                     Modifier
+                        .align(Alignment.TopCenter)
                         .fillMaxSize()
+                        .widthIn(max = 480.dp)
                         .padding(12.dp),
                 ) {
                     val innerW = maxWidth
@@ -118,12 +121,14 @@ fun TunerScreen(
                         else -> 1
                     }
                     val stringsH = if (stringRows == 0) 0.dp else (stringRows * 58 + (stringRows - 1) * 6).dp
-                    val fixedH = 22.dp + 84.dp + 56.dp + stringsH + 52.dp + 8.dp * 5
-                    val meterSlotH = innerH - fixedH
-                    // Main-screen guarantee: fixed layout when the meter has
-                    // real room and text is at normal scale; otherwise an
-                    // explicit accessible scrolling fallback.
-                    val fallback = largeText || meterSlotH < 130.dp
+                    // The measurement assembly is height-aware — its gauge
+                    // shrinks to fit short screens and stays natural on tall
+                    // ones; the lower controls take any surplus height.
+                    val controlsMinH = 56.dp + stringsH + 52.dp + 20.dp
+                    val availableAssemblyH = innerH - 24.dp - controlsMinH - 40.dp
+                    // Main-screen guarantee: fixed layout when the gauge has
+                    // real room at normal scale; otherwise a scrolling fallback.
+                    val fallback = largeText || availableAssemblyH < 120.dp
 
                     if (fallback) {
                         FallbackLayout(
@@ -142,94 +147,61 @@ fun TunerScreen(
                     } else {
                         Column(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             LabelStrip(state)
-                            // The meter owns the flexible space.
-                            Box(
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                            ) {
-                                if (!granted || state.captureError) {
-                                    CapturePanel(
-                                        state = state,
-                                        onPermissionCta = onPermissionCta,
-                                        onRequestPermission = onRequestPermission,
-                                        onRetryCapture = onRetryCapture,
-                                        modifier = Modifier.align(Alignment.Center),
-                                    )
-                                } else {
-                                    BoxWithConstraints(Modifier.fillMaxSize()) {
-                                        val reserve = if (state.statusHint != null || (granted && !state.captureActive)) 26.dp else 0.dp
-                                        val meterW = minOf(maxWidth, (maxHeight - reserve) * 1.6f)
-                                        AnalogTuningMeter(
-                                            position = state.meterPosition,
-                                            inTune = state.inTune,
-                                            clamped = state.meterClamped,
-                                            active = state.meterActive,
-                                            modifier = Modifier
-                                                .width(meterW)
-                                                .align(Alignment.Center),
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                    ) {
-                                        state.statusHint?.let { hint ->
-                                            Text(
-                                                text = hint,
-                                                style = InstrumentType.readoutSmall.copy(fontSize = 12.sp),
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .testTag("resonance.hint"),
-                                            )
-                                        }
-                                        if (granted && !state.captureActive) {
-                                            InstrumentKey(
-                                                onClick = onRetryCapture,
-                                                modifier = Modifier
-                                                    .padding(top = 2.dp)
-                                                    .heightIn(min = 48.dp)
-                                                    .testTag("resonance.start"),
-                                            ) { Text("Start listening", style = InstrumentType.keyLabel) }
-                                        }
-                                    }
-                                }
-                            }
-                            NoteReadout(
-                                state = state,
-                                noteSize = noteSize,
-                                centsSize = centsSize,
-                                largeText = largeText,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            MechanicalModeSelector(
-                                mode = state.mode,
-                                onModeSelect = onModeSelect,
-                                largeText = false,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            if (state.targetLabels.isNotEmpty()) {
-                                InstrumentStringSelector(
-                                    targetLabels = state.targetLabels,
-                                    activeStringIndex = state.activeStringIndex,
-                                    stringLocked = state.stringLocked,
-                                    onStringSelect = onStringSelect,
+                            // The measurement assembly (gauge + readout) sits at
+                            // its natural height directly under the label strip.
+                            if (!granted || state.captureError) {
+                                CapturePanel(
+                                    state = state,
+                                    onPermissionCta = onPermissionCta,
+                                    onRequestPermission = onRequestPermission,
+                                    onRetryCapture = onRetryCapture,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                MeterAssembly(
+                                    state = state,
+                                    largeText = false,
+                                    onRetryCapture = onRetryCapture,
+                                    availableHeightDp = availableAssemblyH.value,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            InstrumentKey(
-                                onClick = onOpenSheet,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .testTag("resonance.openSheet"),
+                            // The lower controls absorb the surplus height:
+                            // mode + strings grouped compactly, settings anchored
+                            // to the bottom of the faceplate (nothing squeezed,
+                            // no empty bands around the meter).
+                            Column(
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
                             ) {
-                                Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
+                                Spacer(Modifier.weight(1f))
+                                MechanicalModeSelector(
+                                    mode = state.mode,
+                                    onModeSelect = onModeSelect,
+                                    largeText = false,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                if (state.targetLabels.isNotEmpty()) {
+                                    Spacer(Modifier.height(10.dp))
+                                    InstrumentStringSelector(
+                                        targetLabels = state.targetLabels,
+                                        activeStringIndex = state.activeStringIndex,
+                                        stringLocked = state.stringLocked,
+                                        onStringSelect = onStringSelect,
+                                    )
+                                }
+                                Spacer(Modifier.weight(1f))
+                                InstrumentKey(
+                                    onClick = onOpenSheet,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("resonance.openSheet"),
+                                ) {
+                                    Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
+                                }
                             }
                         }
                     }

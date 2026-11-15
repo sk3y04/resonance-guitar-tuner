@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ fun NoteReadout(
     centsSize: androidx.compose.ui.unit.TextUnit,
     largeText: Boolean,
     modifier: Modifier = Modifier,
+    fillHeight: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
     val centsDescription = when {
@@ -57,6 +59,7 @@ fun NoteReadout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (fillHeight) Modifier.fillMaxSize() else Modifier)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

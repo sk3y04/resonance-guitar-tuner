@@ -55,6 +55,8 @@ fun AnalogTuningMeter(
     active: Boolean,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    aspectRatio: Float? = if (compact) 1.8f else 1.6f,
+    embedded: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
     val target = (if (active) position.coerceIn(-1.0, 1.0) else -1.0).toFloat()
@@ -65,7 +67,7 @@ fun AnalogTuningMeter(
     )
     val measurer = rememberTextMeasurer()
 
-    val drawModifier = remember(active, inTune, clamped, compact, measurer) {
+    val drawModifier = remember(active, inTune, clamped, compact, embedded, measurer) {
         // The painted band tracks the state machine's EXIT tolerance (±8¢):
         // the needle inside the band is exactly when "In tune" can be claimed.
         val bandHalfAngle = AnalogMeterGeometry.inTuneBandHalfAngle(8.0).toFloat()
@@ -77,16 +79,18 @@ fun AnalogTuningMeter(
         Modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            // Face leaves room below for the shadow cast onto the wood.
-            val faceLeft = 2.dp.toPx()
-            val faceTop = 2.dp.toPx()
-            val faceRight = w - 2.dp.toPx()
-            val faceBottom = h - 6.dp.toPx()
-            val frame = 3.dp.toPx()
-            val pivot = Offset(w / 2f, faceBottom - 14.dp.toPx())
+            // Embedded into the measurement assembly: full-bleed ivory (the
+            // assembly supplies the frame); standalone: framed + cast shadow.
+            val margin = if (embedded) 0.dp.toPx() else 2.dp.toPx()
+            val faceLeft = margin
+            val faceTop = margin
+            val faceRight = w - margin
+            val faceBottom = h - (if (embedded) 0.dp.toPx() else 6.dp.toPx())
+            val frame = if (embedded) 0.dp.toPx() else 3.dp.toPx()
+            val pivot = Offset(w / 2f, faceBottom - (if (embedded) 12.dp.toPx() else 14.dp.toPx()))
             val radius = min(
                 (faceRight - faceLeft) / 2f - 18.dp.toPx(),
-                pivot.y - faceTop - 26.dp.toPx(),
+                pivot.y - faceTop - 30.dp.toPx(),
             ).coerceAtLeast(10f)
 
             fun unit(angleDeg: Float): Offset {
@@ -110,6 +114,7 @@ fun AnalogTuningMeter(
                 startY = faceTop,
                 endY = faceBottom,
             )
+            val faceCorner = if (embedded) 0.dp.toPx() else 9.dp.toPx()
             val facePath = Path().apply {
                 addRoundRect(
                     RoundRect(
@@ -117,7 +122,7 @@ fun AnalogTuningMeter(
                         top = faceTop + frame,
                         right = faceRight - frame,
                         bottom = faceBottom - frame,
-                        cornerRadius = CornerRadius(9.dp.toPx()),
+                        cornerRadius = CornerRadius(faceCorner),
                     ),
                 )
             }
@@ -130,20 +135,21 @@ fun AnalogTuningMeter(
             val spotR = (faceRight - faceLeft) * 0.30f
 
             // Scale labels: fixed dp keeps geometry stable at any font scale.
+            // Enlarged for readability (the meter is the centerpiece).
             val labelStyle = TextStyle(
-                fontSize = 11.dp.toSp(),
+                fontSize = 13.dp.toSp(),
                 fontWeight = FontWeight.Medium,
                 color = p.ink,
             )
             val zeroStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
             val sideLabelStyle = TextStyle(
-                fontSize = 10.dp.toSp(),
+                fontSize = 12.dp.toSp(),
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 1.2.dp.toSp(),
                 color = p.ink,
             )
             val noSignalStyle = TextStyle(
-                fontSize = 9.dp.toSp(),
+                fontSize = 10.dp.toSp(),
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.2.dp.toSp(),
                 color = p.inkSoft,
@@ -167,9 +173,9 @@ fun AnalogTuningMeter(
             val ticks = (-50..50 step 5).map { cents ->
                 val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
                 val len = when {
-                    cents == 0 -> 14.dp.toPx()
-                    cents % 10 == 0 -> 11.dp.toPx()
-                    else -> 7.dp.toPx()
+                    cents == 0 -> 16.dp.toPx()
+                    cents % 10 == 0 -> 13.dp.toPx()
+                    else -> 8.dp.toPx()
                 }
                 Tick(
                     start = at(a, radius),
@@ -187,31 +193,34 @@ fun AnalogTuningMeter(
             val sweep = AnalogMeterGeometry.SWEEP_DEGREES.toFloat()
 
             onDrawBehind {
-                // Shadow cast onto the wood (light from upper left).
-                drawRoundRect(
-                    color = p.recessEdge.copy(alpha = 0.30f),
-                    topLeft = Offset(faceLeft + 1.dp.toPx(), faceTop + 3.5.dp.toPx()),
-                    size = Size(faceRight - faceLeft, faceBottom - faceTop),
-                    cornerRadius = CornerRadius(12.dp.toPx()),
-                )
-                drawRoundRect(
-                    color = p.recessEdge.copy(alpha = 0.18f),
-                    topLeft = Offset(faceLeft + 0.5.dp.toPx(), faceTop + 1.5.dp.toPx()),
-                    size = Size(faceRight - faceLeft, faceBottom - faceTop),
-                    cornerRadius = CornerRadius(12.dp.toPx()),
-                )
-                // Thin metal frame + ivory face.
-                drawRoundRect(
-                    brush = frameBrush,
-                    topLeft = Offset(faceLeft, faceTop),
-                    size = Size(faceRight - faceLeft, faceBottom - faceTop),
-                    cornerRadius = CornerRadius(12.dp.toPx()),
-                )
+                if (!embedded) {
+                    // Shadow cast onto the wood (light from upper left).
+                    drawRoundRect(
+                        color = p.recessEdge.copy(alpha = 0.30f),
+                        topLeft = Offset(faceLeft + 1.dp.toPx(), faceTop + 3.5.dp.toPx()),
+                        size = Size(faceRight - faceLeft, faceBottom - faceTop),
+                        cornerRadius = CornerRadius(12.dp.toPx()),
+                    )
+                    drawRoundRect(
+                        color = p.recessEdge.copy(alpha = 0.18f),
+                        topLeft = Offset(faceLeft + 0.5.dp.toPx(), faceTop + 1.5.dp.toPx()),
+                        size = Size(faceRight - faceLeft, faceBottom - faceTop),
+                        cornerRadius = CornerRadius(12.dp.toPx()),
+                    )
+                    // Thin metal frame around the standalone face.
+                    drawRoundRect(
+                        brush = frameBrush,
+                        topLeft = Offset(faceLeft, faceTop),
+                        size = Size(faceRight - faceLeft, faceBottom - faceTop),
+                        cornerRadius = CornerRadius(12.dp.toPx()),
+                    )
+                }
+                // Ivory face (full-bleed when embedded; the assembly frames it).
                 drawRoundRect(
                     brush = faceBrush,
                     topLeft = Offset(faceLeft + frame, faceTop + frame),
                     size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
-                    cornerRadius = CornerRadius(9.dp.toPx()),
+                    cornerRadius = CornerRadius(faceCorner),
                 )
                 clipPath(facePath) {
                     ageSpots.forEach { c ->
@@ -244,14 +253,16 @@ fun AnalogTuningMeter(
                         style = Stroke(width = 1.5.dp.toPx()),
                     )
                 }
-                // Hairline inset edge between frame and face.
-                drawRoundRect(
-                    color = p.recessEdge.copy(alpha = 0.5f),
-                    topLeft = Offset(faceLeft + frame, faceTop + frame),
-                    size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
-                    cornerRadius = CornerRadius(9.dp.toPx()),
-                    style = Stroke(width = 0.7.dp.toPx()),
-                )
+                // Hairline inset edge between frame and face (standalone only).
+                if (!embedded) {
+                    drawRoundRect(
+                        color = p.recessEdge.copy(alpha = 0.5f),
+                        topLeft = Offset(faceLeft + frame, faceTop + frame),
+                        size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
+                        cornerRadius = CornerRadius(9.dp.toPx()),
+                        style = Stroke(width = 0.7.dp.toPx()),
+                    )
+                }
 
                 // Scale arc + restrained in-tune band.
                 drawArc(
@@ -377,7 +388,7 @@ fun AnalogTuningMeter(
 
     Box(
         modifier = modifier
-            .aspectRatio(if (compact) 1.8f else 1.6f)
+            .then(if (aspectRatio != null) Modifier.aspectRatio(aspectRatio) else Modifier)
             .testTag("resonance.dial"),
     ) {
         Canvas(Modifier.fillMaxSize().then(drawModifier), onDraw = {})

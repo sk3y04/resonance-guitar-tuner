@@ -533,8 +533,11 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all + customPreset, setOf("standard"), "standard"),
         )
         showOverlay(ui)
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.add"))
+        // Footer actions are fixed (always visible), not in the scroll body.
         rule.onNodeWithTag("resonance.sheet.add").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.import").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.export").assertIsDisplayed()
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.row.standard.edit").assertDoesNotExist() // built-ins are read-only

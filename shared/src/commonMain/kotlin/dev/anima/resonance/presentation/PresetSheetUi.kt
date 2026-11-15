@@ -52,6 +52,17 @@ object PresetSheetUi {
     }
 
     /**
+     * The overlay's reference-pitch readout value, e.g. "A4 · 440 Hz".
+     * Same tenths precision as [concertPitchLabel], a clearer middot form
+     * for the calibration control. Derived from the actual concert state.
+     */
+    fun referencePitchValue(hz: Double): String {
+        val tenths = (hz * 10).roundToLong()
+        return if (tenths % 10 == 0L) "A4 · ${tenths / 10} Hz"
+        else "A4 · ${tenths / 10}.${tenths % 10} Hz"
+    }
+
+    /**
      * Steps the A4 reference by ±0.1 Hz (spec §2), rounded to the tenth and
      * clamped to the product range 400..480 Hz.
      */

@@ -134,9 +134,7 @@ class MainScreenUiTest {
             rule.onAllNodes(hasTestTag("resonance.sheet"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        // The overlay scrolls; the main instrument does not.
-        rule.onNodeWithTag("resonance.overlay.scroll")
-            .performScrollToNode(hasTestTag("resonance.sheet.add"))
+        // The footer actions are fixed (outside the scroll body).
         rule.onNodeWithTag("resonance.sheet.add").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.editor.name"))

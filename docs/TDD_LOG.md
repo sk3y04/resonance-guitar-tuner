@@ -1090,3 +1090,60 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   was rate-limited (429), so aesthetic review used PIL geometry checks
   rather than a model verdict. The real-device mic/screen-reader pass
   remains the only external gate.
+
+## Spatial composition + overlay refinement (2026-11-15)
+- Report: the faceplate redesign fit on one screen but read as stacked panels with large empty
+  bands above/below the meter, small markings, controls squeezed low, and a
+  flat brown body; the overlay read as a full-screen settings page. Goal:
+  deliberate instrument composition + a configuration panel belonging to the
+  instrument. DSP/state/permissions/persistence and the semantic contract
+  untouched (UI-only).
+- Root cause of the empty space (found in the layout source, not guessed):
+  the meter was width-capped (`meterW = min(maxWidth, …*1.6)`) and
+  `Alignment.Center`'d inside an oversized `weight(1f)` slot, so on a tall
+  phone the drawing was far shorter than its slot — empty bands above and
+  below. The readout was a separate card.
+- RED→GREEN slices (pure presentation logic first):
+  - `MeterAssemblyLayoutTest` (8): gauge+readout fill the slot within
+    capacity, surplus capped (not stretched), gauge stays at an arc-filling
+    aspect (1.35–1.85), readout compact bounds, note glyph scales+capped,
+    degenerate bounds clamped. RED: unresolved `MeterAssemblyLayout` → GREEN.
+  - `ReferencePitchValueTest` (3): "A4 · 440 Hz" / tenths / rounding. RED:
+    unresolved `referencePitchValue` → GREEN.
+- Main screen:
+  - New `MeterAssembly`: ONE brass-rimmed recess carrying the ivory gauge
+    (embedded `AnalogTuningMeter`, full-bleed, no nested frame) directly above
+    the warm-dark `NoteReadout` (adjoining recessed surfaces, hairline brass
+    divider). Height-aware via `MeterAssemblyLayout`: the gauge shrinks to fit
+    short screens and stays natural on tall ones; the readout is compact. The
+    lower controls take surplus height (mode+strings grouped, settings
+    anchored low) — no empty bands around the meter.
+  - `AnalogTuningMeter`: added `embedded` + nullable `aspectRatio`; enlarged
+    scale labels 11→13 dp, FLAT/SHARP 10→12 dp, longer ticks. Geometry /
+    needle mapping / animation / no-signal rest unchanged (10/10 geometry
+    tests; pixel-reverified 0¢→+1°, −3¢→−2°, +120¢→+46°, rest→−46°).
+  - Faceplate content width capped at 480 dp (centered on wide screens) so the
+    gauge stays arc-filling — fixes the wide default test viewport (1024×768 dp)
+    where an uncapped gauge overflowed. Enclosure grain strengthened on the
+    exposed rails (42 streaks, alpha×1.5, bands×1.3); faceplate grain stays
+    faint behind labels.
+- Overlay (`TuningsOverlay` rebuilt): three regions — fixed header (title +
+  Close), scrolling content, fixed New/Import/Export footer. Content grouped
+  into CALIBRATION (reference pitch + accidentals) and TUNINGS sections with
+  brass small-caps labels + hairline dividers on one shared dark panel with a
+  brass rim. `CalibrationControls`: "Reference pitch" + live "A4 · 440 Hz"
+  value, labelled ±1 Hz / ±0.1 Hz stepper groups. `SpellingKeys`: segmented
+  "Sharps ♯ / Flats ♭" in a recessed track (selected proud + ivory). Tuning
+  rows: bigger note-sequence text (15 sp, ivory), brass active highlight + ●
+  indicator, separate 20 sp star favorite (toggling never selects). Footer
+  actions are outlined/secondary. All former tags/semantics preserved.
+- Evidence: :shared:jvmTest 323/323, :shared:testAndroidHostTest 280/280,
+  run-demo 5/5, verify.sh 7/7 PASS. Main render pixel-checked: label→meter gap
+  ~15 dp, meter+readout contiguous, controls spaced, settings low; small phone
+  360×640 dp unclipped (128 px bottom margin). Vision review of the main render
+  positive (no empty bands, readable markings, walnut body, controls not
+  squeezed). APK installed on the ASUS phone and the layout confirmed
+  on-device. Overlay verified via semantics tests + PIL (header/footer/sections).
+- Known limits: vision intermittently rate-limited (429) — overlay aesthetic
+  verdict relies on tests + PIL rather than a model review. The real-device
+  mic/screen-reader pass and live-guitar G3 confirmation remain open.

@@ -31,7 +31,7 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
         modifier = modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h, count = 34)
+            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h, count = 42)
             val grainPaths = streaks.map { s ->
                 Path().apply {
                     val step = 24f
@@ -88,7 +88,7 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.5f to tone.copy(alpha = b.alpha),
+                            0.5f to tone.copy(alpha = (b.alpha * 1.3f).coerceAtMost(0.18f)),
                             1f to Color.Transparent,
                             startY = b.centerY - b.halfHeight,
                             endY = b.centerY + b.halfHeight,
@@ -97,13 +97,14 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                         size = Size(w, b.halfHeight * 2f),
                     )
                 }
-                // Fine horizontal figure.
+                // Fine horizontal figure — a touch stronger on the exposed
+                // rails so the body reads as walnut, not a flat brown fill.
                 grainPaths.forEachIndexed { i, path ->
                     drawPath(
                         path = path,
                         color = if (i % 3 == 0) p.grainLight else p.grainDark,
-                        alpha = streaks[i].alpha,
-                        style = Stroke(width = streaks[i].thickness),
+                        alpha = (streaks[i].alpha * 1.5f).coerceAtMost(0.34f),
+                        style = Stroke(width = streaks[i].thickness * 1.15f),
                     )
                 }
                 drawRect(lightBrush)
