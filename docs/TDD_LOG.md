@@ -1256,3 +1256,65 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   review. On-device capture still blocked by the secure lock screen. The
   real-device mic/screen-reader and live-guitar G3 confirmation remain open;
   this visual pass claims nothing about G3 or tuning accuracy.
+
+## Composition correction: meter dominant, readout/strings compact (2026-11-15)
+- Report: the finishing pass regressed proportions — six string buttons spread across two
+  excessively separated rows, chromatic readout expanded into a large empty
+  rectangle, analog scale small in both modes. Reverse the hierarchy: meter
+  primary, readout secondary, strings compact supporting controls. Specific
+  composition prescribed; not a general polish pass. Overlay untouched.
+- Regression cause (read from source): `TunerScreen` gave the string grid
+  `Modifier.weight(1f)` and `InstrumentStringSelector(fillHeight=true)`
+  distributed the rows through the available height (oversized, separated
+  buttons); the chromatic branch capped the readout at 260dp (empty rectangle);
+  `AnalogTuningMeter` used `radius = min(width/2 − 18dp, …)` which ignored the
+  sweep, so the arc only used ~63% of the face width (small scale).
+- Meter rebuilt (TDD): `AnalogMeterGeometry.SWEEP_DEGREES` 90°→70° (±35°);
+  `AnalogMeterGeometryTest` updated to the new stops/step/band while keeping the
+  linear center-zero cents mapping, clamping, UI-position agreement and tick
+  symmetry (RED→GREEN). `AnalogTuningMeter` radius now sweep-aware: numerals sit
+  INSIDE the arc rim, so the binding width constraint is the arc rim at the
+  extreme tick angle (`R·sin(half-sweep) ≤ width/2 − edge`), using the full face
+  width; pivot raised (faceBottom−40dp) so the needle counterweight tail clears
+  the face. `MeterAssemblyLayout.GAUGE_ASPECT` 1.6→1.0 (~square face). Result:
+  gauge ~310dp on a 360dp phone (was ~195dp), R≈261 (was ≈138), long needle,
+  readable 14dp numerals, balanced pivot, restrained center tolerance band.
+  Layout-test aspect range + readout-growth fixtures aligned to the larger dial.
+- Readout compact in BOTH modes: `MAX_READOUT_DP` 100dp, content-driven, stable
+  listening↔tracking; the chromatic branch no longer expands it. No-signal
+  unchanged (hidden needle + hub, one "Play a note" message, intentional note
+  placeholder, no scattered dashes/repeated labels).
+- String selector redesigned (`InstrumentStringSelector`): one horizontal row of
+  N equal keys when each keeps a ≥48dp touch target (`maxWidth ≥ 48·N + 4·(N−1)`),
+  else a tight grid (3 or 4 per row, fixed 6dp gap, normal 56dp height, never
+  stretched). Note name 16sp leads; small 9sp number; active key shows a jewel
+  (green AUTO / amber LOCKED) beside the number plus ONE group-level AUTO/LOCKED
+  caption — no per-button AUTO text line. Removed `fillHeight`. Adaptive to any
+  string count; semantics (tags, contentDescription "detected"/"locked",
+  selected=locked) preserved.
+- Layout (`TunerScreen`): one `Column(spacedBy(10dp))` — LabelStrip, MeterAssembly
+  (gauge+readout, the only section sized to absorb spare height up to its
+  coherent width-bound max), MechanicalModeSelector, InstrumentStringSelector
+  (instrument only, natural height), settings key, ONE bottom wood enclosure
+  margin (`Spacer(weight)`). No SpaceBetween/SpaceEvenly, no vertical weight on
+  readout/strings. Height budget reserves gaps + a 16dp bottom margin; assemblies
+  bounded by `availableAssemblyH` so no viewport overflows. Accessible scroll
+  fallback for large fonts / tiny screens unchanged.
+- Evidence: :shared:jvmTest 332/332, :shared:testAndroidHostTest 289/289,
+  run-demo 5/5, verify.sh 7/7 PASS. Added render cases dark-chromatic-valid +
+  dark-instrument-no-signal. Four states vision-verified: instrument valid
+  (dominant full-width meter, long clean needle, compact attached readout, six
+  keys one row, bottom reads as wood casing), chromatic valid (same instrument
+  feel, compact readout, mode directly below readout, wood enclosure margin, no
+  internal blank bands), instrument no-signal (needle hidden hub-only, no face
+  text, one "Play a note" + placeholder, stable). Needle pixel-mapped −3¢→−2°,
+  +120¢→+35° stop, no-signal hidden (radial span 20 vs 54 tracking). Small phone
+  360×640dp unclipped (gauge 250dp, six keys one row ≥48dp, 12 label clusters);
+  large-text scroll fallback unclipped. APK installed on the ASUS phone.
+- Known limits: the meter is width-bound, so on tall phones surplus beyond its
+  coherent maximum is a single wood enclosure margin (larger in chromatic, which
+  has no string grid) — vision reads this as the instrument casing, not an empty
+  internal panel. Small-phone vision review rate-limited (pixel-verified).
+  On-device capture still blocked by the secure lock screen. The real-device
+  mic/screen-reader and live-guitar G3 confirmation remain open; this visual
+  pass claims nothing about G3 or tuning accuracy.

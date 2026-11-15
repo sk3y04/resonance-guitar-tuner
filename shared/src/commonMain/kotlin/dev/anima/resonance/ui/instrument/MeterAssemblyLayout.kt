@@ -14,14 +14,15 @@ package dev.anima.resonance.ui.instrument
  */
 object MeterAssemblyLayout {
     const val MIN_READOUT_DP = 76f
-    /** Compact readout — sized to its content, not a tall empty panel. */
-    const val MAX_READOUT_DP = 104f
+    /** Compact, content-driven readout — secondary to the meter. */
+    const val MAX_READOUT_DP = 100f
     const val MIN_NOTE_SP = 40f
     const val MAX_NOTE_SP = 96f
 
-    /** Natural gauge width:height — the semicircular scale fills this. */
-    const val GAUGE_ASPECT = 1.6f
-    private const val MIN_GAUGE_ASPECT = 1.4f
+    /** Natural gauge width:height — larger dial (70° sweep, full-width arc,
+     *  pivot raised for the needle tail). ~Square face fills the width. */
+    const val GAUGE_ASPECT = 1.0f
+    private const val MIN_GAUGE_ASPECT = 1.0f
     private const val MAX_GAUGE_ASPECT = 1.8f
 
     data class Spec(

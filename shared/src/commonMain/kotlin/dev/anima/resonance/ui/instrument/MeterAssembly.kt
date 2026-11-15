@@ -61,8 +61,8 @@ fun MeterAssembly(
         val spec = MeterAssemblyLayout.compute(maxWidth.value, targetH - 1.5f, readoutCapDp)
         val gaugeH = spec.gaugeHeightDp.dp
         val readoutH = spec.readoutHeightDp.dp
-        val noteSp = (readoutH.value * 0.74f).coerceIn(40f, 78f)
-        val noteSize = (noteSp / fontScale).coerceAtMost(78f).sp
+        val noteSp = (readoutH.value * 0.70f).coerceIn(40f, 76f)
+        val noteSize = (noteSp / fontScale).coerceAtMost(76f).sp
         val centsSize = (noteSp * 0.45f / fontScale).coerceAtMost(34f).sp
 
         Box(

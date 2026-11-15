@@ -1,6 +1,33 @@
 # STATE — Resonance
 
-- Phase: 15 COMPLETE — restrained finishing pass: proportions, legibility,
+- Phase: 16 COMPLETE — composition correction: meter dominant, readout and
+  string controls compact (2026-11-15). Reverses the finishing-pass proportion regression.
+  Regression cause (from source): the finishing pass gave the string grid `weight(1f)` with
+  weight-distributed rows (oversized, separated buttons), expanded the chromatic
+  readout to a 260dp empty rectangle, and the meter used a conservative radius
+  that wasted ~37% of the face width. Fixes:
+  (1) Meter rebuilt as the primary instrument — sweep 90°→70° (±35°) and a
+  sweep-aware radius with numerals INSIDE the arc rim so the arc uses the full
+  face width (`AnalogMeterGeometry`, `AnalogTuningMeter`); gauge aspect 1.0
+  (~square face, pivot raised to clear the needle tail) → gauge ~310dp on a
+  360dp phone (was ~195dp), long needle, readable numerals, balanced pivot.
+  Cents mapping stays linear/center-zero (geometry tests updated to ±35°).
+  (2) Readout compact (100dp) and content-driven in BOTH modes — no expansion
+  when strings are hidden; stable listening↔tracking; honest no-signal (hidden
+  needle, one "Play a note" message, intentional placeholder).
+  (3) String selector redesigned as a compact strip (`InstrumentStringSelector`):
+  one row of six equal keys when ≥48dp touch targets fit, else a tight grid
+  (fixed 6dp gap, never stretched); note name leads, small number, jewel
+  indicator (green AUTO / amber LOCKED) + one group-level caption — no per-button
+  AUTO text line. Adaptive to any string count; semantics preserved.
+  (4) One predictable Column (`spacedBy(10dp)`): status → meter+readout → mode →
+  strings → settings → ONE modest bottom wood enclosure margin. No
+  SpaceBetween/SpaceEvenly, no vertical weight on readout/strings; the meter is
+  the only section sized to absorb spare height up to its coherent width-bound
+  maximum. Settings overlay, DSP/mic/persistence, G3 fix, calibration, favorites,
+  import/export, alternate tunings and the semantic contract all preserved.
+  Details: docs/TDD_LOG.md (composition correction).
+- Prior: milestone COMPLETE — restrained finishing pass: proportions, legibility,
   materials, status consistency (2026-11-15). No redesign; overlay structure
   untouched; DSP/mic/persistence untouched.
   (1) Readout rebalanced to content size (`MeterAssemblyLayout.MAX_READOUT_DP`
@@ -94,7 +121,22 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, finishing pass): :shared:jvmTest 332/332,
+- Last green checkpoint (2026-11-15, composition correction): :shared:jvmTest 332/332,
+  :shared:testAndroidHostTest 289/289, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). Geometry tests updated to the 70° sweep
+  (±35°); MeterAssemblyLayout aspect/fixtures aligned to the larger dial.
+  Four states vision-verified (instrument valid, instrument no-signal,
+  chromatic valid, chromatic no-signal): meter dominant (~310dp gauge,
+  full-width arc, long clean needle), readout compact in BOTH modes, six
+  string keys in one compact row with prominent note names, no-signal needle
+  hidden (hub only) with one "Play a note" message, bottom reads as the wood
+  casing (no internal blank bands). Needle pixel-mapped: −3¢→−2°, +120¢→+35°
+  stop, no-signal hidden (span 20 vs 54 tracking). Small phone 360×640dp
+  unclipped (gauge 250dp, six keys one row, ≥48dp targets); large-text scroll
+  fallback unclipped. APK installed on the ASUS phone; on-device capture
+  still blocked by the secure lock screen (headless renders + tests stand in).
+  Real-device verification (mic/screen reader) + live-guitar G3 remain unverified.
+- Prior checkpoint (2026-11-15, finishing pass): :shared:jvmTest 332/332,
   :shared:testAndroidHostTest 289/289, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). New tests: P15StatusWordingTest 4
   (Tracking vs Listening, no repeated "In tune", mic off/error distinct).

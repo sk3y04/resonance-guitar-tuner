@@ -39,7 +39,8 @@ class MeterAssemblyLayoutTest {
         for (h in listOf(260f, 300f, 360f, 410f, 560f)) {
             val s = MeterAssemblyLayout.compute(w, h)
             val aspect = w / s.gaugeHeightDp
-            assertTrue(aspect in 1.35f..1.85f, "gauge aspect $aspect out of range at h=$h")
+            // The larger full-width dial uses a taller face (aspect ~1.1).
+            assertTrue(aspect in 1.0f..1.85f, "gauge aspect $aspect out of range at h=$h")
         }
     }
 
@@ -54,8 +55,8 @@ class MeterAssemblyLayoutTest {
 
     @Test
     fun spareHeightGrowsTheReadoutUpToItsCap() {
-        val a = MeterAssemblyLayout.compute(w, 300f)
-        val b = MeterAssemblyLayout.compute(w, 320f)
+        val a = MeterAssemblyLayout.compute(w, 400f)
+        val b = MeterAssemblyLayout.compute(w, 410f)
         assertTrue(b.readoutHeightDp > a.readoutHeightDp, "taller slot grows the readout")
         val capped = MeterAssemblyLayout.compute(w, 560f)
         assertEquals(MeterAssemblyLayout.MAX_READOUT_DP, capped.readoutHeightDp, 0.01f)
@@ -73,7 +74,7 @@ class MeterAssemblyLayoutTest {
     @Test
     fun normalPhoneGivesADominantGauge() {
         val s = MeterAssemblyLayout.compute(w, 410f)
-        assertTrue(s.gaugeHeightDp > 180f, "gauge should dominate the upper portion")
+        assertTrue(s.gaugeHeightDp > 240f, "gauge should dominate the upper portion")
         assertTrue(s.readoutHeightDp >= MeterAssemblyLayout.MIN_READOUT_DP, "readout comfortable")
     }
 

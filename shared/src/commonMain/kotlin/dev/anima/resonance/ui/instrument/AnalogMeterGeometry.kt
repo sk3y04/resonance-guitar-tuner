@@ -19,8 +19,13 @@ object AnalogMeterGeometry {
     /** Cents at either mechanical stop (mirrors the tested UI contract). */
     const val FULL_SCALE_CENTS: Double = MainScreenUi.METER_FULL_SCALE_CENTS
 
-    /** Total needle travel in degrees (±half around vertical). */
-    const val SWEEP_DEGREES: Double = 90.0
+    /** Total needle travel in degrees (±half around vertical).
+     *  The dial is rebuilt as a larger, deeper instrument. A 70° sweep
+     *  (±35°) lets the arc radius grow to use the full face width (the old
+     *  90°/conservative-radius dial wasted ~37% of the width), giving a much
+     *  larger scale, longer needle and taller coherent face. The cents mapping
+     *  stays linear and center-zero. */
+    const val SWEEP_DEGREES: Double = 70.0
 
     private const val HALF_SWEEP = SWEEP_DEGREES / 2.0
 

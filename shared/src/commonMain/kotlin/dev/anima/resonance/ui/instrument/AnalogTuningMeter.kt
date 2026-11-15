@@ -95,11 +95,22 @@ fun AnalogTuningMeter(
             val faceRight = w - margin
             val faceBottom = h - (if (embedded) 0.dp.toPx() else 6.dp.toPx())
             val frame = if (embedded) 0.dp.toPx() else 3.dp.toPx()
-            val pivot = Offset(w / 2f, faceBottom - (if (embedded) 12.dp.toPx() else 14.dp.toPx()))
-            val radius = min(
-                (faceRight - faceLeft) / 2f - 18.dp.toPx(),
-                pivot.y - faceTop - 30.dp.toPx(),
-            ).coerceAtLeast(10f)
+            // Pivot raised so the needle's counterweight tail clears the
+            // face bottom; the arc radius is sized from the bounds below.
+            val pivot = Offset(w / 2f, faceBottom - (if (embedded) 40.dp.toPx() else 42.dp.toPx()))
+            // Size the arc from the available bounds AND the sweep. The
+            // scale numerals sit INSIDE the arc rim (classic moving-coil face),
+            // so the binding width constraint is the arc rim itself at the
+            // extreme tick angle: R·sin(half-sweep) must stay inside the face.
+            // This uses far more of the face width than the old conservative
+            // radius. The height limit keeps the arc clear of the top edge.
+            // Needle, ticks and numerals all share this one radius.
+            val halfSweepRad = (AnalogMeterGeometry.SWEEP_DEGREES / 2.0 * PI / 180.0).toFloat()
+            val sinHalf = sin(halfSweepRad)
+            val edgePad = 6.dp.toPx()
+            val widthLimit = ((faceRight - faceLeft) / 2f - edgePad) / sinHalf
+            val heightLimit = pivot.y - faceTop - 9.dp.toPx()
+            val radius = min(widthLimit, heightLimit).coerceAtLeast(10f)
 
             fun unit(angleDeg: Float): Offset {
                 val rad = angleDeg * PI.toFloat() / 180f
@@ -163,7 +174,7 @@ fun AnalogTuningMeter(
                 val layout = measurer.measure(text, style)
                 Mark(
                     text, style,
-                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + 14.dp.toPx()),
+                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius - 26.dp.toPx()),
                     layout.size.width / 2f, layout.size.height / 2f,
                 )
             }

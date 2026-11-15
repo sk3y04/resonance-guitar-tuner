@@ -114,25 +114,31 @@ fun TunerScreen(
                 ) {
                     val innerW = maxWidth
                     val innerH = maxHeight
-                    // Fixed-height budget of the mounted components.
-                    val stringRows = when {
-                        state.targetLabels.isEmpty() -> 0
-                        innerW < 480.dp || state.targetLabels.size > 6 ->
-                            (state.targetLabels.size + 2) / 3
-                        else -> 1
-                    }
-                    val stringsH = if (stringRows == 0) 0.dp else (stringRows * 76 + (stringRows - 1) * 6).dp
+                    // One predictable vertical composition — status strip,
+                    // DOMINANT meter, compact attached readout, compact mode
+                    // selector, compact string strip (instrument only), settings,
+                    // ONE modest bottom enclosure margin. Small consistent gaps;
+                    // no SpaceBetween/SpaceEvenly, no vertical weight on the
+                    // readout or string controls. The meter is sized to its
+                    // coherent width-bound maximum (deeper 100° dial); surplus
+                    // beyond that is a single wood enclosure margin, never an
+                    // empty internal panel or stretched buttons.
                     val hasStrings = state.targetLabels.isNotEmpty()
-                    // Continuous composition with small consistent gaps. The
-                    // meter assembly is compact (arc-filling gauge + content-sized
-                    // readout); spare height grows the readout in chromatic mode
-                    // (no string grid) or remains ONE modest bottom enclosure
-                    // margin in instrument mode — never distributed internal gaps.
+                    val n = state.targetLabels.size
+                    val singleRow = hasStrings && n in 1..8 &&
+                        innerW >= 48.dp * n + 4.dp * (n - 1)
+                    val stringsH = when {
+                        !hasStrings -> 0.dp
+                        singleRow -> 69.dp // caption + gap + one 52dp row
+                        else -> 129.dp // caption + gap + two 56dp rows + 6dp gap
+                    }
                     val controlsNaturalH = 56.dp + stringsH + 48.dp
-                    val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 50.dp
-                    // Main-screen guarantee: fixed layout when the gauge has real
-                    // room at normal scale; otherwise a scrolling fallback.
-                    val fallback = largeText || availableAssemblyH < 120.dp
+                    // Reserve the small group gaps (50dp) + a modest bottom
+                    // enclosure margin (16dp) before sizing the meter assembly.
+                    val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 66.dp
+                    // Fixed layout when the gauge has real room; otherwise an
+                    // accessible scrolling fallback (large fonts / tiny screens).
+                    val fallback = largeText || availableAssemblyH < 160.dp
 
                     if (fallback) {
                         FallbackLayout(
@@ -162,33 +168,21 @@ fun TunerScreen(
                                     onRetryCapture = onRetryCapture,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                            } else if (hasStrings) {
-                                // Instrument: compact assembly at its natural height;
-                                // the string grid keeps comfortable fixed-height keys.
+                            } else {
+                                // The meter assembly is the primary instrument and
+                                // the only section sized to absorb spare height —
+                                // up to its coherent arc-filling maximum. The dark
+                                // readout stays compact in BOTH modes (no expansion
+                                // when strings are hidden).
                                 MeterAssembly(
                                     state = state,
                                     largeText = false,
                                     onRetryCapture = onRetryCapture,
                                     availableHeightDp = minOf(
-                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 105.5f,
+                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 101.5f,
                                         availableAssemblyH.value,
                                     ),
                                     readoutCapDp = MeterAssemblyLayout.MAX_READOUT_DP,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else {
-                                // Chromatic (no string grid): a deliberate, bounded
-                                // spacious readout (big centred note when tracking);
-                                // surplus beyond it is ONE wood enclosure margin below.
-                                MeterAssembly(
-                                    state = state,
-                                    largeText = false,
-                                    onRetryCapture = onRetryCapture,
-                                    availableHeightDp = minOf(
-                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 261.5f,
-                                        availableAssemblyH.value,
-                                    ),
-                                    readoutCapDp = 260f,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -204,8 +198,6 @@ fun TunerScreen(
                                     activeStringIndex = state.activeStringIndex,
                                     stringLocked = state.stringLocked,
                                     onStringSelect = onStringSelect,
-                                    fillHeight = true,
-                                    modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
                             }
                             InstrumentKey(
@@ -217,14 +209,9 @@ fun TunerScreen(
                             ) {
                                 Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
                             }
-                            // ONE modest bottom enclosure margin. Instrument spare
-                            // height grows the string keys; chromatic (no grid) leaves
-                            // a single wood margin below the bounded readout.
-                            if (hasStrings) {
-                                Spacer(Modifier.height(8.dp))
-                            } else {
-                                Spacer(Modifier.weight(1f))
-                            }
+                            // ONE modest bottom enclosure margin absorbs any surplus
+                            // the width-bound meter cannot use coherently.
+                            Spacer(Modifier.weight(1f))
                         }
                     }
                 }

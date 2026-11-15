@@ -38,6 +38,14 @@ class TunerScreenRenderSmokeTest {
             // Main instrument — chromatic and instrument, fixed faceplate.
             RenderCase("dark-chromatic-main", 1080, 2400, 3f, dark = true, state = listening()),
             RenderCase(
+                "dark-chromatic-valid", 1080, 2400, 3f, dark = true,
+                state = measured("E2", -3, TunerMode.CHROMATIC),
+            ),
+            RenderCase(
+                "dark-instrument-no-signal", 1080, 2400, 3f, dark = true,
+                state = listening(mode = TunerMode.INSTRUMENT),
+            ),
+            RenderCase(
                 "dark-instrument-main", 1080, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
             ),
@@ -179,11 +187,12 @@ class TunerScreenRenderSmokeTest {
     private fun listening(
         permission: MicPermissionState = MicPermissionState.GRANTED,
         withSheet: Boolean = false,
+        mode: TunerMode = TunerMode.CHROMATIC,
     ) = MainScreenUi.toUiState(
         snapshot = null,
         permission = permission,
-        mode = TunerMode.CHROMATIC,
-        preset = null,
+        mode = mode,
+        preset = if (mode == TunerMode.INSTRUMENT) BuiltInTunings.standard else null,
         selectedStringIndex = null,
         presets = if (withSheet) BuiltInTunings.all else emptyList(),
         favoritePresetIds = if (withSheet) setOf("standard") else emptySet(),
