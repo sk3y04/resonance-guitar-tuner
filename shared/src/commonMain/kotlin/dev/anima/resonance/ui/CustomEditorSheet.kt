@@ -61,7 +61,6 @@ fun CustomEditorSheet(
         modifier = modifier
             .fillMaxWidth()
             .testTag("resonance.editor"),
-        borderColor = p.brassDark,
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(

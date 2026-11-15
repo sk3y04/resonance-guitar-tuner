@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
@@ -16,10 +17,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The walnut enclosure. Procedural grain is generated ONCE per panel
- * size from a fixed seed inside drawWithCache — it never regenerates while
- * the needle moves or the state ticker refreshes. Bevel, inset shadow and
- * four brass corner screws complete the tabletop-instrument feel.
+ * The walnut enclosure — one continuous wooden body. Horizontal
+ * flat-sawn figure with broad tonal bands, lit consistently from the upper
+ * left (highlights) toward the lower right (shadows). Grain and bands are
+ * generated ONCE per panel size from a fixed seed inside drawWithCache —
+ * never regenerated while the needle moves or the state ticker refreshes.
+ * Corner hardware is four small, dark brass screws — subtle, not jewelry.
  */
 @Composable
 fun WoodenEnclosure(modifier: Modifier = Modifier) {
@@ -28,29 +31,49 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
         modifier = modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h)
+            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h, count = 34)
             val grainPaths = streaks.map { s ->
                 Path().apply {
                     val step = 24f
-                    var y = 0f
-                    moveTo(s.startX + WoodGrain.wanderAt(s, 0f), 0f)
-                    while (y < h) {
-                        y = (y + step).coerceAtMost(h)
-                        lineTo(s.startX + WoodGrain.wanderAt(s, y), y)
+                    var x = 0f
+                    moveTo(0f, s.startY + WoodGrain.wanderAt(s, 0f))
+                    while (x < w) {
+                        x = (x + step).coerceAtMost(w)
+                        lineTo(x, s.startY + WoodGrain.wanderAt(s, x))
                     }
                 }
             }
+            val bands = WoodGrain.bands(seed = 20261115L, height = h)
             val baseBrush = Brush.verticalGradient(
                 0f to p.walnutLight,
-                0.45f to p.walnut,
+                0.5f to p.walnut,
                 1f to p.walnutDeep,
             )
-            val bevelBrush = Brush.verticalGradient(
-                0f to p.walnutLight.copy(alpha = 0.85f),
-                1f to p.walnutDeep.copy(alpha = 0.9f),
+            // Consistent room lighting: soft highlight upper-left, shade
+            // lower-right, laid over the whole body.
+            val lightBrush = Brush.linearGradient(
+                0f to p.walnutLight.copy(alpha = 0.16f),
+                0.45f to Color.Transparent,
+                1f to p.walnutDeep.copy(alpha = 0.22f),
+                start = Offset(0f, 0f),
+                end = Offset(w, h),
             )
-            val screwInset = 12.dp.toPx()
-            val screwR = 3.2.dp.toPx()
+            val bevelBrush = Brush.linearGradient(
+                0f to p.walnutLight.copy(alpha = 0.9f),
+                0.5f to p.walnut.copy(alpha = 0.5f),
+                1f to p.walnutDeep.copy(alpha = 0.95f),
+                start = Offset(0f, 0f),
+                end = Offset(w, h),
+            )
+            val recessBrush = Brush.linearGradient(
+                0f to p.recessEdge.copy(alpha = 0.42f),
+                0.6f to p.recessEdge.copy(alpha = 0.16f),
+                1f to p.walnutLight.copy(alpha = 0.14f),
+                start = Offset(0f, 0f),
+                end = Offset(w, h),
+            )
+            val screwInset = 11.dp.toPx()
+            val screwR = 2.6.dp.toPx()
             val screws = listOf(
                 Offset(screwInset, screwInset),
                 Offset(w - screwInset, screwInset),
@@ -59,6 +82,22 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
             )
             onDrawBehind {
                 drawRect(baseBrush)
+                // Broad heartwood tonal bands (soft-edged, very low alpha).
+                bands.forEach { b ->
+                    val tone = if (b.lighten) p.grainLight else p.grainDark
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.5f to tone.copy(alpha = b.alpha),
+                            1f to Color.Transparent,
+                            startY = b.centerY - b.halfHeight,
+                            endY = b.centerY + b.halfHeight,
+                        ),
+                        topLeft = Offset(0f, b.centerY - b.halfHeight),
+                        size = Size(w, b.halfHeight * 2f),
+                    )
+                }
+                // Fine horizontal figure.
                 grainPaths.forEachIndexed { i, path ->
                     drawPath(
                         path = path,
@@ -67,43 +106,45 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                         style = Stroke(width = streaks[i].thickness),
                     )
                 }
-                // Beveled edge + restrained inset shadow.
-                val edge = 1.dp.toPx()
+                drawRect(lightBrush)
+                // Carefully shaded outer bevel + darker inner recess lip.
+                val edge = 0.75.dp.toPx()
                 drawRoundRect(
                     brush = bevelBrush,
                     topLeft = Offset(edge, edge),
                     size = Size(w - edge * 2, h - edge * 2),
-                    cornerRadius = CornerRadius(20.dp.toPx()),
-                    style = Stroke(width = 2.dp.toPx()),
+                    cornerRadius = CornerRadius(18.dp.toPx()),
+                    style = Stroke(width = 1.5.dp.toPx()),
                 )
                 drawRoundRect(
-                    color = p.recessEdge.copy(alpha = 0.30f),
-                    topLeft = Offset(3.dp.toPx(), 3.dp.toPx()),
-                    size = Size(w - 6.dp.toPx(), h - 6.dp.toPx()),
-                    cornerRadius = CornerRadius(18.dp.toPx()),
-                    style = Stroke(width = 4.dp.toPx()),
+                    brush = recessBrush,
+                    topLeft = Offset(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    size = Size(w - 5.dp.toPx(), h - 5.dp.toPx()),
+                    cornerRadius = CornerRadius(16.dp.toPx()),
+                    style = Stroke(width = 3.dp.toPx()),
                 )
-                // Corner screws with deterministic slot angles.
+                // Small dark brass corner screws, deterministic slot angles.
                 screws.forEachIndexed { i, c ->
+                    drawCircle(p.recessEdge.copy(alpha = 0.55f), radius = screwR * 1.25f, center = c)
                     drawCircle(p.brassDark, radius = screwR, center = c)
                     drawCircle(
                         brush = Brush.radialGradient(
-                            0f to p.brassLight,
-                            1f to p.brass,
-                            center = Offset(c.x - screwR * 0.3f, c.y - screwR * 0.3f),
+                            0f to p.brass,
+                            1f to p.brassDark,
+                            center = Offset(c.x - screwR * 0.35f, c.y - screwR * 0.35f),
                             radius = screwR,
                         ),
-                        radius = screwR * 0.74f,
+                        radius = screwR * 0.72f,
                         center = c,
                     )
                     val ang = (i * 47.0 + 20.0) * PI / 180.0
-                    val dx = (cos(ang) * screwR * 0.55).toFloat()
-                    val dy = (sin(ang) * screwR * 0.55).toFloat()
+                    val dx = (cos(ang) * screwR * 0.5).toFloat()
+                    val dy = (sin(ang) * screwR * 0.5).toFloat()
                     drawLine(
-                        color = p.recessEdge.copy(alpha = 0.75f),
+                        color = p.recessEdge.copy(alpha = 0.8f),
                         start = Offset(c.x - dx, c.y - dy),
                         end = Offset(c.x + dx, c.y + dy),
-                        strokeWidth = 0.9.dp.toPx(),
+                        strokeWidth = 0.8.dp.toPx(),
                     )
                 }
             }

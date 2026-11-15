@@ -1,17 +1,18 @@
 # STATE — Resonance
 
-- Phase: 10 COMPLETE — analog instrument UI redesign (2026-11-15). The
-  tuner is now a walnut-enclosed physical instrument: procedural wood
-  grain (deterministic, cached), ivory analog meter with brass bezel and
-  a physical needle (±45° sweep over ±50¢, clamped at the stops, rest at
-  the flat stop + NO SIGNAL when no reliable pitch), recessed note
-  readout with jewel status lamp, mechanical mode/string keys, milled
-  calibration/tunings sheet. All state, DSP, permissions, persistence and
-  the semantic/test contract are unchanged; instrument materials are
-  constant across system light/dark (Material scheme still adapts
-  dialogs/fields). New: ui/instrument/ (palette, geometry, grain, meter,
-  readout, keys, selectors, calibration); CentsDial removed. Details:
-  docs/TDD_LOG.md (analog instrument UI redesign).
+- COMPLETE — instrument refinement pass (2026-11-15). The analog redesign read
+  as stacked cards; the refinement makes it one wooden body: horizontal flat-sawn
+  walnut grain + tonal bands (deterministic, cached), upper-left lighting,
+  thin aged-brass meter frame with larger face / finer needle / cast
+  shadow, compact recessed readout strip (note cap 64sp), gold outlines
+  removed, proud/flat/pressed/disabled key states, recessed mode track,
+  collapsible Tunings & settings sheet (default expanded), tighter
+  spacing + bottom inset breathing room. DSP/state/permissions/
+  persistence and the semantic contract unchanged. Details:
+  docs/TDD_LOG.md (instrument refinement).
+- Prior: milestone COMPLETE — analog instrument UI redesign (2026-11-15).
+  Walnut enclosure, ivory analog meter, physical needle, brass hardware,
+  tactile keys; ui/instrument/ design system; CentsDial removed.
 - Prior: milestone COMPLETE — G4 octave-bleed fix (2026-11-15). Playing G4
   (392 Hz) excited the open G string (196 Hz) sympathetically; the detector
   returned 196 Hz or no pitch at −10 dB and the stale guard dropped the G4
@@ -28,13 +29,15 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, analog redesign): :shared:jvmTest 297/297
-  (278 pre-analog-redesign + 10 meter-geometry + 5 wood-grain + 4 palette-contrast),
-  :shared:testAndroidHostTest 256/256, run-demo 5/5, headless renders
-  regenerated (15 PNGs incl. clamped/no-signal); needle angles verified
-  from pixels: −3¢→−2.6°, 0¢→+0.2°, +120¢→+45.5° (stop), no signal→−45°.
-  verify.sh 7/7 PASS (host tests, demo 5/5, offline contract, lint,
-  debug assembly, Robolectric host tests, instrumented APK compile).
+- Last green checkpoint (2026-11-15, instrument refinement): :shared:jvmTest 300/300,
+  :shared:testAndroidHostTest 258/258, run-demo 5/5, verify.sh 7/7 PASS.
+  Needle mapping pixel-reverified after refinement: 0¢→−0.05°,
+  −3¢→−2.7°, +120¢→+45.6° (stop), no-signal→−45.7° (rest). Device QA on
+  the ASUS phone (1080x2400): grain/readout/bottom-clearance PASS; the
+  dimmed band in the no-signal state is intentional (honest rest state).
+- Prior checkpoint (2026-11-15, analog redesign): :shared:jvmTest 297/297,
+  :shared:testAndroidHostTest 256/256, run-demo 5/5, verify.sh 7/7 PASS;
+  debug APK installed on the phone (Android 15) and the API 36 emulator.
 - Prior checkpoint (2026-11-15, G4 octave fix): :shared:jvmTest 278/278,
   :shared:testAndroidHostTest 241/241, run-demo 5/5, headless UI PASS,
   debug APK installed on the phone (Android 15) and the API 36 emulator;

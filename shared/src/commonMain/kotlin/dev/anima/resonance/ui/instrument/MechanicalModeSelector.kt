@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -18,11 +20,11 @@ import androidx.compose.ui.unit.dp
 import dev.anima.resonance.presentation.TunerMode
 
 /**
- * A two-position mechanical selector milled into the enclosure.
- * The engaged key sits pressed in its slot with its amber jewel lit;
- * selection is also exposed semantically and by the pressed shape, so
- * color alone never carries the state. Tags/semantics match the tested
- * segmented control contract.
+ * A compact two-position mechanical selector — one recessed slot
+ * milled into the enclosure carrying two physical keys. The engaged key
+ * stands proud with its amber jewel lit; the idle key sits flat in the
+ * slot. Selection is also exposed semantically, so color/shape are never
+ * the only carriers. Tags/semantics match the tested control contract.
  */
 @Composable
 fun MechanicalModeSelector(
@@ -31,21 +33,26 @@ fun MechanicalModeSelector(
     largeText: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    if (largeText) {
-        Column(
-            modifier = modifier.testTag("resonance.mode"),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ModeKey("Chromatic", TunerMode.CHROMATIC, mode, onModeSelect, Modifier.fillMaxWidth())
-            ModeKey("Instrument", TunerMode.INSTRUMENT, mode, onModeSelect, Modifier.fillMaxWidth())
-        }
-    } else {
-        Row(
-            modifier = modifier.testTag("resonance.mode"),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ModeKey("Chromatic", TunerMode.CHROMATIC, mode, onModeSelect, Modifier.weight(1f))
-            ModeKey("Instrument", TunerMode.INSTRUMENT, mode, onModeSelect, Modifier.weight(1f))
+    RecessedPanel(
+        modifier = modifier.testTag("resonance.mode"),
+        shape = RoundedCornerShape(9.dp),
+    ) {
+        if (largeText) {
+            Column(
+                modifier = Modifier.padding(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ModeKey("Chromatic", TunerMode.CHROMATIC, mode, onModeSelect, Modifier.fillMaxWidth())
+                ModeKey("Instrument", TunerMode.INSTRUMENT, mode, onModeSelect, Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                modifier = Modifier.padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ModeKey("Chromatic", TunerMode.CHROMATIC, mode, onModeSelect, Modifier.weight(1f))
+                ModeKey("Instrument", TunerMode.INSTRUMENT, mode, onModeSelect, Modifier.weight(1f))
+            }
         }
     }
 }

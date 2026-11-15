@@ -60,6 +60,7 @@ fun InstrumentStringSelector(
                             InstrumentKey(
                                 onClick = { onStringSelect(i) },
                                 selected = locked,
+                                highlighted = active && !locked,
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 56.dp)

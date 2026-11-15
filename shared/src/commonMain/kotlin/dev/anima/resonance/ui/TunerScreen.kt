@@ -28,8 +28,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,10 +125,11 @@ fun TunerScreen(
     // Adaptive glyphs: system font scaling still applies, but an uncapped
     // 96sp note would overflow narrow screens at 2x accessibility text.
     val largeText = fontScale > 1.3f
-    // Cap the *rendered* size, not the sp value: scaling from 96sp to 64sp
+    // Cap the *rendered* size, not the sp value: scaling from 64sp to 48sp
     // at 1.4x would make the note smaller as the user asks for larger text.
-    val noteSize = (128f / fontScale).coerceAtMost(96f).sp
-    val centsSize = (72f / fontScale).coerceAtMost(44f).sp
+    // Balanced against the meter — the note is prominent, not a wall.
+    val noteSize = (96f / fontScale).coerceAtMost(64f).sp
+    val centsSize = (56f / fontScale).coerceAtMost(34f).sp
     val scrollState = rememberScrollState()
     val tuningsRequester = remember { BringIntoViewRequester() }
     val editorRequester = remember { BringIntoViewRequester() }
@@ -203,7 +207,7 @@ fun TunerScreen(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
             // ── Live capture state + reference pitch ──────────────────────
             if (largeText) {
@@ -241,7 +245,6 @@ fun TunerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("resonance.permission.banner"),
-                    borderColor = p.brassDark,
                 ) {
                     Column(Modifier.padding(14.dp)) {
                         Text(
@@ -310,7 +313,7 @@ fun TunerScreen(
             // Without permission (or with a failed device) there is no
             // measurement to show. A dead meter implied a live instrument.
             if (granted && !state.captureError) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
                 // ── The analog meter (centerpiece) ────────────────────────
                 AnalogTuningMeter(
@@ -324,18 +327,19 @@ fun TunerScreen(
                         .fillMaxWidth(),
                 )
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
 
                 // ── Detected note + measurements ──────────────────────────
                 NoteReadout(
                     state = state,
                     noteSize = noteSize,
                     centsSize = centsSize,
+                    largeText = largeText,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── Mode: mechanical two-position selector ────────────────────
             MechanicalModeSelector(
@@ -346,16 +350,16 @@ fun TunerScreen(
             )
             if (state.mode == TunerMode.CHROMATIC) {
                 Text(
-                    text = "Chromatic listens to every note. Instrument mode targets the selected tuning.",
-                    style = InstrumentType.readoutSmall,
+                    text = "Chromatic: any note. Instrument: the selected tuning.",
+                    style = InstrumentType.readoutSmall.copy(fontSize = 12.sp),
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp),
+                        .padding(top = 4.dp),
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
 
             // ── Target strings (Instrument mode) ──────────────────────────
             if (state.targetLabels.isNotEmpty()) {
@@ -366,7 +370,7 @@ fun TunerScreen(
                     selectedStringIndex = state.selectedStringIndex,
                     onStringSelect = onStringSelect,
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             // ── Optional external "Tunings" entry point (tests/hosts) ─────
@@ -417,7 +421,8 @@ fun TunerScreen(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            // Breathing room above the system navigation area.
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -443,21 +448,50 @@ private fun TuningsSheet(
     onExportRequested: () -> Unit,
 ) {
     val p = InstrumentTheme.palette
+    // Secondary configuration is collapsible. Default expanded keeps
+    // the tested contract; on small screens the player can mill it away.
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(true)
+    }
     RecessedPanel(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("resonance.sheet"),
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text(
-                text = "Tunings & settings",
-                style = InstrumentType.engravedStrong,
-                modifier = Modifier
-                    .padding(bottom = 6.dp)
-                    .bringIntoViewRequester(tuningsRequester)
-                    .semantics { heading() }
-                    .testTag("resonance.sheet.title"),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Tunings & settings",
+                    style = InstrumentType.engravedStrong,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(bottom = 6.dp)
+                        .bringIntoViewRequester(tuningsRequester)
+                        .semantics { heading() }
+                        .testTag("resonance.sheet.title"),
+                )
+                InstrumentKey(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.sheet.toggle")
+                        .semantics {
+                            contentDescription = if (expanded) {
+                                "Collapse tunings and settings"
+                            } else {
+                                "Expand tunings and settings"
+                            }
+                            stateDescription = if (expanded) "Expanded" else "Collapsed"
+                        },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(if (expanded) "▴" else "▾", style = InstrumentType.keyLabel)
+                }
+            }
+            if (!expanded) return@Column
 
             // Coarse ±1 Hz + fine ±0.1 Hz reference steppers.
             CalibrationControls(

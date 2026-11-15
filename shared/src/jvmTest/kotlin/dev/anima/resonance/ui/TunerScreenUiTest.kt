@@ -597,6 +597,28 @@ class TunerScreenUiTest {
     }
 
     @Test
+    fun sheetToggleCollapsesAndReExpandsSecondaryControls() {
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            concertLabel = "A4 = 440 Hz",
+        )
+        show(ui)
+        val scroll = rule.onNodeWithTag("resonance.scroll")
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.toggle"))
+        rule.onNodeWithTag("resonance.sheet.toggle").performClick()
+        rule.waitForIdle()
+        // Collapsed: secondary configuration leaves the tree entirely.
+        rule.onNodeWithTag("resonance.sheet.concert").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.sheet.toggle").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.toggle").performClick()
+        rule.waitForIdle()
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.concert"))
+        rule.onNodeWithTag("resonance.sheet.concert").assertExists()
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertExists()
+    }
+
+    @Test
     fun readingSurfaceNeverShowsAZeroHzOrCenteredZeroForWeakSignal() {
         val weak = MainScreenUi.toUiState(
             snapshot = TunerSnapshot(

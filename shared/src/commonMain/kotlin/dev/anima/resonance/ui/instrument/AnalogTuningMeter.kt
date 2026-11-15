@@ -12,11 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -29,8 +31,10 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * The analog tuning meter — ivory face in a brass bezel, charcoal
- * scale, physical needle pivoting from a visible hub.
+ * The analog tuning meter — the centerpiece of the instrument.
+ * A softly aged ivory face in a THIN aged-brass frame, mounted into the
+ * walnut body (it casts a short shadow onto the wood). Fine dark-metal
+ * needle on a brass pivot; needle, tick arc and pivot share one geometry.
  *
  * Source of truth is the tested normalized [position] (-1..1 over ±50¢).
  * Visual travel is clamped at the mechanical stops by [AnalogMeterGeometry];
@@ -38,12 +42,10 @@ import kotlin.math.sin
  * ([active] = false) the needle parks at the flat-side rest stop and the
  * face reads NO SIGNAL — never a centered "in tune" needle.
  *
- * Caching: the static artwork (face, scale, label positions, bezel) lives
- * in a drawWithCache modifier stabilized by remember(active, inTune,
- * clamped) — the 20 Hz state ticker does NOT rebuild it. Label painting
- * goes through TextMeasurer, which caches measurements internally. Only
- * the needle reads the animated state, so per-frame work is one small
- * path. The needle spring matches the previous dial's motion spec.
+ * Caching: static artwork lives in a drawWithCache modifier stabilized by
+ * remember(active, inTune, clamped, compact) — the 20 Hz state ticker does
+ * NOT rebuild it. TextMeasurer caches label measurements. Only the needle
+ * reads the animated state. Spring matches the original dial (0.8 / 300).
  */
 @Composable
 fun AnalogTuningMeter(
@@ -68,22 +70,23 @@ fun AnalogTuningMeter(
         // the needle inside the band is exactly when "In tune" can be claimed.
         val bandHalfAngle = AnalogMeterGeometry.inTuneBandHalfAngle(8.0).toFloat()
         val bandColor = when {
-            !active -> p.inkSoft.copy(alpha = 0.30f)
+            !active -> p.inkSoft.copy(alpha = 0.28f)
             inTune -> p.bandGreen
-            else -> p.bandGreen.copy(alpha = 0.8f)
+            else -> p.bandGreen.copy(alpha = 0.85f)
         }
         Modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            val bezel = 6.dp.toPx()
-            val faceLeft = bezel
-            val faceTop = bezel
-            val faceRight = w - bezel
-            val faceBottom = h - bezel
-            val pivot = Offset(w / 2f, faceBottom - 16.dp.toPx())
+            // Face leaves room below for the shadow cast onto the wood.
+            val faceLeft = 2.dp.toPx()
+            val faceTop = 2.dp.toPx()
+            val faceRight = w - 2.dp.toPx()
+            val faceBottom = h - 6.dp.toPx()
+            val frame = 3.dp.toPx()
+            val pivot = Offset(w / 2f, faceBottom - 14.dp.toPx())
             val radius = min(
-                (faceRight - faceLeft) / 2f - 26.dp.toPx(),
-                pivot.y - faceTop - 34.dp.toPx(),
+                (faceRight - faceLeft) / 2f - 18.dp.toPx(),
+                pivot.y - faceTop - 26.dp.toPx(),
             ).coerceAtLeast(10f)
 
             fun unit(angleDeg: Float): Offset {
@@ -92,10 +95,12 @@ fun AnalogTuningMeter(
             }
             fun at(angleDeg: Float, r: Float): Offset = pivot + unit(angleDeg) * r
 
-            val bezelBrush = Brush.linearGradient(
-                0f to p.brassLight,
-                0.5f to p.brass,
-                1f to p.brassDark,
+            // Thin aged-brass frame: dark muted metal with a catch-light on
+            // the upper edge — hardware, not a gold picture frame.
+            val frameBrush = Brush.linearGradient(
+                0f to p.brass.copy(alpha = 0.85f),
+                0.22f to p.brassDark,
+                1f to p.brassDark.copy(alpha = 0.92f),
                 start = Offset(0f, 0f),
                 end = Offset(w, h),
             )
@@ -105,26 +110,44 @@ fun AnalogTuningMeter(
                 startY = faceTop,
                 endY = faceBottom,
             )
+            val facePath = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = faceLeft + frame,
+                        top = faceTop + frame,
+                        right = faceRight - frame,
+                        bottom = faceBottom - frame,
+                        cornerRadius = CornerRadius(9.dp.toPx()),
+                    ),
+                )
+            }
+            // Very subtle age mottling — deterministic, clipped to the face.
+            val ageSpots = listOf(
+                Offset(w * 0.30f, faceTop + (faceBottom - faceTop) * 0.32f),
+                Offset(w * 0.72f, faceTop + (faceBottom - faceTop) * 0.55f),
+                Offset(w * 0.48f, faceTop + (faceBottom - faceTop) * 0.78f),
+            )
+            val spotR = (faceRight - faceLeft) * 0.30f
 
-            // Scale labels are instrument markings: fixed dp size keeps the
-            // geometry stable at any system font scale.
+            // Scale labels: fixed dp keeps geometry stable at any font scale.
             val labelStyle = TextStyle(
-                fontSize = 10.dp.toSp(),
+                fontSize = 11.dp.toSp(),
                 fontWeight = FontWeight.Medium,
                 color = p.ink,
             )
             val zeroStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
-            val engravingStyle = TextStyle(
+            val sideLabelStyle = TextStyle(
+                fontSize = 10.dp.toSp(),
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.dp.toSp(),
+                color = p.ink,
+            )
+            val noSignalStyle = TextStyle(
                 fontSize = 9.dp.toSp(),
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.2.dp.toSp(),
                 color = p.inkSoft,
             )
-            val makerStyle = engravingStyle.copy(letterSpacing = 2.4.dp.toSp())
-            // FLAT/SHARP are primary scale labels: full ink for clarity.
-            val sideLabelStyle = engravingStyle.copy(color = p.ink)
-            // Pre-measure once for positions/sizes; TextMeasurer caches the
-            // results, so painting in onDrawBehind does not re-measure.
             data class Mark(val text: String, val style: TextStyle, val center: Offset, val halfW: Float, val halfH: Float)
             val marks = (-50..50 step 10).map { cents ->
                 val text = if (cents > 0) "+$cents" else "$cents"
@@ -132,29 +155,28 @@ fun AnalogTuningMeter(
                 val layout = measurer.measure(text, style)
                 Mark(
                     text, style,
-                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + 15.dp.toPx()),
+                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + 13.dp.toPx()),
                     layout.size.width / 2f, layout.size.height / 2f,
                 )
             }
             val flatSize = measurer.measure("FLAT", sideLabelStyle).size
             val sharpSize = measurer.measure("SHARP", sideLabelStyle).size
-            val makerSize = measurer.measure("RESONANCE", makerStyle).size
-            val noSignalSize = measurer.measure("NO SIGNAL", engravingStyle).size
+            val noSignalSize = measurer.measure("NO SIGNAL", noSignalStyle).size
 
             data class Tick(val start: Offset, val end: Offset, val width: Float, val color: Color)
             val ticks = (-50..50 step 5).map { cents ->
                 val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
                 val len = when {
-                    cents == 0 -> 13.dp.toPx()
-                    cents % 10 == 0 -> 10.dp.toPx()
-                    else -> 6.dp.toPx()
+                    cents == 0 -> 14.dp.toPx()
+                    cents % 10 == 0 -> 11.dp.toPx()
+                    else -> 7.dp.toPx()
                 }
                 Tick(
                     start = at(a, radius),
                     end = at(a, radius - len),
                     width = when {
                         cents == 0 -> 2.4.dp.toPx()
-                        cents % 10 == 0 -> 1.7.dp.toPx()
+                        cents % 10 == 0 -> 1.8.dp.toPx()
                         else -> 1.dp.toPx()
                     },
                     color = if (cents % 10 == 0) p.ink else p.inkSoft,
@@ -165,39 +187,73 @@ fun AnalogTuningMeter(
             val sweep = AnalogMeterGeometry.SWEEP_DEGREES.toFloat()
 
             onDrawBehind {
-                // Bezel + face
-                drawRoundRect(brush = bezelBrush, cornerRadius = CornerRadius(16.dp.toPx()))
+                // Shadow cast onto the wood (light from upper left).
                 drawRoundRect(
-                    brush = faceBrush,
+                    color = p.recessEdge.copy(alpha = 0.30f),
+                    topLeft = Offset(faceLeft + 1.dp.toPx(), faceTop + 3.5.dp.toPx()),
+                    size = Size(faceRight - faceLeft, faceBottom - faceTop),
+                    cornerRadius = CornerRadius(12.dp.toPx()),
+                )
+                drawRoundRect(
+                    color = p.recessEdge.copy(alpha = 0.18f),
+                    topLeft = Offset(faceLeft + 0.5.dp.toPx(), faceTop + 1.5.dp.toPx()),
+                    size = Size(faceRight - faceLeft, faceBottom - faceTop),
+                    cornerRadius = CornerRadius(12.dp.toPx()),
+                )
+                // Thin metal frame + ivory face.
+                drawRoundRect(
+                    brush = frameBrush,
                     topLeft = Offset(faceLeft, faceTop),
                     size = Size(faceRight - faceLeft, faceBottom - faceTop),
-                    cornerRadius = CornerRadius(11.dp.toPx()),
+                    cornerRadius = CornerRadius(12.dp.toPx()),
                 )
                 drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        0f to p.ink.copy(alpha = 0.14f),
-                        0.12f to Color.Transparent,
-                        1f to Color.Transparent,
-                        startY = faceTop,
-                        endY = faceBottom,
-                    ),
-                    topLeft = Offset(faceLeft + 1.dp.toPx(), faceTop + 1.dp.toPx()),
-                    size = Size(faceRight - faceLeft - 2.dp.toPx(), faceBottom - faceTop - 2.dp.toPx()),
-                    cornerRadius = CornerRadius(10.dp.toPx()),
-                    style = Stroke(width = 2.dp.toPx()),
+                    brush = faceBrush,
+                    topLeft = Offset(faceLeft + frame, faceTop + frame),
+                    size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
+                    cornerRadius = CornerRadius(9.dp.toPx()),
                 )
-                // Maker's mark only when the face is tall enough that the
-                // top scale label cannot collide with it (decorative).
-                if (faceBottom - faceTop >= 210.dp.toPx()) {
-                    drawText(
-                        textMeasurer = measurer,
-                        text = "RESONANCE",
-                        topLeft = Offset(w / 2f - makerSize.width / 2f, faceTop + 9.dp.toPx()),
-                        style = makerStyle,
+                clipPath(facePath) {
+                    ageSpots.forEach { c ->
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0f to p.ivoryEdge.copy(alpha = 0.16f),
+                                1f to Color.Transparent,
+                                center = c,
+                                radius = spotR,
+                            ),
+                            radius = spotR,
+                            center = c,
+                        )
+                    }
+                    // Inset edge: shadow along the top inner wall.
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            0f to p.ink.copy(alpha = 0.16f),
+                            0.10f to Color.Transparent,
+                            1f to Color.Transparent,
+                            startY = faceTop + frame,
+                            endY = faceBottom - frame,
+                        ),
+                        topLeft = Offset(faceLeft + frame + 0.5.dp.toPx(), faceTop + frame + 0.5.dp.toPx()),
+                        size = Size(
+                            faceRight - faceLeft - frame * 2 - 1.dp.toPx(),
+                            faceBottom - faceTop - frame * 2 - 1.dp.toPx(),
+                        ),
+                        cornerRadius = CornerRadius(8.dp.toPx()),
+                        style = Stroke(width = 1.5.dp.toPx()),
                     )
                 }
+                // Hairline inset edge between frame and face.
+                drawRoundRect(
+                    color = p.recessEdge.copy(alpha = 0.5f),
+                    topLeft = Offset(faceLeft + frame, faceTop + frame),
+                    size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
+                    cornerRadius = CornerRadius(9.dp.toPx()),
+                    style = Stroke(width = 0.7.dp.toPx()),
+                )
 
-                // Scale arc + in-tune band
+                // Scale arc + restrained in-tune band.
                 drawArc(
                     color = p.ink,
                     startAngle = 270f - sweep / 2f,
@@ -214,7 +270,7 @@ fun AnalogTuningMeter(
                     useCenter = false,
                     topLeft = arcTopLeft,
                     size = arcSize,
-                    style = Stroke(width = 5.dp.toPx()),
+                    style = Stroke(width = 4.dp.toPx()),
                 )
                 ticks.forEach { t -> drawLine(t.color, t.start, t.end, strokeWidth = t.width) }
                 marks.forEach { m ->
@@ -228,13 +284,16 @@ fun AnalogTuningMeter(
                 drawText(
                     textMeasurer = measurer,
                     text = "FLAT",
-                    topLeft = Offset(faceLeft + 13.dp.toPx(), pivot.y - flatSize.height / 2f),
+                    topLeft = Offset(faceLeft + frame + 12.dp.toPx(), pivot.y - flatSize.height / 2f),
                     style = sideLabelStyle,
                 )
                 drawText(
                     textMeasurer = measurer,
                     text = "SHARP",
-                    topLeft = Offset(faceRight - 13.dp.toPx() - sharpSize.width, pivot.y - sharpSize.height / 2f),
+                    topLeft = Offset(
+                        faceRight - frame - 12.dp.toPx() - sharpSize.width,
+                        pivot.y - sharpSize.height / 2f,
+                    ),
                     style = sideLabelStyle,
                 )
                 if (!active) {
@@ -245,13 +304,12 @@ fun AnalogTuningMeter(
                             w / 2f - noSignalSize.width / 2f,
                             pivot.y - radius * 0.5f - noSignalSize.height / 2f,
                         ),
-                        style = engravingStyle,
+                        style = noSignalStyle,
                     )
                 }
 
                 // ── Needle (the only per-frame state read) ───────────────
                 val animated = needleState.value
-                // Pinned-at-stop marker when the deviation exceeds full scale.
                 if (active && clamped) {
                     val stopAngle = if (animated >= 0f) sweep / 2f else -sweep / 2f
                     drawCircle(p.inkSoft, radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
@@ -259,13 +317,13 @@ fun AnalogTuningMeter(
                 val angle = AnalogMeterGeometry.needleAngle(animated.toDouble()).toFloat()
                 val u = unit(angle)
                 val perp = Offset(u.y, -u.x)
-                val len = radius * 0.96f
-                val tail = radius * 0.16f
+                val len = radius * 0.985f
+                val tail = radius * 0.14f
                 val tip = pivot + u * len
-                val baseL = pivot + perp * 2.3.dp.toPx()
-                val baseR = pivot - perp * 2.3.dp.toPx()
-                val tailL = pivot - u * tail + perp * 3.4.dp.toPx()
-                val tailR = pivot - u * tail - perp * 3.4.dp.toPx()
+                val baseL = pivot + perp * 1.7.dp.toPx()
+                val baseR = pivot - perp * 1.7.dp.toPx()
+                val tailL = pivot - u * tail + perp * 2.8.dp.toPx()
+                val tailR = pivot - u * tail - perp * 2.8.dp.toPx()
                 fun needlePath(dx: Float, dy: Float): Path = Path().apply {
                     moveTo(tip.x + dx, tip.y + dy)
                     lineTo(baseL.x + dx, baseL.y + dy)
@@ -274,27 +332,44 @@ fun AnalogTuningMeter(
                     lineTo(baseR.x + dx, baseR.y + dy)
                     close()
                 }
-                drawPath(needlePath(1.5.dp.toPx(), 2.5.dp.toPx()), p.ink.copy(alpha = 0.18f))
+                drawPath(needlePath(1.dp.toPx(), 1.8.dp.toPx()), p.ink.copy(alpha = 0.16f))
                 drawPath(needlePath(0f, 0f), p.ink)
+                // Fine metal sheen along one edge of the pointer.
+                drawLine(
+                    color = p.ivory.copy(alpha = 0.22f),
+                    start = pivot + u * (radius * 0.12f) + perp * 0.5.dp.toPx(),
+                    end = pivot + u * (radius * 0.9f) + perp * 0.5.dp.toPx(),
+                    strokeWidth = 0.6.dp.toPx(),
+                )
 
-                // Hub cap over the needle pivot
-                drawCircle(p.brassDark, radius = 10.dp.toPx(), center = pivot)
+                // Brass pivot: seat shadow, ring, domed cap, slot, specular.
+                drawCircle(
+                    p.recessEdge.copy(alpha = 0.30f),
+                    radius = 10.5.dp.toPx(),
+                    center = Offset(pivot.x + 0.5.dp.toPx(), pivot.y + 1.dp.toPx()),
+                )
+                drawCircle(p.brassDark, radius = 9.5.dp.toPx(), center = pivot)
                 drawCircle(
                     brush = Brush.radialGradient(
                         0f to p.brassLight,
-                        0.7f to p.brass,
+                        0.55f to p.brass,
                         1f to p.brassDark,
                         center = Offset(pivot.x - 3.dp.toPx(), pivot.y - 3.dp.toPx()),
-                        radius = 10.dp.toPx(),
+                        radius = 9.dp.toPx(),
                     ),
                     radius = 8.dp.toPx(),
                     center = pivot,
                 )
                 drawLine(
                     color = p.recessEdge.copy(alpha = 0.7f),
-                    start = Offset(pivot.x - 4.dp.toPx(), pivot.y),
-                    end = Offset(pivot.x + 4.dp.toPx(), pivot.y),
-                    strokeWidth = 1.2.dp.toPx(),
+                    start = Offset(pivot.x - 3.5.dp.toPx(), pivot.y),
+                    end = Offset(pivot.x + 3.5.dp.toPx(), pivot.y),
+                    strokeWidth = 1.1.dp.toPx(),
+                )
+                drawCircle(
+                    p.ivory.copy(alpha = 0.5f),
+                    radius = 1.2.dp.toPx(),
+                    center = Offset(pivot.x - 2.5.dp.toPx(), pivot.y - 2.5.dp.toPx()),
                 )
             }
         }

@@ -957,3 +957,47 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   no system reduced-motion API exists in common Compose, so the needle
   keeps the previous spring behavior; tick labels are fixed-dp instrument
   markings (functional readouts scale with system font size).
+
+## Instrument refinement pass (2026-11-15)
+- Report: the analog redesign read as "stacked brown UI cards with an analog meter", not
+  one wooden instrument; calibration cramped at the bottom on the phone.
+  Goal: material realism, composition, small-screen layout — not a
+  recolor. Functionality, state, DSP and the semantic contract untouched.
+- RED→GREEN slices:
+  - `WoodGrainTest` rewritten for HORIZONTAL figure + tonal bands
+    (startY bounds, wander ≤ amplitude, band subtlety ≤ 0.2 alpha,
+    determinism). RED: unresolved `startY`/`bands` → GREEN 7/7.
+  - `sheetToggleCollapsesAndReExpandsSecondaryControls`: the settings
+    sheet collapses to its header and re-expands; collapsed content
+    leaves the semantics tree. RED: tag not found → GREEN.
+- Material/composition changes:
+  - Enclosure: horizontal flat-sawn grain (34 streaks, alpha 0.07–0.20)
+    + 5 broad tonal bands, upper-left→lower-right lighting overlay,
+    shaded outer bevel + inner recess lip, smaller dark-brass corner
+    screws. Grain cached per size; never regenerated on ticks.
+  - Meter: thin (3 dp) aged-brass frame with hairline inset edge, larger
+    face (margins 26→18 dp), 11 dp scale labels, longer ticks, restrained
+    4 dp green band, finer needle (1.7 dp half-width) with metal sheen,
+    refined brass pivot (seat shadow + dome + specular), subtle clipped
+    age mottling on the ivory, cast shadow onto the wood. Maker's mark
+    removed from the face (no decorative competition). Geometry/mapping
+    unchanged and pixel-reverified: 0¢→−0.05°, −3¢→−2.7°, +120¢→+45.6°,
+    no-signal→−45.7°.
+  - Readout: one compact recessed strip (note+octave | cents, Hz, jewel
+    status), note cap 96→64 sp, cents 44→34 sp, height ~107→~100 dp at
+    1x; no dead zone in the no-signal state. Tabular numerals kept.
+  - Controls: gold outlines removed everywhere; engaged keys stand proud
+    (3 dp shadow + bevel), idle keys sit flat in the recess, finger
+    presses dip, disabled dims; mode selector is one recessed track with
+    two keys; chromatic helper text shortened to one line.
+  - Small screens: settings sheet collapsible (default expanded keeps
+    the tested contract), tighter spacing, 24 dp bottom breathing room
+    above the navigation insets; scroll root + safeDrawing unchanged.
+    320 dp/2x: note glyph bottom at 460 dp of 480 dp (was below fold).
+- Evidence: ui suite 57/57, grain 7/7, toggle GREEN; full verify.sh
+  result recorded in STATE.md. Device screenshot QA on the ASUS phone
+  (1080x2400 @440dpi) via adb; headless renders re-inspected.
+- Known limits: real-device mic/screen-reader pass still open;
+  vision-model aesthetic reviews are advisory — state claims were
+  re-verified against pixels (frame thickness, band heights, needle
+  angles) before acting on them.
