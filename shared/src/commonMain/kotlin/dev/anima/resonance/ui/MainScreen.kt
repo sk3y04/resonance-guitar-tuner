@@ -250,9 +250,13 @@ fun MainScreen(
     )
 
     pendingDelete?.let { target ->
+        val p = dev.anima.resonance.ui.instrument.InstrumentTheme.palette
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             modifier = Modifier.testTag("resonance.deleteDialog"),
+            containerColor = p.walnut,
+            titleContentColor = p.ivory,
+            textContentColor = p.textMuted,
             title = { Text("Delete tuning?") },
             text = {
                 Text("Delete \"${target.name}\"? This cannot be undone.")
@@ -267,13 +271,13 @@ fun MainScreen(
                         }
                     },
                     modifier = Modifier.testTag("resonance.deleteDialog.confirm"),
-                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                ) { Text("Delete", color = p.lampRed) }
             },
             dismissButton = {
                 TextButton(
                     onClick = { pendingDelete = null },
                     modifier = Modifier.testTag("resonance.deleteDialog.cancel"),
-                ) { Text("Cancel") }
+                ) { Text("Cancel", color = p.textMuted) }
             },
         )
     }

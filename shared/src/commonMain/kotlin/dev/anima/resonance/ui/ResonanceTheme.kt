@@ -86,10 +86,18 @@ fun ResonanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) resonanceDarkScheme() else resonanceLightScheme(),
-        content = content,
-    )
+    // The wooden instrument materials are constant across system
+    // light/dark (a physical instrument keeps its finish); the Material
+    // scheme still adapts for dialogs, text fields and legacy surfaces.
+    androidx.compose.runtime.CompositionLocalProvider(
+        dev.anima.resonance.ui.instrument.LocalInstrumentPalette provides
+            dev.anima.resonance.ui.instrument.InstrumentPalette,
+    ) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) resonanceDarkScheme() else resonanceLightScheme(),
+            content = content,
+        )
+    }
 }
 
 /**

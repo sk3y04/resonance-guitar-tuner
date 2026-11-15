@@ -9,14 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,14 +25,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.anima.resonance.presentation.CustomEditorUi
 import dev.anima.resonance.presentation.CustomEditorUiState
+import dev.anima.resonance.ui.instrument.InstrumentKey
+import dev.anima.resonance.ui.instrument.InstrumentTheme
+import dev.anima.resonance.ui.instrument.InstrumentType
+import dev.anima.resonance.ui.instrument.RecessedPanel
 
 /**
- * Custom-tuning editor: create or edit a named tuning. Pure form
- * widget — all state lives in the parent (MainScreen); every interaction is
- * a callback, so headless semantics tests drive it deterministically.
+ * Custom-tuning editor (instrument restyle): create or edit a
+ * named tuning. Pure form widget — all state lives in the parent
+ * (MainScreen); every interaction is a callback, so headless semantics
+ * tests drive it deterministically.
  *
- * A row is one string: tap the note button to cycle the note name
- * (C→C#→…→B→C), tap the octave button to cycle the octave (1..6), tap ✕ to
+ * A row is one string: tap the note key to cycle the note name
+ * (C→C#→…→B→C), tap the octave key to cycle the octave (1..6), tap ✕ to
  * remove the string. "+ String" adds one (max 12, engine contract).
  *
  * Tags: resonance.editor, .name, .string.<i>.note, .string.<i>.octave,
@@ -55,18 +55,18 @@ fun CustomEditorSheet(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val p = InstrumentTheme.palette
     val largeText = LocalDensity.current.fontScale > 1.3f
-    Surface(
+    RecessedPanel(
         modifier = modifier
             .fillMaxWidth()
             .testTag("resonance.editor"),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
+        borderColor = p.brassDark,
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(
                 text = if (state.isEdit) "Edit tuning" else "New tuning",
-                style = MaterialTheme.typography.titleSmall,
+                style = InstrumentType.engravedStrong,
                 modifier = Modifier.semantics { heading() },
             )
             TextField(
@@ -74,21 +74,32 @@ fun CustomEditorSheet(
                 onValueChange = onNameChange,
                 label = { Text("Name") },
                 singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = p.walnutDeep,
+                    unfocusedContainerColor = p.walnutDeep,
+                    focusedTextColor = p.ivory,
+                    unfocusedTextColor = p.ivory,
+                    cursorColor = p.brassLight,
+                    focusedLabelColor = p.textMuted,
+                    unfocusedLabelColor = p.textMuted,
+                    focusedIndicatorColor = p.brass,
+                    unfocusedIndicatorColor = p.brassDark,
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("resonance.editor.name"),
             )
             Spacer(Modifier.size(8.dp))
-            // No nested scroll: the instrument screen itself scrolls. A clipped
-            // 240 dp window made later strings hard to reach and hid most of a
-            // six-string tuning behind an inner gesture.
+            // No nested scroll: the instrument screen itself scrolls. A
+            // clipped 240 dp window made later strings hard to reach and hid
+            // most of a six-string tuning behind an inner gesture.
             Column(
                 Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 state.strings.forEachIndexed { i, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(
+                        InstrumentKey(
                             onClick = { onNoteCycle(i, true) },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
@@ -97,9 +108,9 @@ fun CustomEditorSheet(
                                     contentDescription =
                                         "String ${i + 1} note ${s.noteName}, tap to change"
                                 },
-                        ) { Text(s.noteName) }
+                        ) { Text(s.noteName, style = InstrumentType.keyLabel) }
                         Spacer(Modifier.size(6.dp))
-                        OutlinedButton(
+                        InstrumentKey(
                             onClick = { onOctaveCycle(i, true) },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
@@ -108,78 +119,90 @@ fun CustomEditorSheet(
                                     contentDescription =
                                         "String ${i + 1} octave ${s.octave}, tap to change"
                                 },
-                        ) { Text(s.octave.toString()) }
+                        ) { Text(s.octave.toString(), style = InstrumentType.keyLabel) }
                         Spacer(Modifier.size(6.dp))
-                        TextButton(
+                        InstrumentKey(
                             onClick = { onRemoveString(i) },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
                                 .testTag("resonance.editor.string.$i.remove")
                                 .semantics { contentDescription = "Remove string ${i + 1}" },
-                        ) { Text("✕") }
+                        ) { Text("✕", style = InstrumentType.keyLabel) }
                     }
                 }
             }
             Spacer(Modifier.size(8.dp))
             if (largeText) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(
+                    InstrumentKey(
                         onClick = onAddString,
                         enabled = state.strings.size < CustomEditorUi.MAX_STRINGS,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .testTag("resonance.editor.add"),
-                    ) { Text("+ String") }
+                    ) { Text("+ String", style = InstrumentType.keyLabel) }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(
+                        InstrumentKey(
                             onClick = onCancel,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .testTag("resonance.editor.cancel"),
                             contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) { Text("Cancel") }
-                        Button(
+                        ) { Text("Cancel", style = InstrumentType.keyLabel) }
+                        InstrumentKey(
                             onClick = onSave,
+                            selected = true,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .testTag("resonance.editor.save"),
                             contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) { Text(if (state.isEdit) "Save" else "Create") }
+                        ) {
+                            Text(
+                                if (state.isEdit) "Save" else "Create",
+                                style = InstrumentType.keyLabel.copy(color = p.brassLight),
+                            )
+                        }
                     }
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(
+                    InstrumentKey(
                         onClick = onAddString,
                         enabled = state.strings.size < CustomEditorUi.MAX_STRINGS,
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .testTag("resonance.editor.add"),
-                    ) { Text("+ String") }
+                    ) { Text("+ String", style = InstrumentType.keyLabel) }
                     Spacer(Modifier.weight(1f))
-                    OutlinedButton(
+                    InstrumentKey(
                         onClick = onCancel,
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .testTag("resonance.editor.cancel"),
-                    ) { Text("Cancel") }
+                    ) { Text("Cancel", style = InstrumentType.keyLabel) }
                     Spacer(Modifier.size(6.dp))
-                    Button(
+                    InstrumentKey(
                         onClick = onSave,
+                        selected = true,
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .testTag("resonance.editor.save"),
-                    ) { Text(if (state.isEdit) "Save" else "Create") }
+                    ) {
+                        Text(
+                            if (state.isEdit) "Save" else "Create",
+                            style = InstrumentType.keyLabel.copy(color = p.brassLight),
+                        )
+                    }
                 }
             }
             state.errors.forEach { error ->
                 Text(
                     text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = ResonanceType.hint,
+                    color = p.lampRed,
+                    style = InstrumentType.readoutSmall,
                     modifier = Modifier
                         .testTag("resonance.editor.error")
                         .semantics { liveRegion = LiveRegionMode.Polite },

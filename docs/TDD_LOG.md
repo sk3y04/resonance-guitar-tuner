@@ -897,3 +897,63 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
 - Known limit: the fold relies on temporal continuity. A real G4→G3
   change with no >300 ms playing gap is acoustically identical to the
   bleed and stays G4 until a gap; a normal string change has that gap.
+
+## Analog instrument UI redesign (2026-11-15)
+- Goal: premium physical-instrument feel (dark walnut enclosure, ivory
+  analog meter, physical needle, brass hardware, engraved labels, tactile
+  keys) WITHOUT touching the audio/tuning pipeline, state mapping,
+  permissions, persistence, or the semantic/test contract.
+- RED→GREEN slices (new pure logic, tests first):
+  - `AnalogMeterGeometryTest` (10): needle angle linear over ±45°, clamped
+    at the stops, rest = flat stop (never center), tick spacing 9°/10¢,
+    in-tune band = exit tolerance ±8¢, agreement with the tested
+    `MainScreenUi.meterPosition`/`isMeterClamped` for −120..120¢.
+    RED: unresolved reference → GREEN 10/10.
+  - `WoodGrainTest` (5): deterministic streaks per seed+size, bounds,
+    finite values, degenerate sizes. RED → GREEN 5/5.
+  - `InstrumentPaletteContrastTest` (4): WCAG floors for every
+    information-carrying pair (ink/ivory, ivory/walnut+recess, brass/walnut,
+    lamps/recess, band/ivory). RED → GREEN 4/4; `bandGreen` added as its
+    own RED→GREEN micro-cycle (lamp green failed 3:1 on ivory).
+- UI rebuild: `TunerScreen` recomposed from new `ui/instrument/`
+  components (WoodenEnclosure, AnalogTuningMeter, NoteReadout +
+  TuningStatusIndicator, MechanicalModeSelector, InstrumentStringSelector,
+  CalibrationControls/SpellingKeys, InstrumentKey/RecessedPanel/JewelLamp);
+  editor + delete dialog restyled; `CentsDial` deleted. The pre-existing
+  25-screen semantics suite + 7 controller-driven screen tests + render
+  smoke served as the regression contract (no new RED claimed for the
+  visual layer itself).
+- First integrated run: 297 tests, 2 REAL failures, both fixed:
+  1. fine concert stepper tags were `.Minus/.Plus` (string-interpolation
+     casing bug) → explicit tag constants; caught by
+     `sheetConcertSteppersInvokeCallback`.
+  2. at 320 dp / 2× font the note readout fell below the fold (meter-first
+     hierarchy) → maker's mark hidden at large text, compact meter aspect
+     (1.8 vs 1.6), maker's mark guarded by face height; caught by
+     `smallScreenLargeTextKeepsEveryPrimaryControlReachable`.
+- CMP 1.12 API facts learned: no `DrawScope.drawText(TextLayoutResult)`
+  extension — use `androidx.compose.ui.text.drawText(textMeasurer, …)`
+  (TextMeasurer caches measurements); `Brush.verticalGradient` takes
+  startY/endY (not start/end); `Canvas` requires an explicit onDraw even
+  when all drawing lives in a drawWithCache modifier.
+- Performance: grain paths + meter static artwork built in drawWithCache
+  stabilized by remember(active, inTune, clamped, compact) — the 20 Hz
+  ticker does not rebuild them; only the needle reads animated state.
+  Needle spring unchanged from the old dial (0.8 damping / 300 stiffness).
+- Evidence: :shared:jvmTest 297/297, :shared:testAndroidHostTest 256/256,
+  run-demo 5/5. Render smoke regenerated 15 PNGs (added clamped-sharp and
+  no-signal cases). Pixel-verified needle angles: −3¢→−2.6°, 0¢→+0.2°,
+  +120¢→+45.5° (pinned), no-signal/listening→−45° rest; NO SIGNAL engraving
+  present only without a reading; light/dark system renders byte-identical
+  (instrument materials are theme-constant by design).
+- verify.sh: 7/7 gates PASS (host tests, demo, offline contract, lint,
+  debug assembly, Robolectric host tests, instrumented APK compile).
+- Visual QA: headless renders inspected (vision + pixel analysis). Main
+  screen passed critical review; FLAT/SHARP engravings promoted from
+  secondary ink (4.99:1) to full charcoal ink (12.6:1) for clarity.
+  Mode-key engagement, AUTO/LOCKED string states and the large-text fold
+  fix additionally verified from rendered pixels.
+- Known limits: real-device visual/mic/screen-reader review remains the real-device gate;
+  no system reduced-motion API exists in common Compose, so the needle
+  keeps the previous spring behavior; tick labels are fixed-dp instrument
+  markings (functional readouts scale with system font size).

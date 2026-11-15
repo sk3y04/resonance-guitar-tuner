@@ -44,6 +44,33 @@ class TunerScreenRenderSmokeTest {
                 "dark-in-tune", 1080, 2400, 3f, dark = true,
                 state = measured("E2", 0, TunerMode.INSTRUMENT, inTune = true),
             ),
+            // Needle pinned at the mechanical stop beyond full scale.
+            RenderCase(
+                "dark-clamped-sharp", 1080, 2400, 3f, dark = true,
+                state = measured("E2", 120, TunerMode.INSTRUMENT),
+            ),
+            // No reliable pitch — needle at rest, NO SIGNAL face.
+            RenderCase(
+                "dark-no-signal", 1080, 2400, 3f, dark = true,
+                state = MainScreenUi.toUiState(
+                    snapshot = dev.anima.resonance.presentation.TunerSnapshot(
+                        reading = dev.anima.resonance.presentation.TunerReading(
+                            dev.anima.resonance.presentation.TunerStatus.INSUFFICIENT_SIGNAL,
+                            Note.fromLabel("E2"), 0.0, 0,
+                            dev.anima.resonance.presentation.PitchDirection.FLAT,
+                            false, 0.2,
+                        ),
+                        rms = 0.001,
+                        clipping = false,
+                        sampleRate = 48000,
+                    ),
+                    permission = MicPermissionState.GRANTED,
+                    mode = TunerMode.INSTRUMENT,
+                    preset = BuiltInTunings.standard,
+                    selectedStringIndex = null,
+                    captureActive = true,
+                ),
+            ),
             RenderCase(
                 "light-flat-instrument", 1080, 2400, 3f, dark = false,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
