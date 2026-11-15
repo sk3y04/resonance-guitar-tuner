@@ -125,25 +125,31 @@ class MainScreenUiTest {
         }
         rule.setContent { MainScreen(controller) }
         rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.openSheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        // Configuration lives in the overlay opened by the labeled key.
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        // The whole instrument surface scrolls; off-screen taps do not land.
-        rule.onNodeWithTag("resonance.scroll")
+        // The overlay scrolls; the main instrument does not.
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.add"))
         rule.onNodeWithTag("resonance.sheet.add").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.editor.name"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.editor.name"))
         rule.onNodeWithTag("resonance.editor.name").performTextInput("UI Created")
         // default first string is E2; three upward note cycles → G2 (E→F→F#→G)
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.editor.save"))
         rule.onNodeWithTag("resonance.editor.save").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
@@ -168,11 +174,16 @@ class MainScreenUiTest {
         }
         rule.setContent { MainScreen(controller) }
         rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.openSheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.delete"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
 
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.row.custom-1.delete"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").performClick()
         rule.onNodeWithTag("resonance.deleteDialog").assertExists()
@@ -209,17 +220,22 @@ class MainScreenUiTest {
         }
         rule.setContent { MainScreen(controller) }
         rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.openSheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.edit"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.row.custom-1.edit"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.editor.string.0.note"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.editor.string.0.note"))
         assertEquals(
             "Eb",
@@ -228,7 +244,7 @@ class MainScreenUiTest {
                 .joinToString("") { it.text },
             "the editor must not drop the flat accidental",
         )
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.editor.save"))
         rule.onNodeWithTag("resonance.editor.save").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
@@ -260,10 +276,15 @@ class MainScreenUiTest {
         )
         rule.setContent { MainScreen(controller, importPayload = payload, onImportConsumed = {}) }
         rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.openSheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.importResult"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.importResult"))
         val text = rule.onNodeWithTag("resonance.sheet.importResult")
             .fetchSemanticsNode().config[SemanticsProperties.Text]!!
@@ -286,10 +307,15 @@ class MainScreenUiTest {
         }
         rule.setContent { MainScreen(controller) }
         rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.openSheet"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.drop-d"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.overlay.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.row.drop-d"))
         rule.onNodeWithTag("resonance.sheet.row.drop-d").performClick()
         rule.waitUntil(timeoutMillis = 5000) {

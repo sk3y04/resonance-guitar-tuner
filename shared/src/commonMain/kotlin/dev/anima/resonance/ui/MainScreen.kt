@@ -55,6 +55,13 @@ fun MainScreen(
      */
     importPayload: String? = null,
     onImportConsumed: () -> Unit = {},
+    /**
+     * Platform back/dismiss hook for the configuration overlay. The
+     * Android shell wires androidx.activity.compose.BackHandler here; other
+     * platforms default to a no-op (the overlay's Close key and scrim work
+     * everywhere). Keeps platform concerns out of the common UI.
+     */
+    platformBack: @Composable (Boolean, () -> Unit) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
     var ui by remember(controller) { mutableStateOf(controller.state()) }
@@ -107,6 +114,9 @@ fun MainScreen(
         mutableStateOf<dev.anima.resonance.presentation.PresetRowUi?>(null)
     }
 
+    // Configuration lives in a modal overlay over the fixed instrument.
+    var showSheet by remember(controller) { mutableStateOf(false) }
+
     fun openEditor(id: String? = null) {
         // Structured source of truth: the visible preview is a formatted
         // label. Parsing it dropped flat notes (the old regex accepted only
@@ -125,6 +135,7 @@ fun MainScreen(
             editingId = id,
             isEdit = id != null,
         )
+        showSheet = true
     }
 
     fun updateEditor(transform: (CustomEditorUiState) -> CustomEditorUiState) {
@@ -155,8 +166,6 @@ fun MainScreen(
 
     TunerScreen(
         state = ui,
-        onOpenSettings = {},
-        onOpenPresets = {},
         onModeSelect = { mode ->
             if (mode != ui.mode) {
                 scope.launch {
@@ -177,77 +186,84 @@ fun MainScreen(
                 refresh()
             }
         },
-        onPresetSelect = { id ->
-            scope.launch {
-                controller.setPreset(id)
-                refresh()
-            }
-        },
-        onToggleFavorite = { id ->
-            scope.launch {
-                controller.toggleFavorite(id)
-                refresh()
-            }
-        },
-        onConcertStep = { up ->
-            scope.launch {
-                controller.stepConcertPitch(up)
-                refresh()
-            }
-        },
-        onConcertStepCoarse = { up ->
-            scope.launch {
-                controller.stepConcertPitch(up, stepHz = 1.0)
-                refresh()
-            }
-        },
-        onAddTuning = { openEditor() },
-        onEditTuning = { openEditor(it) },
-        onDeleteTuning = { id ->
-            pendingDelete = ui.presetRows.firstOrNull { it.id == id }
-        },
-        onSpellingSelect = { spelling ->
-            scope.launch {
-                controller.setAccidentalSpelling(spelling)
-                refresh()
-            }
-        },
-        onImportRequested = onImportPicker,
-        onExportRequested = onExportPicker,
-        editor = editor,
-        onEditorNameChange = { name -> updateEditor { it.copy(name = name) } },
-        onEditorNoteCycle = { index, up ->
-            updateEditor { form ->
-                form.copy(strings = form.strings.mapIndexed { i, s ->
-                    if (i == index) s.copy(noteName = CustomEditorUi.nextNoteName(s.noteName, up)) else s
-                })
-            }
-        },
-        onEditorOctaveCycle = { index, up ->
-            updateEditor { form ->
-                form.copy(strings = form.strings.mapIndexed { i, s ->
-                    if (i == index) s.copy(octave = CustomEditorUi.nextOctave(s.octave, up)) else s
-                })
-            }
-        },
-        onEditorRemoveString = { index ->
-            updateEditor { form ->
-                form.copy(strings = form.strings.filterIndexed { i, _ -> i != index })
-            }
-        },
-        onEditorAddString = {
-            updateEditor { form ->
-                if (form.strings.size < CustomEditorUi.MAX_STRINGS) {
-                    form.copy(strings = form.strings + EditorStringUi("E", 2))
-                } else form
-            }
-        },
-        onEditorSave = { saveEditor() },
-        onEditorCancel = { editor = null },
-        showSettingsButton = false,
-        showPresetsButton = false,
+        onOpenSheet = { showSheet = true },
         modifier = modifier,
     )
+
+    if (showSheet) {
+        TuningsOverlay(
+            state = ui,
+            onClose = { showSheet = false },
+            onPresetSelect = { id ->
+                scope.launch {
+                    controller.setPreset(id)
+                    refresh()
+                }
+            },
+            onToggleFavorite = { id ->
+                scope.launch {
+                    controller.toggleFavorite(id)
+                    refresh()
+                }
+            },
+            onConcertStep = { up ->
+                scope.launch {
+                    controller.stepConcertPitch(up)
+                    refresh()
+                }
+            },
+            onConcertStepCoarse = { up ->
+                scope.launch {
+                    controller.stepConcertPitch(up, stepHz = 1.0)
+                    refresh()
+                }
+            },
+            onAddTuning = { openEditor() },
+            onEditTuning = { openEditor(it) },
+            onDeleteTuning = { id ->
+                pendingDelete = ui.presetRows.firstOrNull { it.id == id }
+            },
+            onSpellingSelect = { spelling ->
+                scope.launch {
+                    controller.setAccidentalSpelling(spelling)
+                    refresh()
+                }
+            },
+            onImportRequested = onImportPicker,
+            onExportRequested = onExportPicker,
+            editor = editor,
+            onEditorNameChange = { name -> updateEditor { it.copy(name = name) } },
+            onEditorNoteCycle = { index, up ->
+                updateEditor { form ->
+                    form.copy(strings = form.strings.mapIndexed { i, s ->
+                        if (i == index) s.copy(noteName = CustomEditorUi.nextNoteName(s.noteName, up)) else s
+                    })
+                }
+            },
+            onEditorOctaveCycle = { index, up ->
+                updateEditor { form ->
+                    form.copy(strings = form.strings.mapIndexed { i, s ->
+                        if (i == index) s.copy(octave = CustomEditorUi.nextOctave(s.octave, up)) else s
+                    })
+                }
+            },
+            onEditorRemoveString = { index ->
+                updateEditor { form ->
+                    form.copy(strings = form.strings.filterIndexed { i, _ -> i != index })
+                }
+            },
+            onEditorAddString = {
+                updateEditor { form ->
+                    if (form.strings.size < CustomEditorUi.MAX_STRINGS) {
+                        form.copy(strings = form.strings + EditorStringUi("E", 2))
+                    } else form
+                }
+            },
+            onEditorSave = { saveEditor() },
+            onEditorCancel = { editor = null },
+            platformBack = platformBack,
+        )
+    }
 
     pendingDelete?.let { target ->
         val p = dev.anima.resonance.ui.instrument.InstrumentTheme.palette

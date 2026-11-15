@@ -91,6 +91,9 @@ class ResonanceApp : ComponentActivity() {
                     },
                     importPayload = viewModel.importPayload.collectAsState(initial = null).value,
                     onImportConsumed = { viewModel.consumeImport() },
+                    platformBack = { enabled, onBack ->
+                        androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
+                    },
                 )
             }
         }

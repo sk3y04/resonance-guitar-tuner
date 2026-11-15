@@ -22,9 +22,9 @@ import kotlin.test.assertTrue
  *
  * CMP's desktop test jar has no `captureToImage`, but the public
  * `ImageComposeScene` renders real Skia frames headlessly. This test asserts
- * that representative tuner states produce non-blank PNGs and writes them to
- * `artifacts/render/` so a human (or the audit agent) can inspect typography,
- * contrast, and clipping at realistic phone sizes.
+ * that representative states of the FIXED instrument and its configuration
+ * overlay produce non-blank PNGs and writes them to `build/render/` for
+ * inspection at realistic phone sizes.
  *
  * It is not a pixel-diff test: fonts and anti-aliasing may differ across
  * machines. Assertions are limited to dimensions and non-uniform output.
@@ -35,21 +35,20 @@ class TunerScreenRenderSmokeTest {
     fun representativeStatesRenderToNonBlankPngs() {
         val out = File("build/render").apply { mkdirs() }
         val states = listOf(
-            RenderCase("dark-listening", 1080, 2400, 3f, dark = true, state = listening()),
+            // Main instrument — chromatic and instrument, fixed faceplate.
+            RenderCase("dark-chromatic-main", 1080, 2400, 3f, dark = true, state = listening()),
             RenderCase(
-                "dark-flat-instrument", 1080, 2400, 3f, dark = true,
+                "dark-instrument-main", 1080, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
             ),
             RenderCase(
                 "dark-in-tune", 1080, 2400, 3f, dark = true,
                 state = measured("E2", 0, TunerMode.INSTRUMENT, inTune = true),
             ),
-            // Needle pinned at the mechanical stop beyond full scale.
             RenderCase(
                 "dark-clamped-sharp", 1080, 2400, 3f, dark = true,
                 state = measured("E2", 120, TunerMode.INSTRUMENT),
             ),
-            // No reliable pitch — needle at rest, NO SIGNAL face.
             RenderCase(
                 "dark-no-signal", 1080, 2400, 3f, dark = true,
                 state = MainScreenUi.toUiState(
@@ -72,32 +71,37 @@ class TunerScreenRenderSmokeTest {
                 ),
             ),
             RenderCase(
-                "light-flat-instrument", 1080, 2400, 3f, dark = false,
+                "light-instrument-main", 1080, 2400, 3f, dark = false,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
             ),
             RenderCase(
                 "dark-permission-denied", 1080, 2400, 3f, dark = true,
                 state = listening(permission = MicPermissionState.DENIED_PERMANENT),
             ),
+            // Small supported phone (360x640dp) — must stay fixed, unclipped.
             RenderCase(
-                "dark-large-text-320dp", 960, 1440, 3f, dark = true,
+                "dark-small-phone", 1080, 1920, 3f, dark = true,
+                state = measured("E2", -3, TunerMode.INSTRUMENT),
+            ),
+            // Large accessibility font — explicit scrollable fallback.
+            RenderCase(
+                "dark-large-text-fallback", 960, 1440, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
                 fontScale = 2f,
             ),
+            // Configuration overlay over the instrument.
             RenderCase(
-                "dark-full-page", 1080, 5400, 3f, dark = true,
+                "dark-overlay", 1080, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
             ),
             RenderCase(
-                "light-full-page", 1080, 5400, 3f, dark = false,
+                "light-overlay", 1080, 2400, 3f, dark = false,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
             ),
             RenderCase(
-                "dark-permission-full-page", 1080, 5400, 3f, dark = true,
-                state = listening(permission = MicPermissionState.DENIED_PERMANENT, withSheet = true),
-            ),
-            RenderCase(
-                "dark-custom-tuning", 1080, 5400, 3f, dark = true,
+                "dark-overlay-custom-tuning", 1080, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true).copy(
                     presetRows = PresetSheetUi.toRows(
                         BuiltInTunings.all + customPreset(),
@@ -105,10 +109,12 @@ class TunerScreenRenderSmokeTest {
                         "custom-1",
                     ),
                 ),
+                overlay = true,
             ),
             RenderCase(
-                "dark-editor", 1080, 6000, 3f, dark = true,
+                "dark-overlay-editor", 1080, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
                 editor = CustomEditorUiState(
                     name = "My Open D",
                     strings = listOf("D2", "A2", "D3", "F#3", "A3", "D4").map {
@@ -118,20 +124,10 @@ class TunerScreenRenderSmokeTest {
                 ),
             ),
             RenderCase(
-                "light-large-text-full-page", 960, 9000, 3f, dark = false,
+                "dark-overlay-large-text", 960, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
                 fontScale = 2f,
-            ),
-            RenderCase(
-                "dark-editor-large-text", 960, 11000, 3f, dark = true,
-                state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
-                fontScale = 2f,
-                editor = CustomEditorUiState(
-                    name = "My Open D",
-                    strings = listOf("D2", "A2", "D3", "F#3", "A3", "D4").map {
-                        EditorStringUi(it.dropLast(1), Note.fromLabel(it).octave)
-                    },
-                ),
             ),
         )
         for (case in states) {
@@ -156,16 +152,18 @@ class TunerScreenRenderSmokeTest {
             ResonanceTheme(darkTheme = case.dark) {
                 TunerScreen(
                     state = case.state,
-                    onOpenSettings = {},
-                    onOpenPresets = {},
                     onModeSelect = {},
                     onStringSelect = {},
                     onPermissionCta = {},
                     onRetryCapture = {},
-                    editor = case.editor,
-                    showSettingsButton = false,
-                    showPresetsButton = false,
                 )
+                if (case.overlay) {
+                    TuningsOverlay(
+                        state = case.state,
+                        onClose = {},
+                        editor = case.editor,
+                    )
+                }
             }
         }
         try {
@@ -220,7 +218,7 @@ class TunerScreenRenderSmokeTest {
             permission = MicPermissionState.GRANTED,
             mode = mode,
             preset = if (mode == TunerMode.INSTRUMENT) BuiltInTunings.standard else null,
-            selectedStringIndex = if (mode == TunerMode.INSTRUMENT) null else null,
+            selectedStringIndex = null,
             presets = if (withSheet) BuiltInTunings.all else emptyList(),
             favoritePresetIds = if (withSheet) setOf("standard") else emptySet(),
             selectedPresetId = "standard",
@@ -235,6 +233,7 @@ class TunerScreenRenderSmokeTest {
         val dark: Boolean,
         val state: MainScreenUiState,
         val fontScale: Float = 1f,
+        val overlay: Boolean = false,
         val editor: CustomEditorUiState? = null,
     )
 

@@ -2,8 +2,8 @@ package dev.anima.resonance.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,48 +14,32 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.anima.resonance.music.Spelling
-import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.MainScreenUiState
 import dev.anima.resonance.presentation.MicPermissionState
-import dev.anima.resonance.presentation.PresetRowUi
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.instrument.AnalogTuningMeter
-import dev.anima.resonance.ui.instrument.CalibrationControls
+import dev.anima.resonance.ui.instrument.InstrumentFaceplate
 import dev.anima.resonance.ui.instrument.InstrumentKey
 import dev.anima.resonance.ui.instrument.InstrumentStringSelector
 import dev.anima.resonance.ui.instrument.InstrumentTheme
@@ -64,224 +48,311 @@ import dev.anima.resonance.ui.instrument.JewelLamp
 import dev.anima.resonance.ui.instrument.MechanicalModeSelector
 import dev.anima.resonance.ui.instrument.NoteReadout
 import dev.anima.resonance.ui.instrument.RecessedPanel
-import dev.anima.resonance.ui.instrument.SpellingKeys
 import dev.anima.resonance.ui.instrument.WoodenEnclosure
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 /**
- * Main instrument screen (analog redesign). Renders the tested
- * [MainScreenUiState] only: no measurement logic lives here. The screen is
- * a walnut enclosure carrying an ivory analog meter, a recessed note
- * readout, mechanical mode/string keys and a milled calibration sheet.
+ * The main instrument — ONE fixed, non-scrolling device at normal
+ * phone sizes and default font scale. Structure:
  *
- * Layout is one vertically scrollable instrument surface. A scrolling root
- * is deliberate: at 320 dp / large font sizes the meter, readout, strings,
- * mode and the full tuning sheet cannot all fit at once; hiding the lower
- * controls behind a clipped, non-scrollable column was a real usability
- * defect.
+ *   enclosure (wooden body) → faceplate (shared inset surface) →
+ *   components mounted on it: label strip, analog meter (flexible space),
+ *   note readout, mode selector, string keys, TUNINGS & SETTINGS key.
  *
- * Semantic/test tags (unchanged contract): resonance.scroll, resonance.note,
- * resonance.cents, resonance.dial, resonance.direction, resonance.hint,
- * resonance.micStatus, resonance.mode(+.chromatic/.instrument),
- * resonance.string.<i>, resonance.settings, resonance.concert,
- * resonance.permission, resonance.preset, resonance.sheet.*.
+ * Configuration lives in [TuningsOverlay], opened by the labeled key.
+ * There is no app header; tuning name, capture state and A4 reference sit
+ * in a compact label strip on the faceplate. System insets are respected.
+ *
+ * Exceptionally constrained layouts (very short screens) and large
+ * accessibility font scales get an explicit scrollable fallback
+ * (resonance.scroll) instead of clipped content.
+ *
+ * Semantic/test tags: resonance.note, resonance.cents, resonance.dial,
+ * resonance.direction, resonance.hint, resonance.micStatus,
+ * resonance.mode(+.chromatic/.instrument), resonance.string.<i>,
+ * resonance.concert, resonance.permission(.banner), resonance.preset,
+ * resonance.openSheet, resonance.retry, resonance.start, resonance.scroll
+ * (fallback only).
  */
 @Composable
 fun TunerScreen(
     state: MainScreenUiState,
-    onOpenSettings: () -> Unit,
-    onOpenPresets: () -> Unit,
     onModeSelect: (TunerMode) -> Unit,
     onStringSelect: (Int) -> Unit,
     onPermissionCta: () -> Unit,
     onRetryCapture: () -> Unit,
     onRequestPermission: () -> Unit = {},
-    onConcertStep: (Boolean) -> Unit = {},
-    onConcertStepCoarse: (Boolean) -> Unit = {},
-    onPresetSelect: (String) -> Unit = {},
-    onToggleFavorite: (String) -> Unit = {},
-    onAddTuning: () -> Unit = {},
-    onEditTuning: (String) -> Unit = {},
-    onDeleteTuning: (String) -> Unit = {},
-    onSpellingSelect: (Spelling) -> Unit = {},
-    onImportRequested: () -> Unit = {},
-    onExportRequested: () -> Unit = {},
-    editor: CustomEditorUiState? = null,
-    onEditorNameChange: (String) -> Unit = {},
-    onEditorNoteCycle: (Int, Boolean) -> Unit = { _, _ -> },
-    onEditorOctaveCycle: (Int, Boolean) -> Unit = { _, _ -> },
-    onEditorRemoveString: (Int) -> Unit = {},
-    onEditorAddString: () -> Unit = {},
-    onEditorSave: () -> Unit = {},
-    onEditorCancel: () -> Unit = {},
-    showSettingsButton: Boolean = true,
-    showPresetsButton: Boolean = true,
+    onOpenSheet: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val p = InstrumentTheme.palette
     val granted = state.permission == MicPermissionState.GRANTED
     val fontScale = LocalDensity.current.fontScale
-    // Adaptive glyphs: system font scaling still applies, but an uncapped
-    // 96sp note would overflow narrow screens at 2x accessibility text.
     val largeText = fontScale > 1.3f
-    // Cap the *rendered* size, not the sp value: scaling from 64sp to 48sp
-    // at 1.4x would make the note smaller as the user asks for larger text.
-    // Balanced against the meter — the note is prominent, not a wall.
+    // Cap the *rendered* size, not the sp value, so asking for larger text
+    // never shrinks the note; balanced against the meter.
     val noteSize = (96f / fontScale).coerceAtMost(64f).sp
     val centsSize = (56f / fontScale).coerceAtMost(34f).sp
-    val scrollState = rememberScrollState()
-    val tuningsRequester = remember { BringIntoViewRequester() }
-    val editorRequester = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
-    val editorOpen = editor != null
-    val editorId = editor?.editingId
-    LaunchedEffect(editorOpen, editorId) {
-        if (editorOpen) {
-            // Wait for the editor to be measured, then make it the focus of
-            // the scroll surface (it is inserted above the long sheet).
-            androidx.compose.runtime.withFrameNanos { }
-            editorRequester.bringIntoView()
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // The enclosure is static artwork: it never recomposes with the
-        // pitch ticker (grain paths are cached per size inside the Canvas).
         WoodenEnclosure(Modifier.matchParentSize())
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .widthIn(max = 560.dp)
-                .fillMaxWidth()
+        // One restrained outer enclosure inset + system insets.
+        Box(
+            Modifier
+                .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .testTag("resonance.scroll"),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(10.dp),
         ) {
-            // ── Header: maker's mark, tuning name, hardware shortcuts ─────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    // Decorative maker's mark; dropped at large font scales
-                    // so the note readout stays above the fold on small screens.
-                    if (!largeText) {
-                        Text(
-                            text = "RESONANCE",
-                            style = InstrumentType.engraved,
-                            modifier = Modifier.clearAndSetSemantics {},
-                        )
+            InstrumentFaceplate(Modifier.fillMaxSize()) {
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                ) {
+                    val innerW = maxWidth
+                    val innerH = maxHeight
+                    // Fixed-height budget of the mounted components.
+                    val stringRows = when {
+                        state.targetLabels.isEmpty() -> 0
+                        innerW < 480.dp || state.targetLabels.size > 6 ->
+                            (state.targetLabels.size + 2) / 3
+                        else -> 1
                     }
-                    Text(
-                        text = state.presetName ?: "Chromatic",
-                        style = MaterialTheme.typography.titleMedium.copy(color = p.ivory),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .testTag("resonance.preset")
-                            .semantics { heading() },
-                    )
-                }
-                if (state.presetRows.isNotEmpty()) {
-                    InstrumentKey(
-                        onClick = { scope.launch { tuningsRequester.bringIntoView() } },
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("resonance.openTunings"),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                    ) { Text("Tunings", style = InstrumentType.keyLabel) }
-                    Spacer(Modifier.size(6.dp))
-                }
-                if (showSettingsButton) {
-                    InstrumentKey(
-                        onClick = onOpenSettings,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("resonance.settings"),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                    ) { Text("Settings", style = InstrumentType.keyLabel) }
-                }
-            }
+                    val stringsH = if (stringRows == 0) 0.dp else (stringRows * 58 + (stringRows - 1) * 6).dp
+                    val fixedH = 22.dp + 84.dp + 56.dp + stringsH + 52.dp + 8.dp * 5
+                    val meterSlotH = innerH - fixedH
+                    // Main-screen guarantee: fixed layout when the meter has
+                    // real room and text is at normal scale; otherwise an
+                    // explicit accessible scrolling fallback.
+                    val fallback = largeText || meterSlotH < 130.dp
 
-            Spacer(Modifier.height(6.dp))
-
-            // ── Live capture state + reference pitch ──────────────────────
-            if (largeText) {
-                Column(Modifier.fillMaxWidth()) {
-                    MicStatusLine(
-                        text = state.micStatusText,
-                        isError = state.captureError,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    ConcertPitchText(
-                        hz = state.concertPitchHz,
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .padding(top = 2.dp),
-                    )
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MicStatusLine(
-                        text = state.micStatusText,
-                        isError = state.captureError,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ConcertPitchText(hz = state.concertPitchHz)
-                }
-            }
-
-            // ── Permission recovery (first run / soft denial / permanent) ─
-            if (state.permissionCtaVisible) {
-                Spacer(Modifier.height(12.dp))
-                RecessedPanel(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("resonance.permission.banner"),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Microphone access",
-                            style = MaterialTheme.typography.titleSmall.copy(color = p.ivory),
+                    if (fallback) {
+                        FallbackLayout(
+                            state = state,
+                            granted = granted,
+                            noteSize = noteSize,
+                            centsSize = centsSize,
+                            largeText = largeText,
+                            onModeSelect = onModeSelect,
+                            onStringSelect = onStringSelect,
+                            onPermissionCta = onPermissionCta,
+                            onRetryCapture = onRetryCapture,
+                            onRequestPermission = onRequestPermission,
+                            onOpenSheet = onOpenSheet,
                         )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = state.permissionHint.orEmpty(),
-                            style = InstrumentType.readoutSmall,
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        InstrumentKey(
-                            onClick = {
-                                if (state.permissionCtaOpensSettings) {
-                                    onPermissionCta()
-                                } else {
-                                    onRequestPermission()
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("resonance.permission"),
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(state.permissionCtaText, style = InstrumentType.keyLabel)
+                            LabelStrip(state)
+                            // The meter owns the flexible space.
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            ) {
+                                if (!granted || state.captureError) {
+                                    CapturePanel(
+                                        state = state,
+                                        onPermissionCta = onPermissionCta,
+                                        onRequestPermission = onRequestPermission,
+                                        onRetryCapture = onRetryCapture,
+                                        modifier = Modifier.align(Alignment.Center),
+                                    )
+                                } else {
+                                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                                        val reserve = if (state.statusHint != null || (granted && !state.captureActive)) 26.dp else 0.dp
+                                        val meterW = minOf(maxWidth, (maxHeight - reserve) * 1.6f)
+                                        AnalogTuningMeter(
+                                            position = state.meterPosition,
+                                            inTune = state.inTune,
+                                            clamped = state.meterClamped,
+                                            active = state.meterActive,
+                                            modifier = Modifier
+                                                .width(meterW)
+                                                .align(Alignment.Center),
+                                        )
+                                    }
+                                    Column(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        state.statusHint?.let { hint ->
+                                            Text(
+                                                text = hint,
+                                                style = InstrumentType.readoutSmall.copy(fontSize = 12.sp),
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("resonance.hint"),
+                                            )
+                                        }
+                                        if (granted && !state.captureActive) {
+                                            InstrumentKey(
+                                                onClick = onRetryCapture,
+                                                modifier = Modifier
+                                                    .padding(top = 2.dp)
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("resonance.start"),
+                                            ) { Text("Start listening", style = InstrumentType.keyLabel) }
+                                        }
+                                    }
+                                }
+                            }
+                            NoteReadout(
+                                state = state,
+                                noteSize = noteSize,
+                                centsSize = centsSize,
+                                largeText = largeText,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            MechanicalModeSelector(
+                                mode = state.mode,
+                                onModeSelect = onModeSelect,
+                                largeText = false,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (state.targetLabels.isNotEmpty()) {
+                                InstrumentStringSelector(
+                                    targetLabels = state.targetLabels,
+                                    activeStringIndex = state.activeStringIndex,
+                                    stringLocked = state.stringLocked,
+                                    onStringSelect = onStringSelect,
+                                )
+                            }
+                            InstrumentKey(
+                                onClick = onOpenSheet,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("resonance.openSheet"),
+                            ) {
+                                Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
 
-            Spacer(Modifier.height(12.dp))
+/** Compact faceplate label strip: tuning name, capture state, A4 reference. */
+@Composable
+private fun LabelStrip(state: MainScreenUiState) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = state.presetName ?: "Chromatic",
+            style = InstrumentType.engravedStrong,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("resonance.preset")
+                .semantics { heading() },
+        )
+        MicStatusLine(
+            text = state.micStatusText,
+            isError = state.captureError,
+        )
+        Spacer(Modifier.size(10.dp))
+        ConcertPitchText(hz = state.concertPitchHz)
+    }
+}
 
-            // ── Signal / capture guidance, directly under the mic state ───
-            // First-time clarity: the instruction belongs near "Listening",
-            // not below a large meter the user has not learned to read yet.
+/** Permission / capture-error recovery panel (mounted in the meter slot). */
+@Composable
+private fun CapturePanel(
+    state: MainScreenUiState,
+    onPermissionCta: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onRetryCapture: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = InstrumentTheme.palette
+    RecessedPanel(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("resonance.permission.banner"),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = if (state.captureError) "Microphone unavailable" else "Microphone access",
+                style = MaterialTheme.typography.titleSmall.copy(color = p.ivory),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (state.captureError) {
+                    "Check your input, then retry."
+                } else {
+                    state.permissionHint.orEmpty()
+                },
+                style = InstrumentType.readoutSmall,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            Spacer(Modifier.height(10.dp))
+            if (state.captureError) {
+                InstrumentKey(
+                    onClick = onRetryCapture,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.retry"),
+                ) { Text("Retry microphone", style = InstrumentType.keyLabel) }
+            } else {
+                InstrumentKey(
+                    onClick = {
+                        if (state.permissionCtaOpensSettings) onPermissionCta() else onRequestPermission()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.permission"),
+                ) { Text(state.permissionCtaText, style = InstrumentType.keyLabel) }
+            }
+        }
+    }
+}
+
+/**
+ * Accessible fallback for exceptionally constrained layouts / large
+ * accessibility fonts: the same instrument, scrollable, nothing clipped.
+ */
+@Composable
+private fun FallbackLayout(
+    state: MainScreenUiState,
+    granted: Boolean,
+    noteSize: androidx.compose.ui.unit.TextUnit,
+    centsSize: androidx.compose.ui.unit.TextUnit,
+    largeText: Boolean,
+    onModeSelect: (TunerMode) -> Unit,
+    onStringSelect: (Int) -> Unit,
+    onPermissionCta: () -> Unit,
+    onRetryCapture: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onOpenSheet: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .testTag("resonance.scroll"),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        LabelStrip(state)
+        if (!granted || state.captureError) {
+            CapturePanel(
+                state = state,
+                onPermissionCta = onPermissionCta,
+                onRequestPermission = onRequestPermission,
+                onRetryCapture = onRetryCapture,
+            )
+        } else {
             state.statusHint?.let { hint ->
                 Text(
                     text = hint,
@@ -292,413 +363,57 @@ fun TunerScreen(
                         .testTag("resonance.hint"),
                 )
             }
-            if (state.captureError) {
+            AnalogTuningMeter(
+                position = state.meterPosition,
+                inTune = state.inTune,
+                clamped = state.meterClamped,
+                active = state.meterActive,
+                compact = largeText,
+                modifier = Modifier
+                    .widthIn(max = 420.dp)
+                    .fillMaxWidth()
+                    .align(Alignment.CenterHorizontally),
+            )
+            if (granted && !state.captureActive) {
                 InstrumentKey(
                     onClick = onRetryCapture,
                     modifier = Modifier
-                        .padding(top = 8.dp)
                         .heightIn(min = 48.dp)
-                        .testTag("resonance.retry"),
-                ) { Text("Retry microphone", style = InstrumentType.keyLabel) }
-            } else if (granted && !state.captureActive) {
-                InstrumentKey(
-                    onClick = onRetryCapture,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .heightIn(min = 48.dp)
+                        .align(Alignment.CenterHorizontally)
                         .testTag("resonance.start"),
                 ) { Text("Start listening", style = InstrumentType.keyLabel) }
             }
-
-            // Without permission (or with a failed device) there is no
-            // measurement to show. A dead meter implied a live instrument.
-            if (granted && !state.captureError) {
-                Spacer(Modifier.height(10.dp))
-
-                // ── The analog meter (centerpiece) ────────────────────────
-                AnalogTuningMeter(
-                    position = state.meterPosition,
-                    inTune = state.inTune,
-                    clamped = state.meterClamped,
-                    active = state.meterActive,
-                    compact = largeText,
-                    modifier = Modifier
-                        .widthIn(max = 420.dp)
-                        .fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(6.dp))
-
-                // ── Detected note + measurements ──────────────────────────
-                NoteReadout(
-                    state = state,
-                    noteSize = noteSize,
-                    centsSize = centsSize,
-                    largeText = largeText,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // ── Mode: mechanical two-position selector ────────────────────
-            MechanicalModeSelector(
-                mode = state.mode,
-                onModeSelect = onModeSelect,
+            NoteReadout(
+                state = state,
+                noteSize = noteSize,
+                centsSize = centsSize,
                 largeText = largeText,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (state.mode == TunerMode.CHROMATIC) {
-                Text(
-                    text = "Chromatic: any note. Instrument: the selected tuning.",
-                    style = InstrumentType.readoutSmall.copy(fontSize = 12.sp),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // ── Target strings (Instrument mode) ──────────────────────────
-            if (state.targetLabels.isNotEmpty()) {
-                InstrumentStringSelector(
-                    targetLabels = state.targetLabels,
-                    activeStringIndex = state.activeStringIndex,
-                    stringLocked = state.stringLocked,
-                    selectedStringIndex = state.selectedStringIndex,
-                    onStringSelect = onStringSelect,
-                )
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // ── Optional external "Tunings" entry point (tests/hosts) ─────
-            if (showPresetsButton) {
-                InstrumentKey(
-                    onClick = onOpenPresets,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("resonance.presets"),
-                ) { Text("Tunings", style = InstrumentType.keyLabel) }
-                Spacer(Modifier.height(10.dp))
-            }
-
-            // ── Custom editor (above the sheet) ───────────────────────────
-            editor?.let { form ->
-                CustomEditorSheet(
-                    state = form,
-                    onNameChange = onEditorNameChange,
-                    onNoteCycle = onEditorNoteCycle,
-                    onOctaveCycle = onEditorOctaveCycle,
-                    onRemoveString = onEditorRemoveString,
-                    onAddString = onEditorAddString,
-                    onSave = onEditorSave,
-                    onCancel = onEditorCancel,
-                    modifier = Modifier
-                        .bringIntoViewRequester(editorRequester)
-                        .padding(bottom = 12.dp),
-                )
-            }
-
-            // ── Tunings + reference settings sheet ────────────────────────
-            if (state.presetRows.isNotEmpty()) {
-                TuningsSheet(
-                    state = state,
-                    largeText = largeText,
-                    tuningsRequester = tuningsRequester,
-                    onConcertStep = onConcertStep,
-                    onConcertStepCoarse = onConcertStepCoarse,
-                    onSpellingSelect = onSpellingSelect,
-                    onPresetSelect = onPresetSelect,
-                    onToggleFavorite = onToggleFavorite,
-                    onEditTuning = onEditTuning,
-                    onDeleteTuning = onDeleteTuning,
-                    onAddTuning = onAddTuning,
-                    onImportRequested = onImportRequested,
-                    onExportRequested = onExportRequested,
-                )
-            }
-
-            // Breathing room above the system navigation area.
-            Spacer(Modifier.height(24.dp))
         }
-    }
-}
-
-/**
- * The milled calibration/tunings panel. Same rows, actions and semantic
- * contract as the pre-redesign sheet, rendered as instrument hardware.
- */
-@Composable
-private fun TuningsSheet(
-    state: MainScreenUiState,
-    largeText: Boolean,
-    tuningsRequester: BringIntoViewRequester,
-    onConcertStep: (Boolean) -> Unit,
-    onConcertStepCoarse: (Boolean) -> Unit,
-    onSpellingSelect: (Spelling) -> Unit,
-    onPresetSelect: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit,
-    onEditTuning: (String) -> Unit,
-    onDeleteTuning: (String) -> Unit,
-    onAddTuning: () -> Unit,
-    onImportRequested: () -> Unit,
-    onExportRequested: () -> Unit,
-) {
-    val p = InstrumentTheme.palette
-    // Secondary configuration is collapsible. Default expanded keeps
-    // the tested contract; on small screens the player can mill it away.
-    var expanded by androidx.compose.runtime.saveable.rememberSaveable {
-        androidx.compose.runtime.mutableStateOf(true)
-    }
-    RecessedPanel(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("resonance.sheet"),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Tunings & settings",
-                    style = InstrumentType.engravedStrong,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(bottom = 6.dp)
-                        .bringIntoViewRequester(tuningsRequester)
-                        .semantics { heading() }
-                        .testTag("resonance.sheet.title"),
-                )
-                InstrumentKey(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag("resonance.sheet.toggle")
-                        .semantics {
-                            contentDescription = if (expanded) {
-                                "Collapse tunings and settings"
-                            } else {
-                                "Expand tunings and settings"
-                            }
-                            stateDescription = if (expanded) "Expanded" else "Collapsed"
-                        },
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                ) {
-                    Text(if (expanded) "▴" else "▾", style = InstrumentType.keyLabel)
-                }
-            }
-            if (!expanded) return@Column
-
-            // Coarse ±1 Hz + fine ±0.1 Hz reference steppers.
-            CalibrationControls(
-                concertLabel = state.concertLabel,
-                concertError = state.concertError,
-                onConcertStep = onConcertStep,
-                onConcertStepCoarse = onConcertStepCoarse,
-                largeText = largeText,
+        MechanicalModeSelector(
+            mode = state.mode,
+            onModeSelect = onModeSelect,
+            largeText = largeText,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (state.targetLabels.isNotEmpty()) {
+            InstrumentStringSelector(
+                targetLabels = state.targetLabels,
+                activeStringIndex = state.activeStringIndex,
+                stringLocked = state.stringLocked,
+                onStringSelect = onStringSelect,
             )
-
-            if (largeText) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp)
-                        .testTag("resonance.sheet.spelling"),
-                ) {
-                    Text("Accidentals", style = InstrumentType.readoutSmall)
-                    Spacer(Modifier.size(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        SpellingKeys(state.accidentalSpelling, onSpellingSelect)
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp)
-                        .testTag("resonance.sheet.spelling"),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Accidentals",
-                        style = InstrumentType.readoutSmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    SpellingKeys(state.accidentalSpelling, onSpellingSelect)
-                }
-            }
-
-            state.presetRows.forEach { row ->
-                Surface(
-                    onClick = { onPresetSelect(row.id) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp)
-                        .testTag("resonance.sheet.row.${row.id}")
-                        .semantics {
-                            contentDescription = "Tuning ${row.name}" +
-                                (if (row.selected) ", selected" else "") +
-                                (if (row.favorite) ", favorite" else "")
-                        },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (row.selected) p.walnut else p.recess,
-                    border = if (row.selected) {
-                        androidx.compose.foundation.BorderStroke(1.dp, p.brass)
-                    } else {
-                        null
-                    },
-                ) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = row.name,
-                                style = InstrumentType.keyLabel.copy(
-                                    color = p.ivory,
-                                    fontWeight = FontWeight.Medium,
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (row.selected) {
-                                Text(
-                                    text = "●",
-                                    color = p.brassLight,
-                                    style = InstrumentType.readoutSmall,
-                                    modifier = Modifier
-                                        .padding(start = 6.dp)
-                                        .clearAndSetSemantics {},
-                                )
-                            }
-                            TextButton(
-                                onClick = { onToggleFavorite(row.id) },
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("resonance.sheet.row.${row.id}.favorite")
-                                    .semantics {
-                                        contentDescription = if (row.favorite) {
-                                            "Remove ${row.name} from favorites"
-                                        } else {
-                                            "Add ${row.name} to favorites"
-                                        }
-                                    },
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = if (row.favorite) p.brassLight else p.textMuted,
-                                ),
-                            ) {
-                                Text(
-                                    text = if (row.favorite) "★" else "☆",
-                                    fontSize = 18.sp,
-                                )
-                            }
-                        }
-                        if (largeText) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text(row.stringsPreview, style = InstrumentType.readoutSmall)
-                                if (!row.builtIn) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End,
-                                    ) {
-                                        RowEditDelete(row, onEditTuning, onDeleteTuning)
-                                    }
-                                }
-                            }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = row.stringsPreview,
-                                    style = InstrumentType.readoutSmall,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (!row.builtIn) {
-                                    RowEditDelete(row, onEditTuning, onDeleteTuning)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (largeText) {
-                // Three equal-width actions cannot show full labels at
-                // 2x text; use one full-width action + a two-up row.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    SheetAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.fillMaxWidth())
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        SheetAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                        SheetAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    SheetAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.weight(1f))
-                    SheetAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                    SheetAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-                }
-            }
-            state.importResultText?.let { message ->
-                Text(
-                    text = message,
-                    style = InstrumentType.readoutSmall,
-                    color = p.brassLight,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .testTag("resonance.sheet.importResult")
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            }
         }
+        InstrumentKey(
+            onClick = onOpenSheet,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("resonance.openSheet"),
+        ) { Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel) }
+        Spacer(Modifier.height(14.dp))
     }
-}
-
-@Composable
-private fun RowEditDelete(
-    row: PresetRowUi,
-    onEditTuning: (String) -> Unit,
-    onDeleteTuning: (String) -> Unit,
-) {
-    val p = InstrumentTheme.palette
-    TextButton(
-        onClick = { onEditTuning(row.id) },
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .testTag("resonance.sheet.row.${row.id}.edit")
-            .semantics { contentDescription = "Edit ${row.name}" },
-        contentPadding = PaddingValues(horizontal = 8.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = p.textMuted),
-    ) { Text("Edit") }
-    TextButton(
-        onClick = { onDeleteTuning(row.id) },
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .testTag("resonance.sheet.row.${row.id}.delete")
-            .semantics { contentDescription = "Delete ${row.name}" },
-        contentPadding = PaddingValues(horizontal = 8.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = p.lampRed),
-    ) { Text("Delete") }
 }
 
 @Composable
@@ -718,13 +433,11 @@ private fun MicStatusLine(
             color = if (isError) p.lampRed else p.lampGreen,
             size = 10.dp,
         )
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.size(6.dp))
         Text(
             text = text,
             style = InstrumentType.readoutSmall,
-            modifier = Modifier
-                .weight(1f)
-                .testTag("resonance.micStatus"),
+            modifier = Modifier.testTag("resonance.micStatus"),
         )
     }
 }
@@ -744,24 +457,6 @@ private fun ConcertPitchText(
                     "Reference pitch A4 ${hz.toIntIfWholeOrOneDecimal()} hertz"
             },
     )
-}
-
-@Composable
-private fun SheetAction(
-    text: String,
-    tag: String,
-    onClick: () -> Unit,
-    modifier: Modifier,
-) {
-    InstrumentKey(
-        onClick = onClick,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .testTag(tag),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-    ) {
-        Text(text, style = InstrumentType.keyLabel, maxLines = 1, softWrap = false)
-    }
 }
 
 private fun Double.toIntIfWholeOrOneDecimal(): String {

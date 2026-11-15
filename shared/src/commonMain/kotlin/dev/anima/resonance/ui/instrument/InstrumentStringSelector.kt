@@ -22,19 +22,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The tuning's strings as tactile keys on the enclosure. Works for
- * any string count (built-in six, alternate tunings, customs up to 12):
- * narrow surfaces get a 3-per-row grid, wide surfaces a single low-to-high
- * row. A manual lock presses the key in (amber LOCKED); AUTO detection
- * merely lights the matching key (green AUTO). Semantics are unchanged:
- * only a manual lock is `selected`.
+ * The tuning's strings as tactile keys mounted on the faceplate.
+ * Works for any string count (built-in six, alternate tunings, customs up
+ * to 12): narrow surfaces get a 3-per-row grid, wide surfaces a single
+ * low-to-high row. A manual lock raises the key (amber LOCKED); AUTO
+ * detection highlights the matching key (green AUTO). Semantics are
+ * unchanged: only a manual lock is `selected`. No persistent instruction
+ * paragraph — the LOCKED/AUTO labels carry the state.
  */
 @Composable
 fun InstrumentStringSelector(
     targetLabels: List<String>,
     activeStringIndex: Int?,
     stringLocked: Boolean,
-    selectedStringIndex: Int?,
     onStringSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -117,18 +117,5 @@ fun InstrumentStringSelector(
                 }
             }
         }
-        Text(
-            text = if (selectedStringIndex != null) {
-                "Locked to one string. Tap it again for automatic selection."
-            } else {
-                "Tap a string to lock its target; automatic selection is on."
-            },
-            style = InstrumentType.readoutSmall.copy(fontSize = 13.sp),
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp)
-                .testTag("resonance.stringHint"),
-        )
     }
 }

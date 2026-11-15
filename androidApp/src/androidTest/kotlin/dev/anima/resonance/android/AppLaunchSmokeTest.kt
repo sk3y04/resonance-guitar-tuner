@@ -22,10 +22,11 @@ class AppLaunchSmokeTest {
 
     @Test
     fun mainScreenRendersStableSurface() {
-        compose.onNodeWithTag("resonance.scroll").assertExists()
+        // Fixed faceplate (no scroll root at normal sizes); these nodes
+        // exist in every permission/measurement state.
         compose.onNodeWithTag("resonance.preset").assertExists()
         compose.onNodeWithTag("resonance.micStatus").assertExists()
         compose.onNodeWithTag("resonance.mode").assertExists()
-        compose.onNodeWithTag("resonance.openTunings").assertExists()
+        compose.onNodeWithTag("resonance.openSheet").assertExists()
     }
 }

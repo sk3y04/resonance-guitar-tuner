@@ -1,6 +1,18 @@
 # STATE — Resonance
 
-- COMPLETE — instrument refinement pass (2026-11-15). The analog redesign read
+- Phase: 12 COMPLETE — structural faceplate redesign + G3 tracking fix
+  (2026-11-15). G3 dropout fix (DSP, the G3 dropout fix): G3 dropped after ~1 s because
+  sympathetic D3 makes the ~4:3 mix aperiodic and the YIN dip never
+  crossed 0.15; added a guarded sub-threshold recovery + spectral-peak
+  refinement on the recovery path only (normal path untouched), with
+  `G3SympatheticTrackingTest`. Faceplate redesign (UI): one fixed wooden faceplate
+  (enclosure → shared inset faceplate → mounted components), header
+  removed, compact tuning/A4 label area + labeled TUNINGS & SETTINGS key,
+  configuration moved to a scrolling modal `TuningsOverlay` (platform
+  back via a hook, no new dependency); explicit scroll fallback for large
+  fonts. DSP/state/permissions/persistence and the semantic contract
+  preserved. Details: docs/TDD_LOG.md (G3 dropout fix + faceplate redesign).
+- Prior: milestone COMPLETE — instrument refinement pass (2026-11-15). The analog redesign read
   as stacked cards; the refinement makes it one wooden body: horizontal flat-sawn
   walnut grain + tonal bands (deterministic, cached), upper-left lighting,
   thin aged-brass meter frame with larger face / finer needle / cast
@@ -29,7 +41,17 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, instrument refinement): :shared:jvmTest 300/300,
+- Last green checkpoint (2026-11-15, faceplate redesign): :shared:jvmTest 312/312,
+  :shared:testAndroidHostTest 269/269, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). Needle pixel-reverified in the
+  faceplate (radial-continuity isolation): 0¢→+1°, −3¢→−2°, +120¢→+44°
+  (stop), no-signal→−48° (rest). Small phone 360×640 dp fixed, content
+  ends at 93.6% height (no clipping). Device QA NOT run this pass: the
+  ASUS phone dropped off wireless adb and is not rediscoverable; the
+  vision model was rate-limited (429), so UI evidence is headless Skia
+  renders + PIL geometry checks. Real-device verification (mic/screen reader)
+  remains the only external gate.
+- Prior checkpoint (2026-11-15, instrument refinement): :shared:jvmTest 300/300,
   :shared:testAndroidHostTest 258/258, run-demo 5/5, verify.sh 7/7 PASS.
   Needle mapping pixel-reverified after refinement: 0¢→−0.05°,
   −3¢→−2.7°, +120¢→+45.6° (stop), no-signal→−45.7° (rest). Device QA on

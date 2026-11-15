@@ -1001,3 +1001,92 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   vision-model aesthetic reviews are advisory — state claims were
   re-verified against pixels (frame thickness, band heights, needle
   angles) before acting on them.
+
+## G3 dropout under sympathetic D3 (2026-11-15)
+- Report: sustaining G3 detects for ~1 s then loses the note; other
+  notes track normally. Treated as a tracking bug, not UI.
+- Path traced: capture → StreamingAnalyzer (4096 window) → Yin.detect →
+  confidence gate → TunerStateMachine smoothing/stale guard → target.
+  The UI was NOT clearing a good reading; the detector stopped emitting
+  a candidate, then the stale guard correctly dropped the lock.
+- Evidence (development-only probe `DebugP12ProbeTest`, since removed;
+  deterministic synthetic G3+D3 mixes, NOT live guitar): G3 (196 Hz)
+  excites the open D3 (146.8 Hz) sympathetically — G3's 3rd partial
+  (588 Hz) ≈ D3's 4th harmonic (587.3 Hz). The ~4:3 mix is aperiodic, so
+  the YIN autocorrelation dip never crosses the 0.15 absolute threshold.
+  Measured dip depth d′ ≈ 0.180 @ −14 dB, ≈ 0.34 @ −10 dB, ≈ 0.53 @ −6 dB;
+  the −10 dB valley sits at lag 248 (193.5 Hz) vs the true 244.9
+  (196 Hz) — a −20¢ bias from the beating. The octave-fold cannot help
+  (a fourth is not an octave). This is a hypothesis supported by the
+  probe; live-guitar confirmation remains open (real device).
+- Narrowest fix (recovery path ONLY; normal YIN path untouched): in
+  `Yin.detect`, when no dip crosses 0.15, accept the deepest local-min
+  dip < 0.40 under the SAME octave-recovery guards (tonal energy ratio ≥ 10 +
+  fundamental plausibility), then refine its lag with `spectralPeakNear`
+  (±4 %, 40 steps, parabolic interpolation, ~41 DTFT evals) to remove
+  the beating bias. Bound 0.35→0.40 justified by the phase-rotating
+  valley (~0.34–0.38); strict spectral guards keep noise out (noise
+  ratios ~1–2; the −6 dB dominated mix d′≈0.53 is still rejected). No
+  global threshold lowering, no display-hold extension; true silence
+  still clears.
+- Regression: `G3SympatheticTrackingTest` (sustained / decaying /
+  harmonic-rich / small-variation / adjacent-note controls / silence;
+  AUTO and explicit G-string lock). DSP suite 58/58. Committed as the G3 dropout fix,
+  logically separate from the faceplate UI work.
+- Verified: deterministic synthetic signals + host suite. UNVERIFIED:
+  live-guitar G3 sustain (no device/mic available this pass).
+
+## Structural faceplate redesign + configuration overlay (2026-11-15)
+- Report: the refinement still read as separate padded rectangles on brown; the
+  header wasted space and its Tunings button did nothing; calibration
+  clipped at the bottom. Goal: ONE physical instrument, fixed main
+  screen, configuration in an overlay. DSP/state/permissions/persistence
+  untouched (UI-only; committed separately from the G3 dropout fix).
+- Structure (enclosure → faceplate → components):
+  - New `InstrumentFaceplate`: one shared inset walnut surface carrying
+    the meter, readout, mode selector and string keys; cached grain,
+    directional inner lip. Padding lives INSIDE the faceplate/controls,
+    not as repeated outer card margins. Redundant wrappers/borders/gaps
+    removed; components aligned to a common internal grid.
+  - Header removed (RESONANCE brand, top title, dead Tunings button).
+    Tuning name + A4 reference moved to a compact label area on the
+    faceplate; a labeled physical "TUNINGS & SETTINGS" key
+    (`resonance.openSheet`) opens the overlay. System insets preserved.
+  - Main screen FIXED and non-scrolling at normal sizes/default font;
+    height-aware (meter takes the flexible space). Explicit scrollable
+    fallback (`resonance.scroll`) for large accessibility fonts / very
+    constrained layouts — never clipped. Inline sheet + persistent
+    instructional paragraphs removed from the main layout.
+- New `TuningsOverlay` (modal, scrolls, scrim + obvious Close key):
+  tuning selection, current tuning/string notes, favorites, A4 fine +
+  coarse steppers, accidentals, new/import/export, custom editor. The
+  instrument stays in place behind it; audio/tuning state stable across
+  open/close. Platform back via a `platformBack` composable hook — the
+  Android shell wires `androidx.activity.compose.BackHandler` (already a
+  dependency); no-op default elsewhere. No new dependency, no nav
+  framework. Every control wired to existing state/persistence.
+- Components refined as one assembly: meter bezel integrated into the
+  faceplate (no nested card), compact readout connected to the meter,
+  hardware mode selector + string keys with selected/pressed/disabled
+  states and distinct selected-target vs detected-string. Alternate
+  tunings / string counts preserved (no six-string hardcode).
+- Tests updated to the new contract: `TunerScreenUiTest` (fixed
+  faceplate + overlay), `MainScreenUiTest` (opens overlay via the key),
+  `TunerScreenRenderSmokeTest` (fixed + overlay + small-phone + 2x
+  cases), `AppLaunchSmokeTest`. Removed `resonance.stringHint` /
+  `resonance.openTunings`; added `resonance.openSheet` /
+  `resonance.overlay.*`.
+- Evidence: :shared:jvmTest 312/312, :shared:testAndroidHostTest 269/269,
+  run-demo 5/5, verify.sh 7/7 PASS (offline contract + lint included).
+  Needle pixel-reverified in the faceplate (radial-continuity isolation):
+  0¢→+1°, −3¢→−2°, +120¢→+44° (full-scale stop), no-signal→−48° (rest,
+  not centered) — matches `AnalogMeterGeometryTest` (10/10). Small phone
+  360×640 dp: fixed, content ends at 93.6 % height (122 px bottom
+  margin), nothing clipped. Headless Skia renders of chromatic /
+  instrument / overlay / small-phone / 2x all non-blank.
+- Known limits: the ASUS device dropped off wireless adb and is not
+  rediscoverable this pass, so on-device rendering and live-mic G3 are
+  UNVERIFIED (headless renders + host suite stand in). The vision model
+  was rate-limited (429), so aesthetic review used PIL geometry checks
+  rather than a model verdict. The real-device mic/screen-reader pass
+  remains the only external gate.
