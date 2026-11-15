@@ -92,7 +92,7 @@ object InstrumentType {
         ).tabularNumerals
     val readoutSmall: TextStyle
         @Composable get() = TextStyle(
-            fontSize = 14.sp,
+            fontSize = 15.sp,
             color = InstrumentTheme.palette.textMuted,
         ).tabularNumerals
     val keyLabel: TextStyle

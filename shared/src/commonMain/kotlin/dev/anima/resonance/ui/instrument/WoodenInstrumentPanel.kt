@@ -31,7 +31,7 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
         modifier = modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h, count = 42)
+            val streaks = WoodGrain.streaks(seed = 20261115L, width = w, height = h, count = 52)
             val grainPaths = streaks.map { s ->
                 Path().apply {
                     val step = 24f
@@ -44,9 +44,11 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                 }
             }
             val bands = WoodGrain.bands(seed = 20261115L, height = h)
+            // A quieter, more uniform base so the grain figure (not a
+            // brown gradient) carries the walnut; directional light is overlaid.
             val baseBrush = Brush.verticalGradient(
-                0f to p.walnutLight,
-                0.5f to p.walnut,
+                0f to p.walnut,
+                0.55f to p.walnut,
                 1f to p.walnutDeep,
             )
             // Consistent room lighting: soft highlight upper-left, shade
@@ -88,7 +90,7 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.5f to tone.copy(alpha = (b.alpha * 1.3f).coerceAtMost(0.18f)),
+                            0.5f to tone.copy(alpha = (b.alpha * 1.5f).coerceAtMost(0.2f)),
                             1f to Color.Transparent,
                             startY = b.centerY - b.halfHeight,
                             endY = b.centerY + b.halfHeight,
@@ -97,13 +99,13 @@ fun WoodenEnclosure(modifier: Modifier = Modifier) {
                         size = Size(w, b.halfHeight * 2f),
                     )
                 }
-                // Fine horizontal figure — a touch stronger on the exposed
+                // Fine horizontal figure — restrained but present on the exposed
                 // rails so the body reads as walnut, not a flat brown fill.
                 grainPaths.forEachIndexed { i, path ->
                     drawPath(
                         path = path,
                         color = if (i % 3 == 0) p.grainLight else p.grainDark,
-                        alpha = (streaks[i].alpha * 1.5f).coerceAtMost(0.34f),
+                        alpha = (streaks[i].alpha * 1.9f).coerceAtMost(0.4f),
                         style = Stroke(width = streaks[i].thickness * 1.15f),
                     )
                 }

@@ -105,6 +105,8 @@ object MainScreenUi {
             !granted -> "Microphone off"
             captureError -> "Microphone unavailable"
             !captureActive -> "Microphone off"
+            // Distinguish a live reading from mere microphone activity.
+            reliable -> "Tracking"
             else -> "Listening"
         }
 

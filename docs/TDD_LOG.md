@@ -1202,3 +1202,57 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   + tests stand in; the bottom enclosure margin is larger in the no-inset
   headless render and in chromatic mode (no string grid). The real-device
   mic/screen-reader and live-guitar G3 confirmation remain open.
+
+## Restrained finishing pass: proportions / legibility / materials / status (2026-11-15)
+- Report: structure acceptable; do not redesign or touch the overlay. Polish
+  proportions, phone-size legibility, walnut material, and presentation-state
+  consistency. DSP/mic/persistence untouched; G3 fix + tests preserved.
+- Status wording (TDD): `P15StatusWordingTest` (4) RED→GREEN. `micStatusText`
+  now returns "Tracking" when a reliable reading exists (`reliable` branch in
+  MainScreenUi), "Listening" while waiting/lost/weak, "Microphone off" /
+  "Microphone unavailable" for off/error. Mic activity is no longer conflated
+  with pitch tracking; "In tune" appears only in the readout (directionText),
+  never repeated in the strip. `MicStatusLine` lamp lit for Listening OR
+  Tracking. Existing "Listening" tests (no-pitch snapshots) still pass.
+- Readout rebalance: `MeterAssemblyLayout.MAX_READOUT_DP` 200→104 (compact,
+  content-sized); `compute` gained a `readoutCapDp` param. `MeterAssembly`
+  fills its slot exactly (minus the divider) and sizes the note glyph
+  (readoutH×0.74, capped 78sp) so the note stays prominent without a tall
+  empty panel; readout padding 8→6dp. Geometry stable listening↔tracking.
+  Layout-test fill fixtures moved within the new cap (240/270/300 at w=316).
+- Surplus to useful proportions, not gaps: instrument mode gives the string
+  grid `weight(1f)` with `InstrumentStringSelector(fillHeight=true)` — keys
+  grow centred in their row up to a 104dp cap (min 72dp), absorbing spare
+  height as comfortable targets, leaving ONE fixed modest 8dp bottom margin
+  (~37dp below the settings key, down from ~113dp). Chromatic mode (no string
+  grid) uses a bounded spacious readout (cap 260dp, big centred note when
+  tracking) plus ONE wood enclosure margin below (`weight`); both assemblies
+  are bounded by `availableAssemblyH` so short/wide viewports never overflow
+  (a fixed-height chromatic assembly initially pushed the settings key off
+  the 1024×768dp test viewport — caught by the UI suite, fixed by the bound).
+  No distributed internal gaps.
+- Legibility at phone size: meter numerals 13→14dp SemiBold, label ring
+  radius+14; major ticks 15dp/2dp distinct from minor 9dp/1.1dp (zero
+  18dp/2.6dp). String note names 17sp lead over muted 9sp numbers; inactive
+  names ivory 0.88α. Frequency `readoutSmall` 14→15sp; direction status
+  15→16sp; AUTO/LOCKED 9→10sp; unselected mode label ivory 0.78→0.9α (engaged
+  key still proud + lit amber jewel + full ivory). Hierarchy preserved:
+  note → meter/cents → string/mode controls → secondary info.
+- Walnut material: `WoodenEnclosure` base gradient quieted (uniform walnut →
+  walnutDeep) so the grain figure carries the wood; grain streaks 42→52,
+  alpha ×1.9 cap 0.4; tonal bands ×1.5 cap 0.2. Still cached in drawWithCache
+  (fixed seed, never regenerated per pitch tick); grain never over the ivory
+  face or text; upper-left lighting + recessed inner edge unchanged.
+- Evidence: :shared:jvmTest 332/332, :shared:testAndroidHostTest 289/289,
+  run-demo 5/5, verify.sh 7/7 PASS. Vision (instrument render): wood grain
+  reads, readout compact/balanced, gaps small/consistent, string names
+  prominent, status "Tracking". Pixel: readout ~104dp content-sized; bottom
+  margin ~37dp fixed; small phone 360×640dp unclipped (gauge 177dp, all six
+  keys + settings visible); large-text scroll fallback; no-signal needle
+  hidden (radial span 3 vs 19–31 tracking), tracking maps 0¢→−1°, −3¢→−3°,
+  +120¢→+45° stop. APK installed on the ASUS phone.
+- Known limits: vision intermittently rate-limited (429) — small-phone /
+  chromatic aesthetic verdicts rely on pixel checks + the instrument-render
+  review. On-device capture still blocked by the secure lock screen. The
+  real-device mic/screen-reader and live-guitar G3 confirmation remain open;
+  this visual pass claims nothing about G3 or tuning accuracy.

@@ -49,18 +49,20 @@ fun MeterAssembly(
     onRetryCapture: () -> Unit,
     modifier: Modifier = Modifier,
     availableHeightDp: Float = 4096f,
+    readoutCapDp: Float = MeterAssemblyLayout.MAX_READOUT_DP,
 ) {
     val p = InstrumentTheme.palette
     val fontScale = LocalDensity.current.fontScale
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        // Height-aware: the gauge shrinks to fit short screens and stays at
-        // its natural arc-filling aspect on tall ones; the readout is compact.
-        // The host gives any surplus height to the lower controls.
-        val spec = MeterAssemblyLayout.compute(maxWidth.value, availableHeightDp)
+        // Height-aware: the gauge keeps a natural arc-filling aspect; the
+        // readout is compact. Surplus goes to the string keys (instrument) or
+        // the readout (chromatic). Fill the slot exactly (minus the divider).
+        val targetH = minOf(availableHeightDp, maxHeight.value)
+        val spec = MeterAssemblyLayout.compute(maxWidth.value, targetH - 1.5f, readoutCapDp)
         val gaugeH = spec.gaugeHeightDp.dp
         val readoutH = spec.readoutHeightDp.dp
-        val noteSp = (readoutH.value * 0.55f).coerceIn(40f, 96f)
-        val noteSize = (noteSp / fontScale).coerceAtMost(96f).sp
+        val noteSp = (readoutH.value * 0.74f).coerceIn(40f, 78f)
+        val noteSize = (noteSp / fontScale).coerceAtMost(78f).sp
         val centsSize = (noteSp * 0.45f / fontScale).coerceAtMost(34f).sp
 
         Box(

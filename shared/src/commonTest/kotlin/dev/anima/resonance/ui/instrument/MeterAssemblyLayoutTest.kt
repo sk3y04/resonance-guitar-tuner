@@ -18,7 +18,7 @@ class MeterAssemblyLayoutTest {
 
     @Test
     fun fillsTheSlotExactlyWithinCapacity() {
-        for (h in listOf(260f, 300f, 320f)) {
+        for (h in listOf(240f, 270f, 300f)) {
             val s = MeterAssemblyLayout.compute(w, h)
             assertEquals(h, s.gaugeHeightDp + s.readoutHeightDp, 0.01f, "must fill slot at h=$h")
         }

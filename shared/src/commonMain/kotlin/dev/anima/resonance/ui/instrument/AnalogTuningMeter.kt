@@ -143,10 +143,10 @@ fun AnalogTuningMeter(
             val spotR = (faceRight - faceLeft) * 0.30f
 
             // Scale labels: fixed dp keeps geometry stable at any font scale.
-            // Enlarged for readability (the meter is the centerpiece).
+            // Larger, crisper numerals (the meter is the centerpiece).
             val labelStyle = TextStyle(
-                fontSize = 13.dp.toSp(),
-                fontWeight = FontWeight.Medium,
+                fontSize = 14.dp.toSp(),
+                fontWeight = FontWeight.SemiBold,
                 color = p.ink,
             )
             val zeroStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
@@ -163,7 +163,7 @@ fun AnalogTuningMeter(
                 val layout = measurer.measure(text, style)
                 Mark(
                     text, style,
-                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + 13.dp.toPx()),
+                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + 14.dp.toPx()),
                     layout.size.width / 2f, layout.size.height / 2f,
                 )
             }
@@ -174,17 +174,17 @@ fun AnalogTuningMeter(
             val ticks = (-50..50 step 5).map { cents ->
                 val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
                 val len = when {
-                    cents == 0 -> 16.dp.toPx()
-                    cents % 10 == 0 -> 13.dp.toPx()
-                    else -> 8.dp.toPx()
+                    cents == 0 -> 18.dp.toPx()
+                    cents % 10 == 0 -> 15.dp.toPx()
+                    else -> 9.dp.toPx()
                 }
                 Tick(
                     start = at(a, radius),
                     end = at(a, radius - len),
                     width = when {
-                        cents == 0 -> 2.4.dp.toPx()
-                        cents % 10 == 0 -> 1.8.dp.toPx()
-                        else -> 1.dp.toPx()
+                        cents == 0 -> 2.6.dp.toPx()
+                        cents % 10 == 0 -> 2.dp.toPx()
+                        else -> 1.1.dp.toPx()
                     },
                     color = if (cents % 10 == 0) p.ink else p.inkSoft,
                 )

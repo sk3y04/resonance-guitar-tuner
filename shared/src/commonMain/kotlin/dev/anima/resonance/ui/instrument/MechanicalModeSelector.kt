@@ -86,7 +86,7 @@ private fun ModeKey(
             style = InstrumentType.keyLabel.copy(
                 // Idle mode label stays legible; the engaged key is
                 // unmistakable (proud cap + lit amber jewel + full ivory).
-                color = if (selected) p.ivory else p.ivory.copy(alpha = 0.78f),
+                color = if (selected) p.ivory else p.ivory.copy(alpha = 0.9f),
             ),
             maxLines = 1,
         )

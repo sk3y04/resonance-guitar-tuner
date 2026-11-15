@@ -1,6 +1,28 @@
 # STATE — Resonance
 
-- Phase: 14 COMPLETE — focused layout + no-signal correction (2026-11-15).
+- Phase: 15 COMPLETE — restrained finishing pass: proportions, legibility,
+  materials, status consistency (2026-11-15). No redesign; overlay structure
+  untouched; DSP/mic/persistence untouched.
+  (1) Readout rebalanced to content size (`MeterAssemblyLayout.MAX_READOUT_DP`
+  200→104, note glyph capped 78sp) — no tall empty panel; geometry stable
+  listening↔tracking. Spare height now grows the STRING KEYS (instrument,
+  `InstrumentStringSelector` fillHeight, keys centred in their row up to a
+  104dp cap) leaving ONE modest fixed 8dp bottom margin; chromatic (no grid)
+  uses a bounded spacious readout (cap 260dp) plus ONE wood enclosure margin.
+  Both assemblies bounded by available height so no viewport overflows.
+  (2) Legibility at phone size: meter numerals 13→14dp SemiBold, longer major
+  ticks (15dp) distinct from minor (9dp); string note names 17sp lead over
+  muted 9sp numbers; frequency 15sp, direction status 16sp, AUTO/LOCKED 10sp;
+  unselected mode label brighter (ivory 0.9α) with the engaged key still
+  unmistakable. (3) Status strip meaningful: `micStatusText` now "Tracking"
+  for a live reading vs "Listening" while waiting (mic activity ≠ pitch
+  tracking); "In tune" lives only in the readout, not repeated in the strip
+  (`P15StatusWordingTest` 4). (4) Walnut: quieter uniform base + stronger
+  cached grain (52 streaks) so the body reads as wood, not a brown gradient;
+  grain never over ivory/text, no per-tick redraw. Settings overlay, alternate
+  tunings, string counts, calibration, favorites, import/export, persistence
+  and the semantic contract all preserved. Details: docs/TDD_LOG.md (finishing pass).
+- Prior: milestone COMPLETE — focused layout + no-signal correction (2026-11-15).
   Root cause of the recurring empty bands found in the source: the controls
   sat in a `Column(weight(1f))` with TWO `Spacer(weight(1f))` that distributed
   all leftover height as gaps between groups (TunerScreen.kt). Replaced with
@@ -72,7 +94,21 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, layout/no-signal): :shared:jvmTest 328/328,
+- Last green checkpoint (2026-11-15, finishing pass): :shared:jvmTest 332/332,
+  :shared:testAndroidHostTest 289/289, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). New tests: P15StatusWordingTest 4
+  (Tracking vs Listening, no repeated "In tune", mic off/error distinct).
+  Vision confirmed the instrument render: wood grain reads, readout compact
+  and balanced, group gaps small/consistent, string names prominent over
+  numbers, status strip "Tracking". Pixel-verified: readout content-sized
+  (~104dp), bottom enclosure margin modest (~37dp below the settings key,
+  fixed — no oversized footer), small phone 360×640dp unclipped with all six
+  string keys + settings visible, large-text uses the scroll fallback.
+  No-signal needle still hidden (radial span 3 vs 19–31 tracking). APK
+  installed on the ASUS phone; on-device capture still blocked by the secure
+  lock screen (headless renders + tests stand in). Real-device verification (mic/
+  screen reader) + live-guitar G3 remain unverified.
+- Prior checkpoint (2026-11-15, layout/no-signal): :shared:jvmTest 328/328,
   :shared:testAndroidHostTest 285/285, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). New tests: needleShown (geometry) +
   NoSignalPresentationTest 4 (concise no-signal messages). No-signal needle

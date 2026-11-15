@@ -62,7 +62,7 @@ fun NoteReadout(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (fillHeight) Modifier.fillMaxSize() else Modifier)
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Detected note + octave. A muted dash placeholder keeps the strip
@@ -226,7 +226,7 @@ fun TuningStatusIndicator(
         Text(
             text = state.directionText ?: "—",
             style = InstrumentType.keyLabel.copy(
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 color = if (state.inTune) p.lampGreen else p.ivory,
             ),
             modifier = Modifier

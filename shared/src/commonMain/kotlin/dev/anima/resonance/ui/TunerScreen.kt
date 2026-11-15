@@ -47,6 +47,7 @@ import dev.anima.resonance.ui.instrument.InstrumentType
 import dev.anima.resonance.ui.instrument.JewelLamp
 import dev.anima.resonance.ui.instrument.MechanicalModeSelector
 import dev.anima.resonance.ui.instrument.MeterAssembly
+import dev.anima.resonance.ui.instrument.MeterAssemblyLayout
 import dev.anima.resonance.ui.instrument.NoteReadout
 import dev.anima.resonance.ui.instrument.RecessedPanel
 import dev.anima.resonance.ui.instrument.WoodenEnclosure
@@ -120,16 +121,17 @@ fun TunerScreen(
                             (state.targetLabels.size + 2) / 3
                         else -> 1
                     }
-                    val stringsH = if (stringRows == 0) 0.dp else (stringRows * 58 + (stringRows - 1) * 6).dp
-                    // Continuous composition — status, meter+readout, mode,
-                    // strings, settings, each at its natural height with small
-                    // consistent gaps. Surplus height goes to the meter assembly
-                    // (up to its arc-filling limit); whatever remains is ONE
-                    // bottom enclosure margin, never distributed internal gaps.
+                    val stringsH = if (stringRows == 0) 0.dp else (stringRows * 76 + (stringRows - 1) * 6).dp
+                    val hasStrings = state.targetLabels.isNotEmpty()
+                    // Continuous composition with small consistent gaps. The
+                    // meter assembly is compact (arc-filling gauge + content-sized
+                    // readout); spare height grows the readout in chromatic mode
+                    // (no string grid) or remains ONE modest bottom enclosure
+                    // margin in instrument mode — never distributed internal gaps.
                     val controlsNaturalH = 56.dp + stringsH + 48.dp
                     val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 50.dp
-                    // Main-screen guarantee: fixed layout when the gauge has
-                    // real room at normal scale; otherwise a scrolling fallback.
+                    // Main-screen guarantee: fixed layout when the gauge has real
+                    // room at normal scale; otherwise a scrolling fallback.
                     val fallback = largeText || availableAssemblyH < 120.dp
 
                     if (fallback) {
@@ -152,8 +154,6 @@ fun TunerScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             LabelStrip(state)
-                            // The measurement assembly (gauge + readout) sits at
-                            // its natural height directly under the label strip.
                             if (!granted || state.captureError) {
                                 CapturePanel(
                                     state = state,
@@ -162,29 +162,50 @@ fun TunerScreen(
                                     onRetryCapture = onRetryCapture,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                            } else {
+                            } else if (hasStrings) {
+                                // Instrument: compact assembly at its natural height;
+                                // the string grid keeps comfortable fixed-height keys.
                                 MeterAssembly(
                                     state = state,
                                     largeText = false,
                                     onRetryCapture = onRetryCapture,
-                                    availableHeightDp = availableAssemblyH.value,
+                                    availableHeightDp = minOf(
+                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 105.5f,
+                                        availableAssemblyH.value,
+                                    ),
+                                    readoutCapDp = MeterAssemblyLayout.MAX_READOUT_DP,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                // Chromatic (no string grid): a deliberate, bounded
+                                // spacious readout (big centred note when tracking);
+                                // surplus beyond it is ONE wood enclosure margin below.
+                                MeterAssembly(
+                                    state = state,
+                                    largeText = false,
+                                    onRetryCapture = onRetryCapture,
+                                    availableHeightDp = minOf(
+                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 261.5f,
+                                        availableAssemblyH.value,
+                                    ),
+                                    readoutCapDp = 260f,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            // Controls at their natural heights; the outer
-                            // spacedBy gives small, consistent group gaps.
                             MechanicalModeSelector(
                                 mode = state.mode,
                                 onModeSelect = onModeSelect,
                                 largeText = false,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            if (state.targetLabels.isNotEmpty()) {
+                            if (hasStrings) {
                                 InstrumentStringSelector(
                                     targetLabels = state.targetLabels,
                                     activeStringIndex = state.activeStringIndex,
                                     stringLocked = state.stringLocked,
                                     onStringSelect = onStringSelect,
+                                    fillHeight = true,
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
                             }
                             InstrumentKey(
@@ -196,9 +217,14 @@ fun TunerScreen(
                             ) {
                                 Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
                             }
-                            // ONE intentional bottom enclosure margin absorbs the
-                            // surplus height — never distributed internal gaps.
-                            Spacer(Modifier.weight(1f))
+                            // ONE modest bottom enclosure margin. Instrument spare
+                            // height grows the string keys; chromatic (no grid) leaves
+                            // a single wood margin below the bounded readout.
+                            if (hasStrings) {
+                                Spacer(Modifier.height(8.dp))
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
@@ -373,13 +399,13 @@ private fun MicStatusLine(
     modifier: Modifier = Modifier,
 ) {
     val p = InstrumentTheme.palette
-    val listening = text == "Listening" && !isError
+    val active = (text == "Listening" || text == "Tracking") && !isError
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         JewelLamp(
-            lit = listening || isError,
+            lit = active || isError,
             color = if (isError) p.lampRed else p.lampGreen,
             size = 10.dp,
         )
