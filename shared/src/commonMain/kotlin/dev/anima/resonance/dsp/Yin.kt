@@ -68,6 +68,7 @@ class Yin(
 
         // 3) Absolute threshold: first tau below threshold, descend to its local minimum.
         var tauMin = -1
+        var subThresholdRecovered = -1
         outer@ for (tau in minLag..maxLag) {
             if (dNorm[tau] < absoluteThreshold) {
                 var t = tau
@@ -75,9 +76,6 @@ class Yin(
                 tauMin = t
                 break@outer
             }
-        }
-        if (tauMin == -1) {
-            return PitchEstimate(0.0, 0.0)
         }
 
         var gMin = minLag
@@ -102,7 +100,6 @@ class Yin(
         //      55..1200 Hz band (maxLag period = 55.05 Hz).
         // Survivors: the deeper dip wins; comparable depths (within 25%)
         // → the smaller lag (fundamental-first, classic YIN behavior).
-        val candidates = (if (gMin == tauMin) listOf(tauMin) else listOf(tauMin, gMin)).distinct()
         fun isFundamentalCandidate(tau: Int): Boolean {
             val f = sampleRate.toDouble() / tau
             val r = energyRatioAt(frame, f, sampleRate)
@@ -114,6 +111,50 @@ class Yin(
             }
             return true
         }
+        if (tauMin == -1) {
+            // Sub-threshold recovery (sympathetic fourth mixes). A real
+            // G3 pluck excites the open D string (G3's 3rd partial 588 Hz ~=
+            // D3's 4th harmonic 587.3 Hz). The 4:3 mix is not periodic at any
+            // in-band lag, so NO dip crosses [absoluteThreshold] — yet the
+            // played fundamental still leaves a deep, strongly tonal dip
+            // (measured: d'=0.180 at 196 Hz with the sympathetic at -14 dB,
+            // d'~0.34 at -10 dB, spectral ratio ~1000). Returning "no pitch"
+            // here made the state machine drop a clearly audible G3 after
+            // ~1 s. Recover the deepest local-minimum dip under a 0.40 bound
+            // with the SAME spectral guards as the octave-bleed recovery below
+            // (tonal energy ratio >= 10 + fundamental plausibility). The
+            // bound is wider than the octave-recovery 0.35 because the mix's d' valley
+            // bottom rotates with phase around ~0.34-0.38; the strict
+            // spectral guards keep noise out (noise ratios are ~1-2), and a
+            // dominated mix (-6 dB, d'~0.53) still honestly returns nothing.
+            // The long-lag noise trend (global min ~65 Hz in the measured
+            // mix) carries no tonal energy and fails the guards.
+            var recovered = -1
+            var recoveredD = 0.40
+            var tau = minLag + 1
+            while (tau < maxLag) {
+                if (dNorm[tau] < recoveredD &&
+                    dNorm[tau] <= dNorm[tau - 1] && dNorm[tau] < dNorm[tau + 1]
+                ) {
+                    var t = tau
+                    while (t + 1 <= maxLag && dNorm[t + 1] < dNorm[t]) t++
+                    if (dNorm[t] < recoveredD &&
+                        isFundamentalCandidate(t) &&
+                        energyRatioAt(frame, sampleRate.toDouble() / t, sampleRate) >= 10.0
+                    ) {
+                        recovered = t
+                        recoveredD = dNorm[t]
+                    }
+                    tau = t + 1
+                } else {
+                    tau++
+                }
+            }
+            if (recovered == -1) return PitchEstimate(0.0, 0.0)
+            tauMin = recovered
+            subThresholdRecovered = recovered
+        }
+        val candidates = (if (gMin == tauMin) listOf(tauMin) else listOf(tauMin, gMin)).distinct()
         val survivors = candidates.filter { isFundamentalCandidate(it) }
         if (survivors.isEmpty()) {
             // Octave-bleed recovery. The first-crossing/global minimum
@@ -178,7 +219,16 @@ class Yin(
         }
 
         val confidence = (1.0 - dNorm[tauMin]).coerceIn(0.0, 1.0)
-        val frequency = sampleRate / tau
+        // The sub-threshold dip of a sympathetic mix is biased (the
+        // valley bottom sits off the true period — measured lag 248 vs the
+        // true 244.9 at -10 dB, a -20 cent error). The tonal component
+        // itself is clean, so refine the recovered frequency on the local
+        // spectral peak instead of interpolating the distorted dip.
+        val frequency = if (subThresholdRecovered > 0 && tauMin == subThresholdRecovered) {
+            spectralPeakNear(frame, sampleRate.toDouble() / tauMin, sampleRate)
+        } else {
+            sampleRate / tau
+        }
 
         // 5) Spectral guard: the candidate must carry real energy AT that
         //    frequency. Rejects subharmonic artifacts from out-of-band content
@@ -188,6 +238,38 @@ class Yin(
         if (ratio < 0.25) return PitchEstimate(0.0, 0.0)
 
         return PitchEstimate(frequency, confidence)
+    }
+
+    /**
+     * Fine local spectral-peak estimate around [approxHz] (±4%), used
+     * only on the sub-threshold recovery path. A coarse energy grid plus
+     * parabolic interpolation locates the tonal component to well under a
+     * cent even when the YIN dip is distorted by a second (sympathetic)
+     * tone. Cost is ~41 DTFT evaluations — paid only when no lag crossed
+     * the absolute threshold.
+     */
+    private fun spectralPeakNear(frame: FloatArray, approxHz: Double, sampleRate: Int): Double {
+        val lo = approxHz * 0.96
+        val hi = approxHz * 1.04
+        val steps = 40
+        val step = (hi - lo) / steps
+        val e = DoubleArray(steps + 1)
+        var bestI = 0
+        var bestE = -1.0
+        for (i in 0..steps) {
+            e[i] = energyRatioAt(frame, lo + i * step, sampleRate)
+            if (e[i] > bestE) {
+                bestE = e[i]
+                bestI = i
+            }
+        }
+        val delta = if (bestI in 1 until steps) {
+            val denom = e[bestI - 1] - 2.0 * e[bestI] + e[bestI + 1]
+            if (denom != 0.0) (0.5 * (e[bestI - 1] - e[bestI + 1]) / denom).coerceIn(-0.5, 0.5) else 0.0
+        } else {
+            0.0
+        }
+        return lo + (bestI + delta) * step
     }
 
     /**
