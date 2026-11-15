@@ -1,11 +1,21 @@
 package dev.anima.resonance.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import dev.anima.resonance.music.BuiltInTunings
 import dev.anima.resonance.music.Note
 import dev.anima.resonance.presentation.CustomEditorUiState
@@ -57,17 +67,33 @@ class TunerScreenUiTest {
         selectedStringIndex = selected,
     )
 
-    private fun show(state: dev.anima.resonance.presentation.MainScreenUiState) {
+    private fun show(
+        state: dev.anima.resonance.presentation.MainScreenUiState,
+        onModeSelect: (TunerMode) -> Unit = {},
+        onStringSelect: (Int) -> Unit = {},
+        onPermissionCta: () -> Unit = {},
+        onRequestPermission: () -> Unit = {},
+        onToggleFavorite: (String) -> Unit = {},
+        onPresetSelect: (String) -> Unit = {},
+        onConcertStep: (Boolean) -> Unit = {},
+        onConcertStepCoarse: (Boolean) -> Unit = {},
+        onRetryCapture: () -> Unit = {},
+    ) {
         rule.setContent {
             ResonanceTheme {
                 TunerScreen(
                     state = state,
                     onOpenSettings = {},
                     onOpenPresets = {},
-                    onModeToggle = {},
-                    onStringSelect = {},
-                    onPermissionCta = {},
-                    onRetryCapture = {},
+                    onModeSelect = onModeSelect,
+                    onStringSelect = onStringSelect,
+                    onPermissionCta = onPermissionCta,
+                    onRequestPermission = onRequestPermission,
+                    onToggleFavorite = onToggleFavorite,
+                    onPresetSelect = onPresetSelect,
+                    onConcertStep = onConcertStep,
+                    onConcertStepCoarse = onConcertStepCoarse,
+                    onRetryCapture = onRetryCapture,
                 )
             }
         }
@@ -148,15 +174,29 @@ class TunerScreenUiTest {
             selectedPresetId = "custom-1",
         )
         show(state)
-        rule.onNodeWithTag("resonance.sheet").assertIsDisplayed()
-        rule.onNodeWithTag("resonance.sheet.row.standard").assertIsDisplayed()
-        rule.onNodeWithTag("resonance.sheet.concert").assertIsDisplayed()
+        // The instrument surface scrolls as one page; settings live below
+        // the primary reading. Scroll the root (not a nested sheet).
+        val scroll = rule.onNodeWithTag("resonance.scroll")
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.concertError"))
         rule.onNodeWithTag("resonance.sheet.concertError").assertIsDisplayed()
-        // The custom row may sit below the sheet's fold — it must be
-        // reachable by scrolling, and displayed once scrolled into view.
-        rule.onNodeWithTag("resonance.sheet")
-            .performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.row.standard"))
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertIsDisplayed()
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.title").assertExists()
+    }
+
+    @Test
+    fun tuningsShortcutJumpsToTheBelowFoldSheet() {
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            concertLabel = "A4 = 440 Hz",
+        )
+        show(ui)
+        rule.onNodeWithTag("resonance.openTunings").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.openTunings").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("resonance.sheet.title").assertIsDisplayed()
     }
 
     @Test
@@ -176,7 +216,7 @@ class TunerScreenUiTest {
                     state = ui,
                     onOpenSettings = {},
                     onOpenPresets = {},
-                    onModeToggle = {},
+                    onModeSelect = {},
                     onStringSelect = {},
                     onPermissionCta = {},
                     onRetryCapture = {},
@@ -184,10 +224,27 @@ class TunerScreenUiTest {
                 )
             }
         }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.concert.plus"))
         rule.onNodeWithTag("resonance.sheet.concert.minus").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
         assertEquals(listOf(false, true, true), calls, "minus, then plus twice")
+    }
+
+    @Test
+    fun coarseConcertSteppersInvokeTheOneHertzCallback() {
+        val calls = mutableListOf<Boolean>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            concertLabel = "A4 = 440 Hz",
+        )
+        show(ui, onConcertStepCoarse = { calls += it })
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.concert.coarsePlus"))
+        rule.onNodeWithTag("resonance.sheet.concert.coarseMinus").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.coarsePlus").performClick()
+        assertEquals(listOf(false, true), calls)
     }
 
     @Test
@@ -280,7 +337,7 @@ class TunerScreenUiTest {
         val ui = state(status = TunerStatus.LISTENING).copy(presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"))
         rule.setContent {
             ResonanceTheme {
-                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeSelect = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
             }
         }
         rule.onNodeWithTag("resonance.editor").assertDoesNotExist()
@@ -289,11 +346,13 @@ class TunerScreenUiTest {
             ResonanceTheme {
                 TunerScreen(
                     state = ui,
-                    onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
+                    onOpenSettings = {}, onOpenPresets = {}, onModeSelect = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
                     editor = CustomEditorUiState(name = "X", strings = listOf(EditorStringUi("E", 2))),
                 )
             }
         }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.editor"))
         rule.onNodeWithTag("resonance.editor").assertIsDisplayed()
     }
 
@@ -311,14 +370,10 @@ class TunerScreenUiTest {
         )
         rule.setContent {
             ResonanceTheme {
-                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeSelect = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
             }
         }
-        rule.onNodeWithTag("resonance.sheet").assertIsDisplayed()
-        // custom rows + add button sit below the sheet's fold: the add button
-        // is the sheet's last child — scrolling it into view (a 300dp window)
-        // also brings the trailing custom row in, per the preset-sheet pattern.
-        rule.onNodeWithTag("resonance.sheet")
+        rule.onNodeWithTag("resonance.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.add"))
         rule.onNodeWithTag("resonance.sheet.add").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").assertIsDisplayed()
@@ -336,11 +391,13 @@ class TunerScreenUiTest {
             ResonanceTheme {
                 TunerScreen(
                     state = ui,
-                    onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
+                    onOpenSettings = {}, onOpenPresets = {}, onModeSelect = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {},
                     onSpellingSelect = { calls.add(it) },
                 )
             }
         }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.spelling.sharp"))
         rule.onNodeWithTag("resonance.sheet.spelling.sharp").performClick()
         rule.onNodeWithTag("resonance.sheet.spelling.flat").performClick()
         assertEquals(
@@ -357,10 +414,11 @@ class TunerScreenUiTest {
         )
         rule.setContent {
             ResonanceTheme {
-                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeToggle = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
+                TunerScreen(state = ui, onOpenSettings = {}, onOpenPresets = {}, onModeSelect = {}, onStringSelect = {}, onPermissionCta = {}, onRetryCapture = {})
             }
         }
-        rule.onNodeWithTag("resonance.sheet").performScrollToNode(hasTestTag("resonance.sheet.importResult"))
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.importResult"))
         rule.onNodeWithTag("resonance.sheet.importResult").assertIsDisplayed()
     }
 
@@ -369,5 +427,203 @@ class TunerScreenUiTest {
         show(state(status = TunerStatus.LISTENING))
         rule.onNodeWithTag("resonance.sheet").assertDoesNotExist()
         rule.onNodeWithTag("resonance.sheet.row.standard").assertDoesNotExist()
+    }
+
+    @Test
+    fun stringTargetsAreClickableAndExposeSelectionState() {
+        val clicks = mutableListOf<Int>()
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+                selected = 0,
+            ),
+            onStringSelect = { clicks += it },
+        )
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.string.2"))
+        rule.onNodeWithTag("resonance.string.0").assertIsSelected()
+        rule.onNodeWithTag("resonance.string.2").performClick()
+        assertEquals(listOf(2), clicks, "tapping the third string must lock index 2")
+        rule.onNodeWithTag("resonance.string.2")
+            .assertContentDescriptionEquals("String 3, D3")
+    }
+
+    @Test
+    fun autoDetectedStringIsVisibleAndSemanticallyDifferentFromALock() {
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+                selected = null,
+            ),
+        )
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.string.0"))
+        rule.onNodeWithTag("resonance.note")
+            .assertContentDescriptionEquals("Target note E2")
+        rule.onNodeWithTag("resonance.string.0")
+            .assertContentDescriptionEquals("String 1, E2, detected")
+        // AUTO is an observation, not a user selection.
+        rule.onNodeWithTag("resonance.string.0").assertIsNotSelected()
+    }
+
+    @Test
+    fun favoriteToggleIsARealNamedControl() {
+        val clicks = mutableListOf<String>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, emptySet(), "standard"),
+        )
+        show(ui, onToggleFavorite = { clicks += it })
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.row.standard.favorite"))
+        val favorite = rule.onNodeWithTag("resonance.sheet.row.standard.favorite")
+        favorite.assertContentDescriptionEquals("Add Standard to favorites")
+        favorite.performClick()
+        assertEquals(listOf("standard"), clicks)
+    }
+
+    @Test
+    fun softDenialCtaRequestsPermissionWhilePermanentDenialOpensSettings() {
+        val requests = mutableListOf<String>()
+        show(
+            state = state(status = TunerStatus.LISTENING, permission = MicPermissionState.DENIED),
+            onPermissionCta = { requests += "settings" },
+            onRequestPermission = { requests += "request" },
+        )
+        rule.onNodeWithTag("resonance.permission").performClick()
+        assertEquals(listOf("request"), requests)
+
+        rule.setContent {
+            ResonanceTheme {
+                TunerScreen(
+                    state = state(
+                        status = TunerStatus.LISTENING,
+                        permission = MicPermissionState.DENIED_PERMANENT,
+                    ),
+                    onOpenSettings = {},
+                    onOpenPresets = {},
+                    onModeSelect = {},
+                    onStringSelect = {},
+                    onPermissionCta = { requests += "settings" },
+                    onRequestPermission = { requests += "request" },
+                    onRetryCapture = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("resonance.permission").performClick()
+        assertEquals(listOf("request", "settings"), requests)
+    }
+
+    @Test
+    fun modeOptionsExposeAndInvokeExplicitChoices() {
+        val selected = mutableListOf<TunerMode>()
+        show(
+            state = state(status = TunerStatus.LISTENING, mode = TunerMode.CHROMATIC),
+            onModeSelect = { selected += it },
+        )
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.mode.instrument"))
+        rule.onNodeWithTag("resonance.mode.chromatic").assertIsSelected()
+        rule.onNodeWithTag("resonance.mode.instrument").performClick()
+        assertEquals(listOf(TunerMode.INSTRUMENT), selected)
+    }
+
+    @Test
+    fun spokenReadingCombinesNoteAndOctaveAndKeepsSignMeaning() {
+        show(state(status = TunerStatus.MEASURED, note = Note.fromLabel("E2"), cents = -3))
+        rule.onNodeWithTag("resonance.note")
+            .assertContentDescriptionEquals("Detected note E2")
+        rule.onNodeWithTag("resonance.cents")
+            .assertContentDescriptionEquals("3 cents flat, tune up")
+
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("A4"),
+                cents = 0,
+            ).copy(inTune = true, directionText = "In tune"),
+        )
+        rule.onNodeWithTag("resonance.cents")
+            .assertContentDescriptionEquals("In tune")
+    }
+
+    @Test
+    fun smallScreenLargeTextKeepsEveryPrimaryControlReachable() {
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 2f)) {
+                ResonanceTheme {
+                    Box(Modifier.size(width = 320.dp, height = 480.dp)) {
+                        TunerScreen(
+                            state = state(
+                                status = TunerStatus.MEASURED,
+                                note = Note.fromLabel("E2"),
+                                cents = -3,
+                                mode = TunerMode.INSTRUMENT,
+                                preset = BuiltInTunings.standard,
+                                selected = 0,
+                            ).copy(
+                                presetRows = PresetSheetUi.toRows(
+                                    BuiltInTunings.all,
+                                    setOf("standard"),
+                                    "standard",
+                                ),
+                            ),
+                            onOpenSettings = {},
+                            onOpenPresets = {},
+                            onModeSelect = {},
+                            onStringSelect = {},
+                            onPermissionCta = {},
+                            onRetryCapture = {},
+                        )
+                    }
+                }
+            }
+        }
+        val scroll = rule.onNodeWithTag("resonance.scroll")
+        rule.onNodeWithTag("resonance.note").assertIsDisplayed()
+        scroll.performScrollToNode(hasTestTag("resonance.mode.instrument"))
+        rule.onNodeWithTag("resonance.mode.instrument").assertIsDisplayed()
+        scroll.performScrollToNode(hasTestTag("resonance.string.5"))
+        rule.onNodeWithTag("resonance.string.5").assertIsDisplayed()
+        scroll.performScrollToNode(hasTestTag("resonance.sheet.add"))
+        rule.onNodeWithTag("resonance.sheet.add").assertIsDisplayed()
+    }
+
+    @Test
+    fun readingSurfaceNeverShowsAZeroHzOrCenteredZeroForWeakSignal() {
+        val weak = MainScreenUi.toUiState(
+            snapshot = TunerSnapshot(
+                reading = dev.anima.resonance.presentation.TunerReading(
+                    TunerStatus.INSUFFICIENT_SIGNAL,
+                    Note.fromLabel("E2"),
+                    0.0,
+                    0,
+                    dev.anima.resonance.presentation.PitchDirection.FLAT,
+                    false,
+                    0.2,
+                ),
+                rms = 0.001,
+                clipping = false,
+                sampleRate = 48000,
+            ),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+            captureActive = true,
+        )
+        show(weak)
+        rule.onNodeWithTag("resonance.note").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.frequency").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.cents").assertContentDescriptionEquals("No current reading")
+        rule.onNodeWithTag("resonance.direction").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.hint").assertIsDisplayed()
     }
 }

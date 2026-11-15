@@ -46,6 +46,24 @@ class PresetStoreHydrationTest {
     }
 
     @Test
+    fun hydrationDropsBuiltInIdCollisionsDuplicatesAndDanglingFavorites() {
+        val dupA = custom("dup", "Duplicate A", "E2")
+        val dupB = custom("dup", "Duplicate B", "A2")
+        val collidesWithBuiltIn = custom("standard", "Fake Standard", "E2")
+        val store = PresetStore()
+        store.hydrate(
+            customs = listOf(collidesWithBuiltIn, dupA, dupB),
+            favorites = listOf("standard", "dup", "missing"),
+        )
+        assertEquals(1, store.customs().size, "duplicate ids must collapse")
+        assertEquals("dup", store.customs().single().id)
+        assertEquals(BuiltInTunings.standard, store.byId("standard"), "built-in id must win")
+        assertTrue(store.isFavorite("standard"))
+        assertTrue(store.isFavorite("dup"))
+        assertTrue("missing" !in store.favorites(), "dangling favorites are dropped")
+    }
+
+    @Test
     fun editsAfterHydrationKeepStableIds() {
         val c1 = custom("c1", "Open D", "D2", "A2", "D3", "F#3", "A3", "D4")
         val store = PresetStore(initialCustoms = listOf(c1))

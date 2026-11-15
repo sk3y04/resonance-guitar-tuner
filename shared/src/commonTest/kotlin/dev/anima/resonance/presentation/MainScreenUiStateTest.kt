@@ -101,7 +101,9 @@ class MainScreenUiStateTest {
             selectedStringIndex = null,
         )
         assertTrue(s.permissionCtaVisible)
-        assertEquals("App settings", s.permissionCtaText)
+        assertEquals("Open app settings", s.permissionCtaText)
+        assertTrue(s.permissionCtaOpensSettings)
+        assertTrue(s.permissionHint!!.contains("Settings"), "must explain how to recover: ${s.permissionHint}")
         val notDenied = MainScreenUi.toUiState(
             snapshot = snapshot(TunerStatus.LISTENING),
             permission = MicPermissionState.GRANTED,
@@ -173,7 +175,7 @@ class MainScreenUiStateTest {
     }
 
     @Test
-    fun staleShowsHintAndClearsInTune() {
+    fun staleShowsHintAndClearsInTuneAndAllNumericReadouts() {
         val s = MainScreenUi.toUiState(
             snapshot = snapshot(TunerStatus.STALE, Note.fromLabel("A4"), 440.0, 0, inTune = false),
             permission = MicPermissionState.GRANTED,
@@ -183,6 +185,111 @@ class MainScreenUiStateTest {
         )
         assertTrue(s.statusHint!!.contains("signal", ignoreCase = true) || s.statusHint!!.contains("lost", ignoreCase = true), "stale hint, got '${s.statusHint}'")
         assertFalse(s.inTune, "a stale reading must never show a frozen success state")
+        assertNull(s.noteLabel, "a stale note is history, not a current detection")
+        assertNull(s.frequencyText, "stale data must not look like a live measurement")
+        assertNull(s.centsText)
+        assertNull(s.directionText)
+        assertFalse(s.meterActive)
+    }
+
+    @Test
+    fun weakSignalNeverRendersZeroHzOrACenteredZeroCentsReading() {
+        // A real weak frame: the state machine reports no trustworthy pitch
+        // even though it may still remember the previous note.
+        val s = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.INSUFFICIENT_SIGNAL, Note.fromLabel("E2"), 0.0, 0),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+        )
+        assertNull(s.noteLabel, "no current note while the signal is too weak")
+        assertNull(s.frequencyText, "never format 0.0 Hz as a measurement")
+        assertNull(s.centsText, "no fake 0-cent reading")
+        assertNull(s.directionText, "never say 'Tune up' without a measurement")
+        assertFalse(s.meterActive, "the pointer must not sit at the center target")
+        assertFalse(s.inTune)
+        assertTrue(s.statusHint!!.contains("weak", ignoreCase = true) || s.statusHint!!.contains("closer", ignoreCase = true), "got '${s.statusHint}'")
+    }
+
+    @Test
+    fun clippingKeepsTheNoteButSuppressesTheUntrustworthyDeviation() {
+        val s = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.MEASURED, Note.fromLabel("E2"), 82.4, -3, clipping = true),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+        )
+        assertEquals(TunerStatus.CLIPPING, s.status)
+        assertEquals("E", s.noteLabel, "the note class remains useful context")
+        assertNull(s.centsText, "a clipped deviation is not a trustworthy measurement")
+        assertNull(s.frequencyText)
+        assertNull(s.directionText)
+        assertFalse(s.meterActive)
+        assertFalse(s.inTune)
+    }
+
+    @Test
+    fun permissionStatesExplainTheSituationAndOfferTheRightRecovery() {
+        fun state(permission: MicPermissionState) = MainScreenUi.toUiState(
+            snapshot = null,
+            permission = permission,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+        )
+
+        val notRequested = state(MicPermissionState.NOT_REQUESTED)
+        assertTrue(notRequested.permissionCtaVisible, "first run needs a visible way to start")
+        assertEquals("Allow microphone", notRequested.permissionCtaText)
+        assertFalse(notRequested.permissionCtaOpensSettings)
+        assertTrue(notRequested.permissionHint!!.contains("microphone", ignoreCase = true))
+        assertEquals("Microphone off", notRequested.micStatusText)
+
+        val denied = state(MicPermissionState.DENIED)
+        assertTrue(denied.permissionCtaVisible, "a soft denial can be requested again")
+        assertEquals("Allow microphone", denied.permissionCtaText)
+        assertFalse(denied.permissionCtaOpensSettings)
+
+        val permanent = state(MicPermissionState.DENIED_PERMANENT)
+        assertTrue(permanent.permissionCtaVisible)
+        assertEquals("Open app settings", permanent.permissionCtaText)
+        assertTrue(permanent.permissionCtaOpensSettings)
+
+        val granted = state(MicPermissionState.GRANTED)
+        assertFalse(granted.permissionCtaVisible)
+        assertNull(granted.permissionHint)
+        assertEquals("Listening", granted.micStatusText)
+    }
+
+    @Test
+    fun grantedButStoppedCaptureIsNotDescribedAsListening() {
+        val s = MainScreenUi.toUiState(
+            snapshot = null,
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+            captureActive = false,
+        )
+        assertEquals("Microphone off", s.micStatusText)
+        assertTrue(s.statusHint!!.contains("off", ignoreCase = true), "got '${s.statusHint}'")
+        assertNull(s.frequencyText)
+    }
+
+    @Test
+    fun listeningWhileCapturingIsExplicit() {
+        val s = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.LISTENING),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.CHROMATIC,
+            preset = null,
+            selectedStringIndex = null,
+            captureActive = true,
+        )
+        assertEquals("Listening", s.micStatusText)
+        assertTrue(s.statusHint!!.contains("Play", ignoreCase = true))
     }
 
     @Test
@@ -226,6 +333,51 @@ class MainScreenUiStateTest {
         )
         assertEquals(listOf("E2", "A2", "D3", "G3", "B3", "E4"), s.targetLabels, "low-to-high order with octaves")
         assertEquals(0, s.selectedStringIndex)
+    }
+
+    @Test
+    fun instrumentAutoExposesTheDetectedStringWithoutClaimingALock() {
+        val auto = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.MEASURED, Note.fromLabel("E2"), 82.4, -3),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.standard,
+            selectedStringIndex = null,
+        )
+        assertEquals(0, auto.activeStringIndex, "AUTO must show which string it is comparing")
+        assertFalse(auto.stringLocked)
+        assertNull(auto.selectedStringIndex)
+
+        val locked = MainScreenUi.toUiState(
+            snapshot = snapshot(TunerStatus.MEASURED, Note.fromLabel("E2"), 82.4, -3),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.standard,
+            selectedStringIndex = 2,
+        )
+        assertEquals(2, locked.activeStringIndex, "a manual lock overrides the AUTO target")
+        assertTrue(locked.stringLocked)
+    }
+
+    @Test
+    fun aReadingFarFromTheLockedTargetSuggestsCheckingTheString() {
+        val s = MainScreenUi.toUiState(
+            snapshot = snapshot(
+                TunerStatus.MEASURED,
+                Note.fromLabel("E2"),
+                freq = 196.0,
+                cents = 1500,
+                direction = PitchDirection.SHARP,
+            ),
+            permission = MicPermissionState.GRANTED,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.standard,
+            selectedStringIndex = 0,
+        )
+        assertEquals(0, s.activeStringIndex)
+        assertTrue(s.statusHint!!.contains("target string", ignoreCase = true), "got '${s.statusHint}'")
+        // The signed deviation is still preserved for the meter/description.
+        assertEquals("+1500", s.centsText)
     }
 
     @Test

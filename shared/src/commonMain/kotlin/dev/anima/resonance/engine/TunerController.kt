@@ -45,6 +45,15 @@ class TunerController(
         permission = state
     }
 
+    /**
+     * Loads persisted settings/tunings without touching the microphone.
+     * The shell calls this at startup so a permanently denied user still
+     * sees their real mode, tuning, reference pitch and custom library.
+     */
+    suspend fun load() {
+        engine.load()
+    }
+
     /** Opens capture. Denied permission never touches the mic. */
     suspend fun startCapture() {
         if (permission != MicPermissionState.GRANTED) return
@@ -52,8 +61,8 @@ class TunerController(
         engine.start()
     }
 
-    /** Stops capture and clears the screen reading. Idempotent. */
-    suspend fun stopCapture() {
+    /** Stops capture and clears the screen reading. Idempotent (non-suspending). */
+    fun stopCapture() {
         engine.stop()
     }
 
@@ -70,20 +79,31 @@ class TunerController(
 
     /** The complete, immutable screen state, mapped through [MainScreenUi]. */
     fun state(): MainScreenUiState {
-        val settings = engine.currentSettings
+        val data = engine.uiData()
+        val settings = data.settings
         val instrument = settings.mode == TunerMode.INSTRUMENT
+        // Defense in depth: a dangling persisted preset id (custom tuning
+        // deleted elsewhere / interrupted restore) must never restore into an
+        // instrument screen with zero target strings.
+        val preset = if (instrument) {
+            data.presets.firstOrNull { it.id == settings.selectedPresetId }
+                ?: data.presets.firstOrNull { it.id == "standard" }
+        } else {
+            null
+        }
         return MainScreenUi.toUiState(
-            snapshot = if (engine.capturingUi) engine.lastSnapshot else null,
+            snapshot = if (data.capturing) data.snapshot else null,
             permission = permission,
             mode = settings.mode,
-            preset = if (instrument) presets.byId(settings.selectedPresetId) else null,
-            selectedStringIndex = if (instrument) engine.lockedString else null,
+            preset = preset,
+            selectedStringIndex = if (instrument) data.lockedString else null,
             concertPitchHz = settings.concertPitchHz,
-            captureError = engine.captureErrorUi,
-            presets = presets.all(),
-            favoritePresetIds = presets.favorites().toSet(),
+            captureError = data.captureError,
+            presets = data.presets,
+            favoritePresetIds = data.favorites,
             selectedPresetId = settings.selectedPresetId,
             accidentalSpelling = settings.accidentalSpelling,
+            captureActive = data.capturing,
         )
     }
 
@@ -111,13 +131,16 @@ class TunerController(
         engine.selectString(index)
     }
 
+    /** Structured preset lookup for the editor (preserves spelling/octaves). */
+    fun preset(id: String): dev.anima.resonance.music.TuningPreset? = engine.preset(id)
+
     suspend fun setConcertPitch(hz: Double) {
         engine.setConcertPitch(hz)
     }
 
-    /** Steps the A4 reference by ±0.1 Hz (spec §2); clamped at 400..480. */
-    suspend fun stepConcertPitch(up: Boolean) {
-        engine.stepConcertPitch(up)
+    /** Steps the A4 reference (0.1 Hz fine by default); clamped at 400..480. */
+    suspend fun stepConcertPitch(up: Boolean, stepHz: Double = 0.1) {
+        engine.stepConcertPitch(up, stepHz)
     }
 
     /** Sets the enharmonic display preference (display-only, persisted). */

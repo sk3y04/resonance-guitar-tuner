@@ -6,13 +6,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import dev.anima.resonance.engine.TunerController
 import dev.anima.resonance.presentation.CustomEditorUi
 import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.EditorStringUi
-import dev.anima.resonance.presentation.TunerMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -27,9 +31,10 @@ import kotlinx.coroutines.launch
  * (Android Activity) starts/stops capture via the controller lifecycle;
  * [onPermissionCta] is the hook that opens system app settings.
  *
- * The inline settings/preset sheet replaces the old Settings and
- * Tunings buttons — they are hidden here (TunerScreen keeps them, tested,
- * for state-driven rendering).
+ * The inline settings/preset sheet stays on the scrollable
+ * instrument surface; a compact "Tunings" shortcut in the header brings it
+ * into view. The legacy Settings/Tunings buttons remain available to
+ * state-driven tests but are hidden here.
  */
 @Composable
 fun MainScreen(
@@ -37,6 +42,8 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     refreshMs: Long = 50,
     onPermissionCta: () -> Unit = {},
+    /** Re-request a soft-denied microphone permission. */
+    onRequestPermission: () -> Unit = {},
     /** Open the document picker for import (Android shell). */
     onImportPicker: () -> Unit = {},
     /** Open the document picker for export (Android shell). */
@@ -94,20 +101,26 @@ fun MainScreen(
 
     // Custom-tuning editor form state (create: editingId = null).
     var editor by remember(controller) { mutableStateOf<CustomEditorUiState?>(null) }
+    // A custom tuning is durable user data; deletion is confirmed, never a
+    // single mis-tap on a row's trailing action.
+    var pendingDelete by remember(controller) {
+        mutableStateOf<dev.anima.resonance.presentation.PresetRowUi?>(null)
+    }
 
     fun openEditor(id: String? = null) {
-        val row = id?.let { uid -> ui.presetRows.firstOrNull { it.id == uid } }
-        val strings = row?.stringsPreview
-            ?.split(" ")
-            ?.filter { it.isNotBlank() }
-            ?.mapNotNull { label ->
-                Regex("([A-G]#?)(\\d)").find(label)?.let { m ->
-                    EditorStringUi(m.groupValues[1], m.groupValues[2].toInt())
-                }
-            }
+        // Structured source of truth: the visible preview is a formatted
+        // label. Parsing it dropped flat notes (the old regex accepted only
+        // '#') and would rewrite imported tunings on save.
+        val preset = id?.let { controller.preset(it) }
+        // The row could have been deleted between render and tap; opening an
+        // editor for a missing/built-in preset would fail on save.
+        if (id != null && (preset == null || preset.builtIn)) return
+        val strings = preset?.strings
+            ?.map { CustomEditorUi.toEditorString(it.note) }
+            ?.takeIf { it.isNotEmpty() }
             ?: listOf(EditorStringUi("E", 2))
         editor = CustomEditorUiState(
-            name = row?.name ?: "",
+            name = preset?.name ?: "",
             strings = strings,
             editingId = id,
             isEdit = id != null,
@@ -144,11 +157,12 @@ fun MainScreen(
         state = ui,
         onOpenSettings = {},
         onOpenPresets = {},
-        onModeToggle = {
-            val next = if (ui.mode == TunerMode.CHROMATIC) TunerMode.INSTRUMENT else TunerMode.CHROMATIC
-            scope.launch {
-                controller.setMode(next)
-                refresh()
+        onModeSelect = { mode ->
+            if (mode != ui.mode) {
+                scope.launch {
+                    controller.setMode(mode)
+                    refresh()
+                }
             }
         },
         onStringSelect = { index ->
@@ -156,6 +170,7 @@ fun MainScreen(
             refresh()
         },
         onPermissionCta = onPermissionCta,
+        onRequestPermission = onRequestPermission,
         onRetryCapture = {
             scope.launch {
                 controller.retryCapture()
@@ -168,19 +183,28 @@ fun MainScreen(
                 refresh()
             }
         },
+        onToggleFavorite = { id ->
+            scope.launch {
+                controller.toggleFavorite(id)
+                refresh()
+            }
+        },
         onConcertStep = { up ->
             scope.launch {
                 controller.stepConcertPitch(up)
                 refresh()
             }
         },
+        onConcertStepCoarse = { up ->
+            scope.launch {
+                controller.stepConcertPitch(up, stepHz = 1.0)
+                refresh()
+            }
+        },
         onAddTuning = { openEditor() },
         onEditTuning = { openEditor(it) },
         onDeleteTuning = { id ->
-            scope.launch {
-                controller.deleteCustomPreset(id)
-                refresh()
-            }
+            pendingDelete = ui.presetRows.firstOrNull { it.id == id }
         },
         onSpellingSelect = { spelling ->
             scope.launch {
@@ -224,4 +248,33 @@ fun MainScreen(
         showPresetsButton = false,
         modifier = modifier,
     )
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            modifier = Modifier.testTag("resonance.deleteDialog"),
+            title = { Text("Delete tuning?") },
+            text = {
+                Text("Delete \"${target.name}\"? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        scope.launch {
+                            controller.deleteCustomPreset(target.id)
+                            refresh()
+                        }
+                    },
+                    modifier = Modifier.testTag("resonance.deleteDialog.confirm"),
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDelete = null },
+                    modifier = Modifier.testTag("resonance.deleteDialog.cancel"),
+                ) { Text("Cancel") }
+            },
+        )
+    }
 }

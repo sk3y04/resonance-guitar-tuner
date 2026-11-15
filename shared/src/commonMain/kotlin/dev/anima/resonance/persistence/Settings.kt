@@ -43,6 +43,13 @@ interface SettingsRepository {
      * backends override this.
      */
     suspend fun saveCustomPresets(customs: List<TuningPreset>): List<TuningPreset> = customs
+
+    /**
+     * Restores the persisted custom tunings on process start.
+     * Without this the store was hydratable but the production engine never
+     * asked for the snapshot — custom tunings vanished on relaunch.
+     */
+    suspend fun loadCustomPresets(): List<TuningPreset> = emptyList()
 }
 
 /** In-memory implementation (tests, debug, and future platforms). */
@@ -64,6 +71,8 @@ class InMemorySettingsRepository(initial: Settings = Settings.DEFAULTS) : Settin
         this.customs = customs
         return customs
     }
+
+    override suspend fun loadCustomPresets(): List<TuningPreset> = customs
 }
 
 /**
@@ -99,8 +108,35 @@ class PresetStore(
 
     fun isFavorite(id: String): Boolean = id in favorites
 
+    /**
+     * Replaces the in-memory snapshot with the persisted one (process start).
+     * Favorites that point at a deleted/unknown preset are dropped; the ID
+     * counter advances past every restored "custom-N" so future creations
+     * cannot collide. Only call this before user mutations.
+     */
+    fun hydrate(
+        customs: List<dev.anima.resonance.music.TuningPreset>,
+        favorites: List<String>,
+    ) {
+        val builtInIds = builtIns.map { it.id }.toSet()
+        this.customs = customs
+            .filter { it.id !in builtInIds }
+            .distinctBy { it.id }
+            .toMutableList()
+        val known = all().map { it.id }.toSet()
+        this.favorites = favorites.filter { it in known }.toMutableList()
+        idCounter = this.customs
+            .mapNotNull { it.id.removePrefix("custom-").toIntOrNull() }
+            .maxOrNull() ?: 0
+    }
+
     private fun newCustomId(): String {
-        idCounter += 1
+        // Imported presets may legitimately carry a "custom-N" id that the
+        // constructor-time counter never saw. Advance until unique so a new
+        // tuning can never share an id with an imported one.
+        do {
+            idCounter += 1
+        } while (customs.any { it.id == "custom-$idCounter" })
         return "custom-$idCounter"
     }
 

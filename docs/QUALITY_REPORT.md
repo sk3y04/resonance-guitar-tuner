@@ -252,3 +252,46 @@ still the real-device gate). Lint sweep remains gate 4 (`:androidApp:lintDebug`)
   runs; deterministic repro on deck if it recurs).
 - Device gate: on-device run (`./scripts/test-device.sh`) pending a
   device/emulator — the test APK builds as gate 7/7 in the meantime.
+
+## UX/accessibility/QA audit (2026-11-15)
+
+**Verdict:** core acquisition, math, and detector tests were already strong;
+the audit found and fixed user-facing reliability/accessibility gaps around
+them. No DSP algorithm or threshold was changed.
+
+**Verified defects fixed (18):**
+
+| # | Severity | Defect | Evidence / regression |
+|---|---|---|---|
+| 1 | Critical | Custom tunings/favorites persisted but never restored on relaunch | InMemory + real DataStore restart tests |
+| 2 | Critical | No signal/weak/stale/clipping could render `0.0 Hz`, `0 cents`, centered “in tune” styling | `MainScreenUiStateTest`, UI semantics test |
+| 3 | Critical | Capture not stopped in background; pump `Thread` could not restart | `AppTunerLifecycleTest`, `ResonancePumpWorkerTest` |
+| 4 | Critical | Permanent denial could re-prompt; no first-run explanation | `PermissionPolicyTest` |
+| 5 | High | String tiles had no click handler (manual lock impossible) | UI callback + selected-semantics tests |
+| 6 | High | Favorites displayed but no toggle control | UI + controller persistence test |
+| 7 | High | Editing flat tunings dropped strings (sharp-only regex) | pure + end-to-end editor tests |
+| 8 | High | Editing selected tuning left stale targets/lock | controller test |
+| 9 | High | Dangling selected preset restored with no targets | `AppTunerTest` |
+| 10 | High | Android shell never applied `ResonanceTheme`; light theme had unreadable hardcoded colors | contrast tests + inspected renders |
+| 11 | High | Clipped/nested-scroll layout at small widths & 2× text | 320 dp/2× semantics + render smoke |
+| 12 | Medium | Sheet below fold with no affordance; 0.1 Hz-only reference (80 taps to 432) | shortcut + coarse-step tests |
+| 13 | Medium | Delete was single-tap and irreversible | confirmation test |
+| 14 | Medium | Import/export disk I/O on main; unbounded read | `ImportIoTest` |
+| 15 | Medium | Imported `custom-N` IDs could collide with next creation | `PresetStoreTest` |
+| 16 | Medium | Instrumented launch smoke asserted a note in no-signal states | permission-independent assertions |
+| 17 | Low | Missing accessible names for icon-only edit/delete/favorite/steppers, note octave split, decorative dial exposed | semantics tests |
+| 18 | High | Startup restore raced with user mutations (lost custom tuning) | DataStore export host test + persistence mutex |
+
+**Verification:** `:shared:jvmTest` 270/270, `:shared:testAndroidHostTest`
+233/233, demo 5/5, lint green, debug + instrumented test APKs build,
+`verify.sh` 7/7 mandatory locally-available gates PASS. Headless Skia
+renders were produced and inspected at 320/360 dp, 2× font, dark/light
+(`shared/build/render/`).
+
+**Not verified (honest limits):** no emulator/phone: real mic,
+background/interruption behavior on hardware, real screen-reader speech,
+haptics, Bluetooth/headset routing, real screen insets, and on-device
+performance. Audio source is still `VOICE_RECOGNITION` at 48 kHz with no
+sample-rate fallback — device-dependent risks, deliberately not changed
+without measurement. The editor cycles notes upward only (reported as an
+optional enhancement).

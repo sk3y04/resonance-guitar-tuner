@@ -6,43 +6,56 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import dev.anima.resonance.engine.ResonanceViewModel
 import dev.anima.resonance.presentation.MicPermissionState
+import dev.anima.resonance.presentation.PermissionDecision
+import dev.anima.resonance.presentation.PermissionPolicy
 import dev.anima.resonance.ui.MainScreen
+import dev.anima.resonance.ui.ResonanceTheme
 
 /**
- * Android shell entry point. Renders the tested common [MainScreen]
- * against the [ResonanceViewModel] and enforces the microphone permission
+ * Android shell entry point. Renders the tested common [MainScreen] against
+ * the [ResonanceViewModel] and enforces the microphone permission/lifecycle
  * policy:
  *
- *  - granted → start capture;
- *  - not requested yet → request it once;
- *  - denied with rationale → request (the user may change their mind);
- *  - permanently denied (no rationale offered) → DENIED_PERMANENT: the UI
- *    shows the "open app settings" CTA and the app never re-prompts.
+ *  - granted → start capture while the screen is started;
+ *  - first run → explain, then request once from a real button (the flag is
+ *    persisted; Android cannot distinguish "never asked" from "permanently
+ *    denied" without it);
+ *  - soft denial → explain and offer a real "Allow microphone" retry;
+ *  - permanent denial → "Open app settings" and never re-prompt;
+ *  - leaving the foreground stops and releases capture; returning re-checks
+ *    the permission and restarts only when granted.
  *
- * Status: COMPILE-VERIFIED (2026-11-06, first real Android
- * build — assembleDebug + lint green). No device testing yet.
+ * Status: host compile/Robolectric verified; on-device behavior remains
+ * unverified on real hardware (no emulator/phone in this environment).
  */
 class ResonanceApp : ComponentActivity() {
 
     private val viewModel: ResonanceViewModel by viewModels()
 
+    private val permissionRequestedPrefs by lazy {
+        getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
+    }
+
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            markPermissionRequested()
             val controller = viewModel.controller
             if (granted) {
                 controller.onPermissionResult(MicPermissionState.GRANTED)
                 viewModel.start()
             } else {
                 controller.onPermissionResult(
-                    if (shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO))
+                    if (shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
                         MicPermissionState.DENIED
-                    else MicPermissionState.DENIED_PERMANENT
+                    } else {
+                        MicPermissionState.DENIED_PERMANENT
+                    },
                 )
             }
         }
@@ -63,11 +76,13 @@ class ResonanceApp : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            ResonanceTheme {
                 MainScreen(
                     controller = viewModel.controller,
                     onPermissionCta = { openAppSettings() },
+                    onRequestPermission = { requestMicrophonePermission() },
                     onImportPicker = {
                         importLauncher.launch(arrayOf("application/json", "text/plain"))
                     },
@@ -79,28 +94,64 @@ class ResonanceApp : ComponentActivity() {
                 )
             }
         }
-        applyPermissionState(hasRecordAudio())
+    }
+
+    override fun onStart() {
+        super.onStart()
+        refreshPermissionAndCapture()
+    }
+
+    override fun onStop() {
+        // Spec lifecycle rule: capture runs only while the foreground tuner
+        // surface is active. Also releases the AudioRecord before the system
+        // can keep the mic hot in the background.
+        viewModel.stop()
+        super.onStop()
     }
 
     private fun hasRecordAudio(): Boolean =
         checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
+    private fun permissionRequestedBefore(): Boolean =
+        permissionRequestedPrefs.getBoolean(KEY_PERMISSION_REQUESTED, false)
+
+    private fun markPermissionRequested() {
+        permissionRequestedPrefs.edit().putBoolean(KEY_PERMISSION_REQUESTED, true).apply()
+    }
+
+    private fun requestMicrophonePermission() {
+        markPermissionRequested()
+        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
     /**
-     * Maps the platform permission state onto the controller and starts
-     * capture only when granted.
+     * Re-checks the platform permission on every foreground start. The
+     * persisted request flag is what prevents an endless prompt loop after a
+     * permanent denial.
+     *
+     * The first request is deliberately user-initiated: the screen shows an
+     * explanatory banner with a real "Allow microphone" button instead of
+     * throwing a system dialog at a first-time user. Soft denials use the
+     * same retry path; permanent denial routes to app settings.
      */
-    private fun applyPermissionState(granted: Boolean) {
+    private fun refreshPermissionAndCapture() {
         val controller = viewModel.controller
-        if (granted) {
-            controller.onPermissionResult(MicPermissionState.GRANTED)
-            viewModel.start()
-        } else if (shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-            controller.onPermissionResult(MicPermissionState.DENIED)
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
-            // First run without rationale: ask once; afterwards, permanent.
-            controller.onPermissionResult(MicPermissionState.NOT_REQUESTED)
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        val granted = hasRecordAudio()
+        val requestedBefore = permissionRequestedBefore()
+        val rationale = shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        val decision = PermissionPolicy.decide(
+            hasPermission = granted,
+            shouldShowRationale = rationale,
+            requestedBefore = requestedBefore,
+        )
+        controller.onPermissionResult(
+            PermissionPolicy.toMicState(decision, granted, requestedBefore),
+        )
+        when (decision) {
+            PermissionDecision.GRANTED -> viewModel.start()
+            PermissionDecision.REQUEST,
+            PermissionDecision.PERMANENT_DENIAL,
+            -> Unit // the banner CTA requests or opens app settings
         }
     }
 
@@ -110,5 +161,10 @@ class ResonanceApp : ComponentActivity() {
                 data = android.net.Uri.fromParts("package", packageName, null)
             },
         )
+    }
+
+    private companion object {
+        const val PERMISSION_PREFS = "resonance_permissions"
+        const val KEY_PERMISSION_REQUESTED = "mic_requested"
     }
 }

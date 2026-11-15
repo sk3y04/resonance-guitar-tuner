@@ -7,10 +7,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The app launches and renders its main reading surface on a real
- * device (visual gate, in headless semantics form). The
- * asserted nodes exist in EVERY state — with or without the mic
- * permission — so the test is independent of grant order.
+ * The app launches and renders its main surface on a real device
+ * (visual/device gate, in headless semantics form).
+ *
+ * These nodes exist in every permission/measurement state. The note glyph is
+ * deliberately NOT asserted: with no trustworthy pitch it is absent, and
+ * pretending otherwise would hide the exact behavior this audit fixes.
  */
 @RunWith(AndroidJUnit4::class)
 class AppLaunchSmokeTest {
@@ -19,9 +21,11 @@ class AppLaunchSmokeTest {
     val compose = createAndroidComposeRule<ResonanceApp>()
 
     @Test
-    fun mainScreenRenders() {
-        compose.onNodeWithTag("resonance.note").assertExists()
+    fun mainScreenRendersStableSurface() {
+        compose.onNodeWithTag("resonance.scroll").assertExists()
         compose.onNodeWithTag("resonance.preset").assertExists()
+        compose.onNodeWithTag("resonance.micStatus").assertExists()
         compose.onNodeWithTag("resonance.mode").assertExists()
+        compose.onNodeWithTag("resonance.openTunings").assertExists()
     }
 }

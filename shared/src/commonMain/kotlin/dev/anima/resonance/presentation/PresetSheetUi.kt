@@ -56,7 +56,8 @@ object PresetSheetUi {
      * clamped to the product range 400..480 Hz.
      */
     fun stepConcertPitch(hz: Double, up: Boolean, step: Double = 0.1): Double {
-        val tenths = (hz * 10).roundToLong() + if (up) 1L else -1L
+        val deltaTenths = (step * 10).roundToLong().coerceAtLeast(1L)
+        val tenths = (hz * 10).roundToLong() + if (up) deltaTenths else -deltaTenths
         return (tenths.coerceIn((CONCERT_MIN_HZ * 10).toLong(), (CONCERT_MAX_HZ * 10).toLong())) / 10.0
     }
 

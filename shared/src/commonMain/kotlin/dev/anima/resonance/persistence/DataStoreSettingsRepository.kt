@@ -50,7 +50,7 @@ class DataStoreSettingsRepository(
 
     /** Read user-created presets from the persisted JSON payload. */
     @Suppress("UnsafeOptInUsageError")
-    suspend fun loadCustomPresets(): List<TuningPreset> =
+    override suspend fun loadCustomPresets(): List<TuningPreset> =
         decodeCustoms(dataStore.data.first()[CUSTOMS].orEmpty())
 
     /** Replace the persisted customs (durable), preserving settings. */

@@ -1,23 +1,22 @@
 # STATE — Resonance
 
-- Device/SDK follow-up COMPLETE + overnight quality program (all five passes) ALL
-  COMPLETE (2026-11-08). 228/228 jvmTest + 203/203 android host +
-  demo 5/5 + instrumented test APK builds; verify.sh 7/7 gates PASS,
-  including from a fully wiped build tree (clean rebuild).
-  Five real bugs found + fixed, all RED→GREEN: (1) low-E misread at
-  10 dB noise, (2) subharmonic fragility (246.94→123.43 Hz),
-  (3) stale-note display (A1 at +5210¢), (4) two-thread engine race
-  (pump crash in the smoothing ring — fixed with a single engine lock),
-  (5) offline contract now a build gate on the merged manifest.
+- Phase: 8 COMPLETE — UX/accessibility/reliability/QA audit
+  (2026-11-15). 18 verified defects fixed (persistence restore, false
+  zero readings, permission/lifecycle, string lock/favorites, flat-note
+  editing, theme, responsive layout, a11y names, import I/O bounds,
+  ID collisions, destructive delete). Details: docs/TDD_LOG.md (UX/accessibility/QA audit) +
+  docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
+  Headless host renders RESOLVED; real-device verification (mic/
+  screen reader) is the only remaining external gate. No DSP algorithm
+  or threshold changed.
+- Last green checkpoint (2026-11-15): :shared:jvmTest 270/270,
+  :shared:testAndroidHostTest 233/233, run-demo 5/5, lint green,
+  debug APK + instrumented test APK build, verify.sh 7/7 mandatory
+  locally-available gates PASS (device RUN still not run).
+- Prior: device/SDK follow-up COMPLETE + overnight quality program (all five passes)
+  (2026-11-08) fixed five DSP/engine/contract bugs (low-E noise,
+  subharmonic, stale-note display, two-thread race, offline gate).
   Details + measured quality: docs/QUALITY_REPORT.md.
-  Device day = attach device, ./scripts/test-device.sh (test APK builds
-  as gate 7/7 until then).
-- Last green checkpoint: :shared:jvmTest 228/228 (214 + 13 fuzz:
-  FuzzCodec 5 + FuzzStateMachine 4 + FuzzCrud 3 + StaleNoteYield 1 +
-  1 concurrency AppTunerConcurrencyTest);
-  :shared:testAndroidHostTest 203/203 (199 common + 4 Robolectric);
-  run-demo 5/5; verify.sh ALL 7 mandatory gates PASS (device RUN still
-  not run; its test APK is assembled as gate 7).
 - DSP correctness facts (2026-11-07): Yin.detect now selects between the
   first-crossing candidate and the global in-band minimum, validated by
   spectral presence (ratio ≥ 0.25) + fundamental plausibility (no in-band
@@ -61,8 +60,9 @@
   store a TestScope (runTest hangs on DataStore's long-lived jobs); trailing
   lambdas bind to the LAST parameter (design signatures accordingly).
 - UI facts: headless Compose SEMANTICS tests work (skiko native 0.150.2 in
-  jvmTest). Screenshots BLOCKED (no capture API in CMP 1.12.2 desktop test
-  jar — javap-verified).
+  jvmTest). Headless PNG rendering works via the public
+  `ImageComposeScene.render()` API (2026-11-15); no Xvfb/display needed.
+  `TunerScreenRenderSmokeTest` writes dark/light/permission/editor/2x PNGs.
 - Versions: Kotlin 2.4.21, AGP 9.3.1, Gradle 9.7.0 (wrapper, sha256-pinned),
   CMP 1.12.2, CMP-Material3 1.9.0, coroutines 1.11.0, serialization 1.12.0,
   lifecycle 2.11.0, datastore + datastore-preferences 1.3.0, activity-compose
@@ -72,7 +72,7 @@
 - Key paths: repo root; Gradle
   user-local 9.7.0; SDK at ANDROID_HOME (platforms:
   android-36; ANDROID_HOME must be exported for builds).
-- Blockers: Android SDK RESOLVED (first Android build green, see TDD_LOG for
-  the 4 fixes); screenshots/visual inspection only (semantics tests
-  pass headless); no device (only remaining gate).
+- Blockers: Android SDK RESOLVED; headless host renders RESOLVED
+  (ImageComposeScene; real-device visual/audio still pending);
+  no device (only remaining gate).
 - Failing test: none.

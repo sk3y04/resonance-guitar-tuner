@@ -15,11 +15,39 @@ object CustomEditorUi {
 
     val NOTE_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
+    /**
+     * The same pitch classes spelled with flats. The editor preserves the
+     * accidental family of an existing note (an Eb stays Eb while cycling)
+     * instead of silently rewriting imported flat tunings as sharps.
+     */
+    val FLAT_NAMES = listOf("C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B")
+
     /** Cycles the note name forward/backward within the chromatic set. */
     fun nextNoteName(current: String, up: Boolean): String {
-        val i = NOTE_NAMES.indexOf(current)
-        val next = if (up) (i + 1) % NOTE_NAMES.size else (i - 1 + NOTE_NAMES.size) % NOTE_NAMES.size
-        return NOTE_NAMES[next]
+        val palette = if (current.endsWith("b")) FLAT_NAMES else NOTE_NAMES
+        val i = palette.indexOf(current)
+        if (i < 0) {
+            // Defensive: an unknown name starts from its letter's natural.
+            val fallback = NOTE_NAMES.indexOfFirst { it.first() == current.firstOrNull() }
+            return NOTE_NAMES[if (fallback < 0) 0 else fallback]
+        }
+        val next = if (up) (i + 1) % palette.size else (i - 1 + palette.size) % palette.size
+        return palette[next]
+    }
+
+    /**
+     * Converts a domain [Note] into the editor's row while preserving its
+     * accidental spelling and octave. This is the structured path used when
+     * editing a preset; parsing the human-readable "strings preview" was
+     * lossy for flat tunings.
+     */
+    fun toEditorString(note: Note): EditorStringUi {
+        val suffix = when (note.spelling) {
+            dev.anima.resonance.music.Spelling.SHARP -> "#"
+            dev.anima.resonance.music.Spelling.FLAT -> "b"
+            dev.anima.resonance.music.Spelling.NATURAL -> ""
+        }
+        return EditorStringUi(note.letter + suffix, note.octave)
     }
 
     /** Cycles the octave within the product range (guitar strings live 1..4). */

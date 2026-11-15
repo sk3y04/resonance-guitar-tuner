@@ -9,7 +9,10 @@ import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.Settings
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerStatus
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.test.Test
@@ -308,6 +311,75 @@ class AppTunerTest {
         val decoded = dev.anima.resonance.music.TuningPresetJson.decode(payload)
         assertEquals(listOf("Export Me"), decoded.map { it.name })
         assertEquals(listOf("D2", "A2", "D3"), decoded.single().strings.map { it.note.label })
+    }
+
+    @Test
+    fun missingSelectedPresetFallsBackToStandardAndPersists() = runBlocking {
+        // Persisted settings can outlive a custom preset (deleted on another
+        // path, interrupted write, hand-edited file). Instrument mode must not
+        // restore into a state with no target strings.
+        val repo = InMemorySettingsRepository(
+            Settings.DEFAULTS.copy(mode = TunerMode.INSTRUMENT, selectedPresetId = "custom-gone"),
+        )
+        val engine = AppTuner(ToneInput(freq("E", 2)), repo, PresetStore())
+        val applied = engine.start()
+        assertEquals("standard", applied.selectedPresetId, "restore must repair a dangling preset id")
+        assertEquals("standard", repo.get().selectedPresetId, "the repair is persisted, not transient")
+        assertEquals(
+            BuiltInTunings.standard.strings.map { it.note },
+            engine.presetsView.first { it.id == "standard" }.strings.map { it.note },
+        )
+        pump(engine, 12)
+        assertEquals(Note.fromLabel("E2"), engine.lastSnapshot?.reading?.note)
+    }
+
+    @Test
+    fun aMutationCannotBeOverwrittenByAnInFlightStartupRestore() = runTest {
+        // The restore snapshot is captured before the mutation and the
+        // restore is deliberately slow; without a persistence lock the
+        // mutation would be added and then wiped by hydrate().
+        val repo = object : dev.anima.resonance.persistence.SettingsRepository {
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            private var customs = emptyList<dev.anima.resonance.music.TuningPreset>()
+
+            override suspend fun get(): Settings {
+                entered.complete(Unit)
+                release.await()
+                return Settings.DEFAULTS
+            }
+
+            override suspend fun update(transform: (Settings) -> Settings): Settings =
+                transform(Settings.DEFAULTS)
+
+            override suspend fun loadCustomPresets(): List<dev.anima.resonance.music.TuningPreset> =
+                emptyList() // the snapshot that would win without serialization
+
+            override suspend fun saveCustomPresets(
+                customs: List<dev.anima.resonance.music.TuningPreset>,
+            ): List<dev.anima.resonance.music.TuningPreset> {
+                this.customs = customs
+                return customs
+            }
+        }
+        val engine = AppTuner(
+            input = ToneInput(freq("E", 2)),
+            settingsRepo = repo,
+            presets = PresetStore(),
+            persistCustoms = { repo.saveCustomPresets(it) },
+        )
+        val loadJob = launch { engine.load() }
+        repo.entered.await()
+        val createJob = launch {
+            engine.createCustomPreset("Race survivor", listOf(Note.fromLabel("E2")))
+        }
+        repo.release.complete(Unit)
+        loadJob.join()
+        createJob.join()
+        assertTrue(
+            engine.presetsView.any { it.name == "Race survivor" },
+            "a user mutation must be ordered after (or before) hydration, never lost under it",
+        )
     }
 
     @Test

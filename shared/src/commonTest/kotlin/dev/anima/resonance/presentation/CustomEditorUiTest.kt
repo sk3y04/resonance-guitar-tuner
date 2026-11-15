@@ -43,4 +43,27 @@ class CustomEditorUiTest {
         val notes = CustomEditorUi.toNotes(listOf("D2", "F#3"))
         assertEquals(listOf(Note.fromLabel("D2"), Note.fromLabel("F#3")), notes)
     }
+
+    @Test
+    fun flatSpellingsArePreservedWhileCycling() {
+        // A flat tuning must not be silently rewritten as sharps on edit.
+        assertEquals("Eb", CustomEditorUi.toEditorString(Note.fromLabel("Eb2")).noteName)
+        assertEquals(2, CustomEditorUi.toEditorString(Note.fromLabel("Eb2")).octave)
+        assertEquals("E", CustomEditorUi.nextNoteName("Eb", up = true))
+        assertEquals("D", CustomEditorUi.nextNoteName("Eb", up = false))
+        assertEquals("B", CustomEditorUi.nextNoteName("Bb", up = true), "flat palette wraps")
+        assertEquals("A", CustomEditorUi.nextNoteName("Bb", up = false))
+        assertEquals(
+            Note.fromLabel("Eb2"),
+            CustomEditorUi.toNotes(listOf(CustomEditorUi.toEditorString(Note.fromLabel("Eb2")).label)).single(),
+        )
+    }
+
+    @Test
+    fun sharpAndNaturalSpellingsStillUseTheSharpPalette() {
+        assertEquals("C#", CustomEditorUi.nextNoteName("C", up = true))
+        assertEquals("B", CustomEditorUi.nextNoteName("A#", up = true))
+        assertEquals("D#", CustomEditorUi.toEditorString(Note.fromLabel("D#3")).noteName)
+        assertEquals("D", CustomEditorUi.toEditorString(Note.fromLabel("D3")).noteName)
+    }
 }

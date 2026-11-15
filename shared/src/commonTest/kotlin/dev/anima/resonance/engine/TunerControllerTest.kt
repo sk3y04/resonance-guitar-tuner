@@ -137,6 +137,17 @@ class TunerControllerTest {
     }
 
     @Test
+    fun coarseConcertStepPersistsAndClamps() = runBlocking {
+        val (controller, _) = harness()
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        repeat(8) { controller.stepConcertPitch(up = false, stepHz = 1.0) }
+        assertEquals(432.0, controller.state().concertPitchHz, 1e-9, "eight coarse taps reach 432 Hz")
+        repeat(100) { controller.stepConcertPitch(up = false, stepHz = 1.0) }
+        assertEquals(400.0, controller.state().concertPitchHz, 1e-9)
+    }
+
+    @Test
     fun createCustomPresetAppearsInUiStateAndPersists() = runBlocking {
         val repo = InMemorySettingsRepository()
         val controller = TunerController(SilenceInput(), repo, PresetStore())
@@ -145,6 +156,64 @@ class TunerControllerTest {
         val preset = controller.createCustomPreset("UI Custom", listOf(Note.fromLabel("E2"), Note.fromLabel("A2")))
         assertTrue(preset.id in controller.state().presetRows.map { it.id }, "the sheet must list the new custom")
         assertEquals(1, repo.customsSnapshot.size, "customs must persist through the repository")
+    }
+
+    @Test
+    fun relaunchRestoresCustomTuningsFavoritesAndSelection() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val first = TunerController(SilenceInput(), repo, PresetStore())
+        first.onPermissionResult(MicPermissionState.GRANTED)
+        first.startCapture()
+        val preset = first.createCustomPreset(
+            "Persisted Open D",
+            listOf(Note.fromLabel("D2"), Note.fromLabel("A2"), Note.fromLabel("D3")),
+        )
+        first.toggleFavorite(preset.id)
+        first.setMode(TunerMode.INSTRUMENT)
+        first.setPreset(preset.id)
+        first.stopCapture()
+
+        // A new process: fresh store, same repository, no shared objects.
+        val second = TunerController(SilenceInput(), repo, PresetStore())
+        second.onPermissionResult(MicPermissionState.GRANTED)
+        second.startCapture()
+        val ui = second.state()
+        assertEquals("Persisted Open D", ui.presetName, "selected custom tuning must restore")
+        assertEquals(listOf("D2", "A2", "D3"), ui.targetLabels, "its targets must restore")
+        val row = ui.presetRows.single { it.id == preset.id }
+        assertTrue(row.favorite, "the favorite star must survive relaunch")
+        assertEquals(TunerMode.INSTRUMENT, ui.mode)
+    }
+
+    @Test
+    fun editingTheSelectedTuningRetargetsTheTunerAndClearsAStaleLock() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        val preset = controller.createCustomPreset(
+            "Editable",
+            listOf(Note.fromLabel("E2"), Note.fromLabel("A2")),
+        )
+        controller.setMode(TunerMode.INSTRUMENT)
+        controller.setPreset(preset.id)
+        controller.selectString(1)
+        assertEquals(1, controller.state().selectedStringIndex)
+        assertEquals(listOf("E2", "A2"), controller.state().targetLabels)
+
+        controller.editCustomPreset(
+            preset.id,
+            "Editable",
+            listOf(Note.fromLabel("D2"), Note.fromLabel("G2"), Note.fromLabel("D3")),
+        )
+        val ui = controller.state()
+        assertEquals(
+            listOf("D2", "G2", "D3"),
+            ui.targetLabels,
+            "the live target set must follow the edited preset",
+        )
+        assertNull(ui.selectedStringIndex, "a positional lock is meaningless after a retune")
+        assertNull(ui.activeStringIndex)
     }
 
     @Test
@@ -217,6 +286,65 @@ class TunerControllerTest {
         controller.retryCapture()
         assertFalse(controller.state().captureError)
         assertTrue(input.opens >= 2, "retry must reopen the device")
+    }
+
+    @Test
+    fun loadRestoresSettingsAndLibraryWithoutOpeningTheMicrophone() = runBlocking {
+        val input = SilenceInput()
+        val repo = InMemorySettingsRepository(
+            Settings.DEFAULTS.copy(
+                concertPitchHz = 432.0,
+                mode = TunerMode.INSTRUMENT,
+                selectedPresetId = "drop-d",
+                accidentalSpelling = dev.anima.resonance.music.Spelling.FLAT,
+            ),
+        )
+        val controller = TunerController(input, repo, PresetStore())
+        // No permission result, no startCapture — exactly the permanently
+        // denied first screen.
+        controller.load()
+        val ui = controller.state()
+        assertEquals(432.0, ui.concertPitchHz, 1e-9)
+        assertEquals(TunerMode.INSTRUMENT, ui.mode)
+        assertEquals("Drop D", ui.presetName)
+        assertEquals(listOf("D2", "A2", "D3", "G3", "B3", "E4"), ui.targetLabels)
+        assertEquals(dev.anima.resonance.music.Spelling.FLAT, ui.accidentalSpelling)
+        assertFalse(ui.captureActive)
+        assertEquals(0, input.opens, "loading settings must never touch the mic")
+    }
+
+    @Test
+    fun captureActiveAndMicCopyTrackTheRealEngineState() = runBlocking {
+        val (controller, _) = harness()
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        var ui = controller.state()
+        assertFalse(ui.captureActive)
+        assertEquals("Microphone off", ui.micStatusText)
+        assertTrue(ui.statusHint!!.contains("off", ignoreCase = true))
+
+        controller.startCapture()
+        ui = controller.state()
+        assertTrue(ui.captureActive)
+        assertEquals("Listening", ui.micStatusText)
+
+        controller.stopCapture()
+        ui = controller.state()
+        assertFalse(ui.captureActive)
+        assertEquals("Microphone off", ui.micStatusText)
+    }
+
+    @Test
+    fun favoriteToggleFlowsThroughControllerAndPersists() = runBlocking {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        controller.onPermissionResult(MicPermissionState.GRANTED)
+        controller.startCapture()
+        assertFalse(controller.state().presetRows.first { it.id == "standard" }.favorite)
+        assertEquals(true, controller.toggleFavorite("standard"))
+        assertTrue(controller.state().presetRows.first { it.id == "standard" }.favorite)
+        assertTrue(repo.get().favorites.contains("standard"), "favorites must persist")
+        assertEquals(false, controller.toggleFavorite("standard"))
+        assertFalse(controller.state().presetRows.first { it.id == "standard" }.favorite)
     }
 
     @Test

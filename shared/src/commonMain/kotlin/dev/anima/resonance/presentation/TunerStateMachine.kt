@@ -71,11 +71,14 @@ class TunerStateMachine(
             val status = when {
                 !present && last == null -> TunerStatus.LISTENING
                 !present -> if (nowMs - (last ?: nowMs) > staleMs) TunerStatus.STALE else TunerStatus.UNSTABLE
-                else -> TunerStatus.UNSTABLE // signal present but below confidence floor
+                else -> TunerStatus.INSUFFICIENT_SIGNAL // present but below the confidence floor
             }
             return TunerReading(
                 status = status,
-                note = stableNote,
+                // A frame that is not trustworthy is not a current note.
+                // Keeping the previous stable note here invited the UI to
+                // present old data as a live measurement.
+                note = null,
                 frequencyHz = 0.0,
                 cents = 0,
                 direction = PitchDirection.FLAT,

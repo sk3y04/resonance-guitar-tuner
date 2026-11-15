@@ -17,10 +17,20 @@ enum class MicPermissionState { NOT_REQUESTED, GRANTED, DENIED, DENIED_PERMANENT
 data class MainScreenUiState(
     val status: TunerStatus,
     val permission: MicPermissionState,
+    /** True while the engine really has the capture device open. */
+    val captureActive: Boolean,
+    /** Short visible/announced capture state: "Listening", "Microphone off", … */
+    val micStatusText: String,
     val permissionCtaVisible: Boolean,
     val permissionCtaText: String,
+    /** True → the CTA must open app settings; false → request permission again. */
+    val permissionCtaOpensSettings: Boolean,
+    /** Explanatory copy shown in the permission banner (null when granted). */
+    val permissionHint: String?,
     val meterPosition: Double,       // -1..1, 0 = center (clamped)
     val meterClamped: Boolean,       // |cents| beyond the meter's full scale
+    /** False when there is no trustworthy live measurement (silence/stale/clipping). */
+    val meterActive: Boolean,
     val noteLabel: String?,          // large glyph, e.g. "E"
     val octave: String?,             // "2"
     val frequencyText: String?,      // "82.4 Hz" or null (never fake zeros)
@@ -32,7 +42,11 @@ data class MainScreenUiState(
     val mode: TunerMode,
     val presetName: String?,
     val targetLabels: List<String>,  // low-to-high with octaves; empty in chromatic
-    val selectedStringIndex: Int?,   // exposed semantically in the UI
+    val selectedStringIndex: Int?,   // manual lock only; null = AUTO
+    /** The string being compared: manual lock, or the AUTO-detected target. */
+    val activeStringIndex: Int?,
+    /** True when [activeStringIndex] is a manual lock (vs AUTO detection). */
+    val stringLocked: Boolean,
     val concertPitchHz: Double,
     // Settings/preset sheet
     val presetRows: List<PresetRowUi> = emptyList(),

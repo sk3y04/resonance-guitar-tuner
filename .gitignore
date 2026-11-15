@@ -15,3 +15,5 @@ captures/
 artifacts/*.apk
 artifacts/*.aab
 artifacts/logs/
+./
+.gitignore

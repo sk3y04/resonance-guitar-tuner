@@ -138,15 +138,30 @@ class TunerStateMachineTest {
     }
 
     @Test
-    fun lowConfidenceIsTreatedAsNoPitch() {
+    fun lowConfidenceIsItsOwnInsufficientSignalState() {
         val m = machine()
         val r = m.feed(listOf(
             tone(0.0, conf = 0.4) to 0L,
             tone(0.0, conf = 0.4) to 20L,
         ))
         assertNull(r[0].note)
-        assertEquals(TunerStatus.UNSTABLE, r[0].status)
+        assertEquals(
+            TunerStatus.INSUFFICIENT_SIGNAL,
+            r[0].status,
+            "a present-but-untrustworthy pitch must be distinguishable from a note transition",
+        )
         assertEquals(0.0, r[1].frequencyHz, 1e-9)
+    }
+
+    @Test
+    fun lowConfidenceAfterAStableNoteDoesNotKeepANumericReading() {
+        val m = machine()
+        val stable = m.feed(List(5) { i -> tone(0.0) to (i * 20L) }).last()
+        assertEquals(TunerStatus.MEASURED, stable.status)
+        val weak = m.onPitch(PitchEstimate(440.0, 0.2), 200L)
+        assertEquals(TunerStatus.INSUFFICIENT_SIGNAL, weak.status)
+        assertEquals(0.0, weak.frequencyHz, 1e-9, "a weak frame must not expose a measurement")
+        assertNull(weak.note, "a weak frame must not keep presenting the old note as current")
     }
 
     @Test

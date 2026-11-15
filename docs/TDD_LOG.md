@@ -743,3 +743,122 @@ Format: slice ID | test(s) | command | initial failure | final exit | report.
 - Overnight quality program (all five passes): COMPLETE. Remaining
   external-only items: device run and optional visual
   review).
+
+## UX, accessibility, reliability, and QA audit (2026-11-15)
+
+Scope: inspect the shipped Android/shared app rather than re-review the DSP.
+No detector algorithm or tuning threshold was changed. Commands used:
+`./scripts/test-unit.sh`, `:shared:testAndroidHostTest`, `./scripts/run-demo.sh`,
+`./scripts/test-ui.sh`, `./scripts/verify.sh`.
+
+### Verified defects found and fixed (ordered by impact)
+
+1. **Custom tunings and favorites were persisted but never restored.**
+   `PresetStore` had hydration support, but the production engine was
+   constructed with an empty store and `start()` never asked the repository
+   for the saved snapshot. After a relaunch every custom tuning/favorite and
+   the selected custom preset disappeared. Fixed by `SettingsRepository
+   .loadCustomPresets()` + `PresetStore.hydrate()` + `AppTuner.load()`.
+   Regression: `TunerControllerTest.relaunchRestoresCustomTuningsFavoritesAndSelection`,
+   `ResonanceViewModelHostTest.customTuningFavoriteAndSelectionSurviveAViewModelRecreation`
+   (real DataStore + Robolectric).
+2. **Silent/weak/stale/clipping frames could render a false measurement**
+   (`0.0 Hz`, `0 cents`, `Tune up`, centered meter). The mapper keyed only on
+   `note != null`, while the state machine deliberately returns `frequencyHz
+   = 0` when it has no trustworthy pitch. Fixed with an explicit
+   `INSUFFICIENT_SIGNAL` status, `meterActive`, and hiding all numeric output
+   when there is no live measurement; clipping keeps the note class but
+   suppresses the deviation. Regressions: `MainScreenUiStateTest`
+   (weak/stale/clipping), `TunerScreenUiTest.readingSurfaceNeverShowsAZeroHz…`.
+3. **Android foreground/background lifecycle was unsafe.** Capture was never
+   stopped in `onStop`, permission was re-checked only at creation, and the
+   pump was a `Thread` that could only be started once — returning to the
+   foreground after `stop()` would have thrown `IllegalThreadStateException`.
+   Fixed with Activity `onStart`/`onStop`, a reusable parked daemon pump
+   (`ResonancePumpWorker`), start-job cancellation, and an engine capture
+   epoch so a start suspended on settings I/O cannot open the mic after a stop.
+   Tests: `ResonancePumpWorkerTest`, `AppTunerLifecycleTest`.
+4. **Permanent denial could re-prompt on every launch**, and first run had no
+   in-app explanation before the system dialog. Added `PermissionPolicy`
+   (persisted requested flag), user-initiated first request, a visible
+   permission banner with recovery, soft-denial retry, permanent-denial
+   app-settings route, and permission re-check on foreground.
+   Test: `PermissionPolicyTest` (5 cases).
+5. **Manual string lock was impossible**: the string tiles had no click
+   handler. Fixed + exposed AUTO detection vs a manual lock with text and
+   semantics. Tests: `TunerScreenUiTest.stringTargetsAreClickable…`,
+   `autoDetectedString…`; `MainScreenUiStateTest.instrumentAuto…`.
+6. **Favorites were displayed but could not be toggled.** Added real star
+   controls (named for screen readers) and persisted toggling.
+   Tests: `TunerScreenUiTest.favoriteToggleIsARealNamedControl`,
+   `TunerControllerTest.favoriteToggleFlowsThroughControllerAndPersists`.
+7. **Editing a flat custom tuning dropped strings.** The editor rebuilt the
+   form by regex-parsing the formatted preview (`[A-G]#?`), so `Eb2`/`Ab2`
+   vanished. Replaced with structured `controller.preset(id)` +
+   `CustomEditorUi.toEditorString`, and taught the editor to cycle within the
+   flat accidental family. Tests: `CustomEditorUiTest.flatSpellings…`,
+   `MainScreenUiTest.editingAFlatTuning…`.
+8. **Editing the selected tuning did not retarget the live machine** and
+   could leave a positional lock pointing at a changed/removed string.
+   Fixed in `AppTuner.editCustomPreset` (clear lock + reapply only when the
+   edited preset is selected). Test: `editingTheSelectedTuning…`.
+9. **Missing selected preset after restore** produced Instrument mode with no
+   target strings. Fixed at load time (repair to standard and persist) plus a
+   controller mapping fallback. Test: `AppTunerTest.missingSelectedPreset…`,
+   `TunerControllerTest.loadRestores…`.
+10. **Android shell used plain `MaterialTheme`**, not `ResonanceTheme`; the
+    custom light/dark tokens were never active. Fixed, with theme-aware
+    typography/dial colors and a contrast test for both schemes.
+    Tests: `ResonanceThemeContrastTest` (AA text/graphic floors).
+11. **Small-screen/large-text layout defects**: the sheet/editor were clipped
+    in a non-scrollable column, the editor had a nested scroll, the Import
+    button wrapped to `Impor t`, and mode/action labels clipped at 2× font.
+    Fixed with one scrollable instrument surface, a 3×2 string grid on
+    phones, adaptive stacked mode/actions/concert controls, and full labels.
+    Tests: `smallScreenLargeTextKeepsEveryPrimaryControlReachable`; render
+    smoke PNGs inspected at 320/360 dp, 2× font, dark/light.
+12. **Discoverability**: the tuning/reference sheet sits below the fold.
+    Added a top-bar `Tunings` shortcut (`bringIntoView`) and coarse ±1 Hz
+    reference steppers (440→432 is now 8 taps, not 80).
+    Tests: `tuningsShortcutJumpsToTheBelowFoldSheet`,
+    `coarseConcertSteppersInvoke…`, `PresetSheetUiTest.coarse…`.
+13. **Destructive delete was single-tap.** Added a confirmation dialog.
+    Test: `MainScreenUiTest.deletingACustomTuningRequiresConfirmation`.
+14. **Import/export I/O ran on the main thread and import read unbounded.**
+    Moved to `Dispatchers.IO` and added a 1 MiB bounded read.
+    Test: `ImportIoTest`.
+15. **Imported `custom-N` IDs could collide with the next created tuning**
+    (`idCounter` never advanced). Fixed by making `newCustomId()` skip existing
+    IDs. Test: `PresetStoreTest.anImportedCustomIdCannotBeReused…`.
+16. **Instrumented launch smoke asserted a note even in no-signal states**
+    (it could never pass without a current note). Replaced with permission-
+    independent surface nodes.
+17. **Startup restore raced with user mutations.** Moving the restore off
+    the main thread (needed so a permanently denied user still sees their
+    settings) exposed a real lost-update race: a custom tuning created while
+    the async hydrate was in flight could be overwritten by the restore
+    snapshot. The DataStore export test caught it (file decoded to `[]`).
+    Fixed with a `persistenceMutex` (restore + every persisted mutation,
+    lock order: persistence mutex → engine lock) and a lock-protected
+    `AppTuner.uiData()` snapshot for the UI. This also removes the
+    cross-thread `PresetStore` read during hydration.
+
+### Test-first / RED notes (honest)
+
+- Core pure contracts were written before the mapping/state changes. The
+  first integrated UI run after the scroll restructure did fail (sheet/title
+  offscreen, callbacks not invoked); those failures exposed the nested-scroll
+  layout and were fixed.
+- The render smoke test found visual defects (Import wrapping, clipped
+  editor rows, 2× label clipping) rather than asserting pixels; those were
+  fixed and re-rendered. There is no screenshot-diff baseline, by design.
+- Some API renames and mechanical wiring were done in the same edit as their
+  tests; no RED claim is made for those.
+
+### Visual evidence
+
+`TunerScreenRenderSmokeTest` writes PNGs to `shared/build/render/` using
+CMP's headless `ImageComposeScene` (dark/light, listening, flat/in-tune,
+permission denial, full sheet, custom row, editor, 2× text at 320 dp).
+They were inspected during this audit. This is a host Skia render, not an
+emulator/device screenshot; real-device rendering remains the real-device gate.

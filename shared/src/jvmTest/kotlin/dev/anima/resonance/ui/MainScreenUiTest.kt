@@ -102,14 +102,17 @@ class MainScreenUiTest {
     }
 
     @Test
-    fun mainScreenShowsListeningHintBeforeStart() {
+    fun mainScreenDoesNotClaimListeningBeforeCaptureStarts() {
         val (controller, _) = controller(hz = 100.0)
+        // Permission granted, but capture intentionally not started yet.
+        controller.onPermissionResult(MicPermissionState.GRANTED)
         rule.setContent { MainScreen(controller) }
         rule.waitUntil(timeoutMillis = 5000) {
-            rule.onAllNodes(hasText("Play a note near the microphone."))
+            rule.onAllNodes(hasText("Microphone is off."))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         rule.onNodeWithTag("resonance.hint").assertExists()
+        rule.onNodeWithTag("resonance.micStatus").assertExists()
     }
 
     @Test
@@ -125,20 +128,23 @@ class MainScreenUiTest {
             rule.onAllNodes(hasTestTag("resonance.sheet"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        // the add button sits below the sheet's fold — scroll it into view
-        // before tapping (off-screen taps do not land in headless tests).
-        rule.onNodeWithTag("resonance.sheet")
+        // The whole instrument surface scrolls; off-screen taps do not land.
+        rule.onNodeWithTag("resonance.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.add"))
         rule.onNodeWithTag("resonance.sheet.add").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.editor.name"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.editor.name"))
         rule.onNodeWithTag("resonance.editor.name").performTextInput("UI Created")
         // default first string is E2; three upward note cycles → G2 (E→F→F#→G)
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
         rule.onNodeWithTag("resonance.editor.string.0.note").performClick()
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.editor.save"))
         rule.onNodeWithTag("resonance.editor.save").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1"))
@@ -148,6 +154,93 @@ class MainScreenUiTest {
             val created = repo.customsSnapshot.single()
             assertEquals("UI Created", created.name)
             assertEquals(dev.anima.resonance.music.Note.fromLabel("G2"), created.strings.single().note)
+        }
+    }
+
+    @Test
+    fun deletingACustomTuningRequiresConfirmation() {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        runBlocking {
+            controller.onPermissionResult(MicPermissionState.GRANTED)
+            controller.startCapture()
+            controller.createCustomPreset("Keep Me", listOf(Note.fromLabel("E2")))
+        }
+        rule.setContent { MainScreen(controller) }
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.delete"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.row.custom-1.delete"))
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").performClick()
+        rule.onNodeWithTag("resonance.deleteDialog").assertExists()
+        rule.onNodeWithTag("resonance.deleteDialog.cancel").performClick()
+        runBlocking {
+            assertTrue(
+                repo.customsSnapshot.any { it.name == "Keep Me" },
+                "cancel must keep the user's tuning",
+            )
+        }
+
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").performClick()
+        rule.onNodeWithTag("resonance.deleteDialog.confirm").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.deleteDialog"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+        }
+        runBlocking {
+            assertTrue(repo.customsSnapshot.isEmpty(), "confirm must delete exactly the chosen tuning")
+        }
+    }
+
+    @Test
+    fun editingAFlatTuningPreservesEveryStringAndItsSpelling() {
+        val repo = InMemorySettingsRepository()
+        val controller = TunerController(SilenceInput(), repo, PresetStore())
+        runBlocking {
+            controller.onPermissionResult(MicPermissionState.GRANTED)
+            controller.startCapture()
+            controller.createCustomPreset(
+                "Flat Tuning",
+                listOf(Note.fromLabel("Eb2"), Note.fromLabel("Ab2")),
+            )
+        }
+        rule.setContent { MainScreen(controller) }
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.edit"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.row.custom-1.edit"))
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.editor.string.0.note"))
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.editor.string.0.note"))
+        assertEquals(
+            "Eb",
+            rule.onNodeWithTag("resonance.editor.string.0.note")
+                .fetchSemanticsNode().config[SemanticsProperties.Text]!!
+                .joinToString("") { it.text },
+            "the editor must not drop the flat accidental",
+        )
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.editor.save"))
+        rule.onNodeWithTag("resonance.editor.save").performClick()
+        rule.waitUntil(timeoutMillis = 5000) {
+            rule.onAllNodes(hasTestTag("resonance.editor")).fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+        }
+        runBlocking {
+            val saved = repo.customsSnapshot.single()
+            assertEquals(
+                listOf(Note.fromLabel("Eb2"), Note.fromLabel("Ab2")),
+                saved.strings.map { it.note },
+                "editing without changes must be lossless",
+            )
         }
     }
 
@@ -170,7 +263,7 @@ class MainScreenUiTest {
             rule.onAllNodes(hasTestTag("resonance.sheet.importResult"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        rule.onNodeWithTag("resonance.sheet")
+        rule.onNodeWithTag("resonance.scroll")
             .performScrollToNode(hasTestTag("resonance.sheet.importResult"))
         val text = rule.onNodeWithTag("resonance.sheet.importResult")
             .fetchSemanticsNode().config[SemanticsProperties.Text]!!
@@ -196,6 +289,8 @@ class MainScreenUiTest {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.drop-d"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
+        rule.onNodeWithTag("resonance.scroll")
+            .performScrollToNode(hasTestTag("resonance.sheet.row.drop-d"))
         rule.onNodeWithTag("resonance.sheet.row.drop-d").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasText("Drop D"))

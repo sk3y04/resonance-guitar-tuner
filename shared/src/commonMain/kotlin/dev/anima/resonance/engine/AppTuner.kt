@@ -14,6 +14,8 @@ import dev.anima.resonance.presentation.PresetSheetUi
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerSnapshot
 import dev.anima.resonance.presentation.TunerStateMachine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
     /**
      * Result of an import attempt. A failed import has
@@ -59,6 +61,15 @@ class AppTuner(
     /** Single lock for all shared-state access (see class doc). */
     private val lock = Any()
 
+    /**
+     * Serializes persisted-state reads (startup hydration) with every
+     * mutation. The UI can be interactive before the asynchronous restore
+     * finishes; without this, a just-created tuning could be overwritten by
+     * the restore snapshot. Engine lock order: persistenceMutex -> lock,
+     * never the reverse, and never across a suspension while holding [lock].
+     */
+    private val persistenceMutex = Mutex()
+
     /** All presets (built-ins + customs) for import dedupe and UI mapping. */
     val presetsView: List<TuningPreset> get() = engineLocked(lock) { presets.all() }
     private val stateMachine = TunerStateMachine()
@@ -77,6 +88,17 @@ class AppTuner(
 
     /** Last persisted settings applied to the state machine. */
     private var applied: Settings = Settings.DEFAULTS
+
+    /** Custom/favorite snapshot is restored once per engine instance. */
+    @Volatile
+    private var hydrated = false
+
+    /**
+     * Lifecycle epoch. A start that is still loading settings when the shell
+     * stops must not open the microphone on resume; every stop/start bumps
+     * the epoch and only the matching start may open capture.
+     */
+    private var captureEpoch = 0
 
     /** Read-only view of [applied] (the UI maps from this). */
     val currentSettings: Settings get() = engineLocked(lock) { applied }
@@ -97,6 +119,36 @@ class AppTuner(
     /** Live capture state (mirrors the orchestrator). */
     val captureState: CaptureState get() = engineLocked(lock) { orchestrator.state }
 
+    /** Read-only preset lookup for the editor (stable IDs, never positions). */
+    fun preset(id: String): TuningPreset? = engineLocked(lock) { presets.byId(id) }
+
+    /**
+     * Consistent, lock-protected snapshot for the UI mapper. Preset
+     * hydration/CRUD may run on an I/O dispatcher at startup, while the UI
+     * ticker reads on Main; both must go through the same lock.
+     */
+    internal data class UiData(
+        val settings: Settings,
+        val snapshot: TunerSnapshot?,
+        val capturing: Boolean,
+        val captureError: Boolean,
+        val lockedString: Int?,
+        val presets: List<TuningPreset>,
+        val favorites: Set<String>,
+    )
+
+    internal fun uiData(): UiData = engineLocked(lock) {
+        UiData(
+            settings = applied,
+            snapshot = _lastSnapshot,
+            capturing = uiCapturing,
+            captureError = uiCaptureError,
+            lockedString = _lockedString,
+            presets = presets.all(),
+            favorites = presets.favorites().toSet(),
+        )
+    }
+
     /**
      * UI-facing capture flags, owned by the engine so the main thread
      * reads them through the same lock the pump writes under. (The controller
@@ -109,29 +161,75 @@ class AppTuner(
     val captureErrorUi: Boolean get() = engineLocked(lock) { uiCaptureError }
 
     /**
-     * Loads persisted settings, applies concert pitch / mode / preset to the
-     * state machine, and opens capture. Returns the applied settings.
+     * Loads persisted settings, custom tunings and favorites, applies the
+     * concert pitch / mode / preset to the state machine, and returns the
+     * applied settings. Deliberately does NOT open the microphone: settings
+     * and the tuning library must be usable even when permission is denied.
      */
-    suspend fun start(): Settings {
-        val settings = settingsRepo.get() // persistence: outside the lock
-        return engineLocked(lock) {
+    suspend fun load(): Settings = persistenceMutex.withLock {
+        var settings = settingsRepo.get() // persistence: outside the lock
+        // Restore the user's custom tunings + favorites before any
+        // target/mapping read. The store supported hydration but the
+        // production path constructed it empty, so a relaunch lost them.
+        // Once per engine instance: a foreground restart must not clobber
+        // in-memory-only hosts or re-read under a live mutation.
+        if (!hydrated) {
+            val persistedCustoms = settingsRepo.loadCustomPresets()
+            engineLocked(lock) {
+                if (!hydrated) {
+                    presets.hydrate(persistedCustoms, settings.favorites)
+                    hydrated = true
+                }
+            }
+        }
+        // A persisted selection can outlive its custom preset. Repair
+        // it before applying targets so Instrument mode never restores with
+        // an empty target set.
+        val selectionExists = engineLocked(lock) {
+            presets.byId(settings.selectedPresetId) != null
+        }
+        if (!selectionExists) {
+            settings = settingsRepo.update { it.copy(selectedPresetId = "standard") }
+        }
+        engineLocked(lock) {
             applied = settings
             stateMachine.setConcertPitch(applied.concertPitchHz)
             applyTarget(applied)
+            applied
+        }
+    }
+
+    /**
+     * Loads persisted settings, then opens capture. Returns the applied
+     * settings. Permission gating is the controller's job; this method is
+     * only called after the mic is allowed.
+     */
+    suspend fun start(): Settings {
+        val epoch = engineLocked(lock) { ++captureEpoch }
+        val settings = load()
+        return engineLocked(lock) {
+            if (captureEpoch != epoch) {
+                // A stop happened while the persisted settings were loading.
+                // Do not open the mic in the background.
+                return@engineLocked settings
+            }
             uiCaptureError = false
             uiCapturing = true
+            // Never resurrect a pre-error/pre-stop reading on a fresh open.
+            _lastSnapshot = null
             orchestrator.start()
             if (orchestrator.state == CaptureState.ERROR) {
                 uiCapturing = false
                 uiCaptureError = true
             }
-            applied
+            settings
         }
     }
 
     /** Stops capture and clears the displayed reading. Idempotent. */
     fun stop() {
         engineLocked(lock) {
+            captureEpoch++
             orchestrator.stop()
             _lastSnapshot = null
             uiCapturing = false
@@ -152,9 +250,9 @@ class AppTuner(
     }
 
     /** Persists and applies a new A4 reference (400..480 Hz, validated). */
-    suspend fun setConcertPitch(hz: Double): Settings {
+    suspend fun setConcertPitch(hz: Double): Settings = persistenceMutex.withLock {
         val settings = settingsRepo.update { it.copy(concertPitchHz = hz) }
-        return engineLocked(lock) {
+        engineLocked(lock) {
             applied = settings
             stateMachine.setConcertPitch(hz)
             applyTarget(applied) // re-applies a restricted set under the new scale
@@ -162,9 +260,19 @@ class AppTuner(
         }
     }
 
-    /** Steps the A4 reference by ±0.1 Hz (spec §2); clamped at 400..480. */
-    suspend fun stepConcertPitch(up: Boolean) {
-        setConcertPitch(PresetSheetUi.stepConcertPitch(engineLocked(lock) { applied.concertPitchHz }, up))
+    /**
+     * Steps the A4 reference (default ±0.1 Hz, spec §2), clamped to
+     * 400..480. A coarse UI step is available so moving 440 → 432 Hz is a
+     * few deliberate taps instead of 80.
+     */
+    suspend fun stepConcertPitch(up: Boolean, stepHz: Double = 0.1) {
+        setConcertPitch(
+            PresetSheetUi.stepConcertPitch(
+                engineLocked(lock) { applied.concertPitchHz },
+                up,
+                stepHz,
+            ),
+        )
     }
 
     /**
@@ -172,14 +280,16 @@ class AppTuner(
      * identity, frequencies and stored tunings never change.
      */
     suspend fun setAccidentalSpelling(spelling: dev.anima.resonance.music.Spelling) {
-        val settings = settingsRepo.update { it.copy(accidentalSpelling = spelling) }
-        engineLocked(lock) { applied = settings }
+        persistenceMutex.withLock {
+            val settings = settingsRepo.update { it.copy(accidentalSpelling = spelling) }
+            engineLocked(lock) { applied = settings }
+        }
     }
 
     /** Persists and applies a new mode; retargets the state machine. */
-    suspend fun setMode(mode: TunerMode): Settings {
+    suspend fun setMode(mode: TunerMode): Settings = persistenceMutex.withLock {
         val settings = settingsRepo.update { it.copy(mode = mode) }
-        return engineLocked(lock) {
+        engineLocked(lock) {
             applied = settings
             applyTarget(applied)
             applied
@@ -187,9 +297,9 @@ class AppTuner(
     }
 
     /** Persists and applies a new preset; the instrument returns to AUTO. */
-    suspend fun setPreset(id: String): Settings {
+    suspend fun setPreset(id: String): Settings = persistenceMutex.withLock {
         val settings = settingsRepo.update { it.copy(selectedPresetId = id) }
-        return engineLocked(lock) {
+        engineLocked(lock) {
             applied = settings
             _lockedString = null
             applyTarget(applied)
@@ -209,52 +319,63 @@ class AppTuner(
     }
 
     /** Toggles favorite and persists the favorites list. */
-    suspend fun toggleFavorite(id: String): Boolean {
+    suspend fun toggleFavorite(id: String): Boolean = persistenceMutex.withLock {
         val (nowFavorite, favorites) = engineLocked(lock) {
             presets.toggleFavorite(id) to presets.favorites()
         }
         settingsRepo.update { it.copy(favorites = favorites) }
-        return nowFavorite
+        nowFavorite
     }
 
     /**
      * Creates a custom named tuning (spec §2). String IDs are positional
      * and stable within the preset; the change is persisted durably.
      */
-    suspend fun createCustomPreset(name: String, notes: List<Note>): TuningPreset {
-        val preset = engineLocked(lock) {
-            presets.create(name, notes.mapIndexed { i, n -> TuningString("s${i + 1}", n) })
+    suspend fun createCustomPreset(name: String, notes: List<Note>): TuningPreset =
+        persistenceMutex.withLock {
+            val preset = engineLocked(lock) {
+                presets.create(name, notes.mapIndexed { i, n -> TuningString("s${i + 1}", n) })
+            }
+            persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
+            preset
         }
-        persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
-        return preset
-    }
 
     /**
      * Edits a custom tuning (built-ins are read-only). String IDs are
      * preserved positionally when the string count is unchanged.
      */
-    suspend fun editCustomPreset(id: String, name: String, notes: List<Note>): TuningPreset {
-        val updated = engineLocked(lock) {
-            val previous = presets.byId(id)
-            val strings = notes.mapIndexed { i, n ->
-                val oldId = previous?.strings?.getOrNull(i)?.id
-                TuningString(oldId ?: "s${i + 1}", n)
+    suspend fun editCustomPreset(id: String, name: String, notes: List<Note>): TuningPreset =
+        persistenceMutex.withLock {
+            val updated = engineLocked(lock) {
+                val previous = presets.byId(id)
+                val strings = notes.mapIndexed { i, n ->
+                    val oldId = previous?.strings?.getOrNull(i)?.id
+                    TuningString(oldId ?: "s${i + 1}", n)
+                }
+                val result = presets.edit(id, name, strings)
+                // Only the selected tuning feeds the live target set. Editing
+                // it makes its target set and any positional string lock
+                // stale, so clear the lock and re-apply immediately. Editing
+                // another preset must not disturb the active lock.
+                if (applied.selectedPresetId == id) {
+                    _lockedString = null
+                    applyTarget(applied)
+                }
+                result
             }
-            presets.edit(id, name, strings)
+            persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
+            updated
         }
-        persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
-        return updated
-    }
 
     /**
      * Deletes a custom tuning. If it was the selected preset, selection
      * falls back to "standard" (persisted) and any string lock is released.
      */
-    suspend fun deleteCustomPreset(id: String): Boolean {
+    suspend fun deleteCustomPreset(id: String): Boolean = persistenceMutex.withLock {
         val (removed, wasSelected) = engineLocked(lock) {
             presets.delete(id) to (applied.selectedPresetId == id)
         }
-        if (!removed) return false
+        if (!removed) return@withLock false
         val fallback = if (wasSelected) {
             settingsRepo.update { it.copy(selectedPresetId = "standard") }
         } else null
@@ -264,7 +385,7 @@ class AppTuner(
             applyTarget(applied)
         }
         persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
-        return true
+        true
     }
 
     /**
@@ -274,11 +395,11 @@ class AppTuner(
      * deterministically (never overwriting). A failed import mutates
      * nothing and reports its reason.
      */
-    suspend fun importCustomPresets(payload: String): ImportResult {
+    suspend fun importCustomPresets(payload: String): ImportResult = persistenceMutex.withLock {
         val decoded = try {
             dev.anima.resonance.music.TuningPresetJson.decode(payload, engineLocked(lock) { presets.all() })
         } catch (e: IllegalArgumentException) {
-            return ImportResult(0, 0, e.message ?: "Unreadable tuning file")
+            return@withLock ImportResult(0, 0, e.message ?: "Unreadable tuning file")
         }
         engineLocked(lock) {
             for (preset in decoded) {
@@ -286,7 +407,7 @@ class AppTuner(
             }
         }
         persistCustoms?.invoke(engineLocked(lock) { presets.customs() })
-        return ImportResult(decoded.size, 0, null)
+        ImportResult(decoded.size, 0, null)
     }
 
     /** Versioned JSON of all custom tunings (for the document picker). */

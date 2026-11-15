@@ -13,7 +13,7 @@ and host tests build (the Android target is auto-disabled — see
 
 ## Commands
 - `./scripts/test-unit.sh` — fast shared tests (DSP/domain/state/persistence), no phone/display
-- `./scripts/test-ui.sh` — Compose UI tests (needs a display; distinguishes BLOCKED from FAIL)
+- `./scripts/test-ui.sh` — Compose UI semantics + headless render smoke tests (no display needed)
 - `./scripts/run-demo.sh` — runnable host demo: the FULL pipeline (synthetic mic → engine → UI state), 5 assertive scenarios, no device/display/SDK needed
 - `./scripts/verify.sh` — host tests + host demo + available lint + debug assembly
 - `./scripts/build-debug.sh` — debug APK to artifacts/ + checksum

@@ -34,33 +34,95 @@ object MainScreenUi {
         selectedPresetId: String = "standard",
         // Enharmonic display preference (identity never changes)
         accidentalSpelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
+        // True while capture is actually open. Defaults to the common
+        // test/demo assumption; the controller always passes the real flag.
+        captureActive: Boolean = permission == MicPermissionState.GRANTED,
     ): MainScreenUiState {
         val status = snapshot?.status ?: TunerStatus.IDLE
         val reading = snapshot?.reading
-        val note = reading?.note
-        val hasPitch = reading != null && note != null
 
-        val ctaVisible = permission == MicPermissionState.DENIED_PERMANENT
-        val hint = when {
-            captureError -> "Microphone capture failed — check input and retry."
-            status == TunerStatus.CLIPPING ->
-                "Signal is clipping — lower the volume or move away."
-            status == TunerStatus.STALE ->
-                "Signal lost — last reading shown."
-            status == TunerStatus.MEASURED -> null
-            status == TunerStatus.UNSTABLE -> "Stabilizing…"
-            else -> "Play a note near the microphone."
+        // A measurement is only "live" when the state machine actually
+        // produced a frequency in a state that can carry one. STALE and
+        // INSUFFICIENT_SIGNAL deliberately return frequencyHz = 0: exposing
+        // that as "0.0 Hz / 0 cents / Tune up" is a false measurement.
+        val hasLivePitch = reading != null &&
+            reading.note != null &&
+            reading.frequencyHz > 0.0 &&
+            (status == TunerStatus.MEASURED ||
+                status == TunerStatus.UNSTABLE ||
+                status == TunerStatus.CLIPPING)
+        // Clipping means the waveform is at full scale: keep the note class as
+        // context but never present its numeric deviation as trustworthy.
+        val reliable = hasLivePitch && status != TunerStatus.CLIPPING
+        val liveReading = if (hasLivePitch) reading else null
+        val note = liveReading?.note
+        val cents = if (reliable) liveReading?.cents ?: 0 else 0
+
+        val granted = permission == MicPermissionState.GRANTED
+        val permissionHint = when (permission) {
+            MicPermissionState.GRANTED -> null
+            MicPermissionState.NOT_REQUESTED, MicPermissionState.DENIED ->
+                "Microphone access is needed to tune. Allow it to start listening."
+            MicPermissionState.DENIED_PERMANENT ->
+                "Microphone access is off. Enable it in Settings to start tuning."
         }
-
-        val cents = if (hasPitch) reading!!.cents else 0
-        val directionText = when {
-            !hasPitch -> null
-            reading!!.inTune -> "In tune"
-            reading.direction == PitchDirection.FLAT -> "Tune up"
-            else -> "Tune down"
+        val ctaVisible = !granted
+        val ctaText = if (permission == MicPermissionState.DENIED_PERMANENT) {
+            "Open app settings"
+        } else {
+            "Allow microphone"
         }
 
         val inInstrument = mode == TunerMode.INSTRUMENT && preset != null
+        val hint = when {
+            // The permission banner carries its own explanation.
+            !granted -> null
+            captureError -> "Microphone unavailable — check your input, then retry."
+            !captureActive -> "Microphone is off."
+            status == TunerStatus.CLIPPING ->
+                "Signal is clipping — lower the volume or move away."
+            status == TunerStatus.STALE ->
+                "Signal lost — play again."
+            status == TunerStatus.INSUFFICIENT_SIGNAL ->
+                "Signal too weak — move closer to the microphone and play a clear note."
+            status == TunerStatus.MEASURED ->
+                if (inInstrument && abs(cents) > 100) {
+                    "Check the target string — this note is far from the highlighted string."
+                } else {
+                    null
+                }
+            status == TunerStatus.UNSTABLE -> "Hold the note steady…"
+            else -> "Play a note near the microphone."
+        }
+
+        val directionText = when {
+            !reliable || liveReading == null -> null
+            liveReading.inTune -> "In tune"
+            liveReading.direction == PitchDirection.FLAT -> "Tune up"
+            else -> "Tune down"
+        }
+
+        val micStatusText = when {
+            !granted -> "Microphone off"
+            captureError -> "Microphone unavailable"
+            !captureActive -> "Microphone off"
+            else -> "Listening"
+        }
+
+        // AUTO mode compares against the nearest preset string but the old
+        // screen only highlighted a manual lock, leaving the player unable to
+        // see which target was being used. Expose the active target: manual
+        // lock wins; otherwise the detected stable note identifies the string.
+        val autoStringIndex = if (inInstrument && selectedStringIndex == null && note != null) {
+            preset.strings.indexOfFirst { it.note == note }.takeIf { it >= 0 }
+        } else {
+            null
+        }
+        val activeStringIndex = when {
+            !inInstrument -> null
+            selectedStringIndex != null -> selectedStringIndex
+            else -> autoStringIndex
+        }
         // The glyph renders the spelled name (letter + accidental)
         // under the user's preference; octave is read off the same label so
         // folded notes (Cb3 → B2) stay consistent.
@@ -68,22 +130,33 @@ object MainScreenUi {
         return MainScreenUiState(
             status = status,
             permission = permission,
+            captureActive = captureActive,
+            micStatusText = micStatusText,
             permissionCtaVisible = ctaVisible,
-            permissionCtaText = "App settings",
-            meterPosition = if (hasPitch) meterPosition(cents) else 0.0,
-            meterClamped = if (hasPitch) isMeterClamped(cents) else false,
+            permissionCtaText = ctaText,
+            permissionCtaOpensSettings = permission == MicPermissionState.DENIED_PERMANENT,
+            permissionHint = permissionHint,
+            meterPosition = if (reliable) meterPosition(cents) else 0.0,
+            meterClamped = if (reliable) isMeterClamped(cents) else false,
+            meterActive = reliable,
             noteLabel = spelled?.dropLast(1),
             octave = spelled?.last()?.toString(),
-            frequencyText = if (hasPitch) formatHz(reading!!.frequencyHz) else null,
-            centsText = if (hasPitch) formatCents(cents) else null,
+            frequencyText = if (reliable) formatHz(liveReading?.frequencyHz ?: 0.0) else null,
+            centsText = if (reliable) formatCents(cents) else null,
             directionText = directionText,
             statusHint = hint,
-            inTune = hasPitch && reading!!.inTune,
+            inTune = reliable && liveReading?.inTune == true,
             captureError = captureError,
             mode = mode,
-            presetName = if (inInstrument) preset!!.name else null,
-            targetLabels = if (inInstrument) preset!!.strings.map { it.note.spelledLabel(accidentalSpelling) } else emptyList(),
+            presetName = if (inInstrument) preset.name else null,
+            targetLabels = if (inInstrument) {
+                preset.strings.map { it.note.spelledLabel(accidentalSpelling) }
+            } else {
+                emptyList()
+            },
             selectedStringIndex = if (inInstrument) selectedStringIndex else null,
+            activeStringIndex = activeStringIndex,
+            stringLocked = inInstrument && selectedStringIndex != null,
             concertPitchHz = concertPitchHz,
             presetRows = PresetSheetUi.toRows(presets, favoritePresetIds, selectedPresetId, accidentalSpelling),
             concertLabel = PresetSheetUi.concertPitchLabel(concertPitchHz),

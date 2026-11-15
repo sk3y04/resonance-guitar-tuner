@@ -6,6 +6,7 @@ import dev.anima.resonance.music.Note
 import dev.anima.resonance.music.TuningPresetJson
 import dev.anima.resonance.music.TuningString
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -58,35 +59,81 @@ class ResonanceViewModelHostTest {
         val file = File(app.filesDir, "import.json")
         file.writeText(TuningPresetJson.encode(listOf(preset)))
 
-        val vm = ResonanceViewModel(app)
-        vm.onImportUri(Uri.fromFile(file))
-        await({ vm.importPayload.value != null }, "payload staged from URI")
+        val vm = TestableViewModel(app)
+        try {
+            vm.onImportUri(Uri.fromFile(file))
+            await({ vm.importPayload.value != null }, "payload staged from URI")
 
-        val result = runBlocking { vm.controller.importCustomPresets(vm.importPayload.value!!) }
-        assertEquals(1, result.importedCount)
-        assertEquals(null, result.error)
+            val result = runBlocking(Dispatchers.IO) { vm.controller.importCustomPresets(vm.importPayload.value!!) }
+            assertEquals(1, result.importedCount)
+            assertEquals(null, result.error)
 
-        vm.consumeImport()
-        mainLooper.idle()
-        assertNull("consumeImport must clear the staged payload", vm.importPayload.value)
+            vm.consumeImport()
+            mainLooper.idle()
+            assertNull("consumeImport must clear the staged payload", vm.importPayload.value)
+        } finally {
+            vm.clearForTest()
+        }
     }
 
     @Test
     fun exportUriWritesCodecEncodedCustomPresets() {
         val file = File(app.filesDir, "export.json")
-        val vm = ResonanceViewModel(app)
-        runBlocking {
-            vm.controller.createCustomPreset("Robo Export", listOf(Note("E", 1), Note("A", 2)))
+        val vm = TestableViewModel(app)
+        try {
+            runBlocking(Dispatchers.IO) {
+                vm.controller.createCustomPreset("Robo Export", listOf(Note("E", 1), Note("A", 2)))
+            }
+
+            vm.onExportUri(Uri.fromFile(file))
+            await({ file.exists() && file.length() > 0 }, "export file written")
+
+            val decoded = TuningPresetJson.decode(file.readText())
+            assertTrue(
+                "export must round-trip the custom preset, got: $decoded",
+                decoded.any { it.name == "Robo Export" && it.strings.size == 2 },
+            )
+        } finally {
+            vm.clearForTest()
+        }
+    }
+
+    @Test
+    fun customTuningFavoriteAndSelectionSurviveAViewModelRecreation() {
+        val first = TestableViewModel(app)
+        try {
+            runBlocking(Dispatchers.IO) {
+                first.controller.onPermissionResult(dev.anima.resonance.presentation.MicPermissionState.GRANTED)
+                first.controller.startCapture()
+                val preset = first.controller.createCustomPreset(
+                    "Robo Persisted",
+                    listOf(Note.fromLabel("D2"), Note.fromLabel("A2"), Note.fromLabel("D3")),
+                )
+                first.controller.toggleFavorite(preset.id)
+                first.controller.setMode(dev.anima.resonance.presentation.TunerMode.INSTRUMENT)
+                first.controller.setPreset(preset.id)
+                first.controller.stopCapture()
+            }
+        } finally {
+            first.stop()
+            first.clearForTest()
         }
 
-        vm.onExportUri(Uri.fromFile(file))
-        await({ file.exists() && file.length() > 0 }, "export file written")
-
-        val decoded = TuningPresetJson.decode(file.readText())
-        assertTrue(
-            "export must round-trip the custom preset, got: $decoded",
-            decoded.any { it.name == "Robo Export" && it.strings.size == 2 },
-        )
+        val second = TestableViewModel(app)
+        try {
+            runBlocking(Dispatchers.IO) {
+                second.controller.onPermissionResult(dev.anima.resonance.presentation.MicPermissionState.GRANTED)
+                second.controller.startCapture()
+            }
+            val ui = second.controller.state()
+            val restored = ui.presetRows.single { it.name == "Robo Persisted" }
+            assertTrue("favorite survives a real DataStore restart", restored.favorite)
+            assertEquals("Robo Persisted", ui.presetName)
+            assertEquals(listOf("D2", "A2", "D3"), ui.targetLabels)
+        } finally {
+            second.stop()
+            second.clearForTest()
+        }
     }
 
     @Test

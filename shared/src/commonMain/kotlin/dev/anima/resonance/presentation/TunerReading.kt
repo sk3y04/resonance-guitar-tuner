@@ -4,12 +4,13 @@ import dev.anima.resonance.music.Note
 
 /** Coarse signal/measurement state of the tuner. */
 enum class TunerStatus {
-    IDLE,         // no data yet (fresh engine)
-    LISTENING,    // no pitch at all so far — welcoming hint, not a frozen state
-    UNSTABLE,     // pitch present but not stable yet (hysteresis/silence grace)
-    MEASURED,     // stable note, reliable display
-    STALE,        // no fresh pitch beyond the stale window — last data is old
-    CLIPPING,     // input at full scale — measurement untrustworthy
+    IDLE,                // no data yet (fresh engine)
+    LISTENING,           // no pitch at all so far — welcoming hint, not a frozen state
+    UNSTABLE,            // pitch present but the note is changing (hysteresis)
+    INSUFFICIENT_SIGNAL, // pitch-like input below the confidence floor — too weak to trust
+    MEASURED,            // stable note, reliable display
+    STALE,               // no fresh pitch beyond the stale window — last data is old
+    CLIPPING,            // input at full scale — measurement untrustworthy
 }
 
 enum class PitchDirection { FLAT, INTUNE, SHARP }

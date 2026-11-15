@@ -126,4 +126,20 @@ class PresetStoreTest {
         store.delete(p.id)
         assertFalse(store.isFavorite(p.id), "deleting a preset clears its favorite")
     }
+
+    @Test
+    fun anImportedCustomIdCannotBeReusedByTheNextCreatedTuning() {
+        val store = PresetStore()
+        store.addImported(
+            dev.anima.resonance.music.TuningPreset(
+                id = "custom-1",
+                name = "Imported",
+                builtIn = false,
+                strings = strings("E2"),
+            ),
+        )
+        val created = store.create("New", strings("A2"))
+        assertEquals("custom-2", created.id, "new IDs must skip imported IDs")
+        assertEquals(2, store.customs().map { it.id }.toSet().size)
+    }
 }

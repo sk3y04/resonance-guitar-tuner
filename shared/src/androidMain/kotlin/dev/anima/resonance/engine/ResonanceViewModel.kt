@@ -8,25 +8,30 @@ import androidx.lifecycle.viewModelScope
 import dev.anima.resonance.audio.AndroidAudioInput
 import dev.anima.resonance.persistence.PresetStore
 import dev.anima.resonance.persistence.createContextDataStore
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Android shell ViewModel. A THIN layer over the common
- * [TunerController] (all behavior is tested on the host in
- * TunerControllerTest / AppTunerTest): it provides the platform audio
- * backend, the Context-backed DataStore, and the pump thread that drives
- * the engine from the audio clock.
+ * Android shell ViewModel. A THIN layer over the common [TunerController]
+ * (all behavior is tested on the host in TunerControllerTest / AppTunerTest):
+ * it provides the platform audio backend, the Context-backed DataStore, and
+ * the pump thread that drives the engine from the audio clock.
  *
- * Status: COMPILE-VERIFIED (2026-11-06, first real Android
- * build — assembleDebug + lint green; picker wiring included). No
- * device testing has been performed.
+ * The pump is a single long-lived daemon thread that parks while capture is
+ * stopped. This is deliberate: the previous design created a `Thread` per
+ * start, which cannot be restarted after `stop()` — now that the Activity
+ * actually stops capture in the background, a foreground return would have
+ * crashed with `IllegalThreadStateException`.
  *
- * Permission policy (enforced by the Activity, not here): the mic is only
- * opened after RECORD_AUDIO is granted; permanent denial maps to
- * DENIED_PERMANENT, which the UI renders as the "open app settings" CTA
- * (never re-prompts).
+ * Permission policy (enforced by the Activity, not here): the mic is opened
+ * only after RECORD_AUDIO is granted.
  */
 open class ResonanceViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -40,22 +45,57 @@ open class ResonanceViewModel(application: Application) : AndroidViewModel(appli
         )
     }
 
-    private val pumpThread = PumpWorker(controller)
+    private val pumpThread = ResonancePumpWorker(
+        pump = { controller.pump(SystemClock.elapsedRealtime()) },
+    )
 
-    /** Starts capture (if permitted) and the pump thread. */
+    private var startJob: Job? = null
+    private var loadJob: Job? = null
+
+    init {
+        // Restore settings/tunings even before (or without) microphone
+        // permission. Capture itself remains gated by the Activity.
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                controller.load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Unreadable storage must not crash the first screen; the
+                // UI keeps safe defaults and the user can still retry later.
+            }
+        }
+    }
+
+    /**
+     * Starts capture (if permitted) and feeds the pump thread. The job is
+     * tracked so a quick backgrounding can cancel a start that is still
+     * suspended on persisted-settings I/O before it opens the microphone.
+     */
     fun start() {
-        viewModelScope.launch {
-            controller.startCapture()
+        startJob?.cancel()
+        startJob = viewModelScope.launch {
+            try {
+                controller.startCapture()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A settings read/open failure leaves capture closed; the
+                // common UI shows the recovery surface and a retry action.
+                return@launch
+            }
             if (controller.captureState == dev.anima.resonance.audio.CaptureState.CAPTURING) {
                 pumpThread.startFeeding()
             }
         }
     }
 
-    /** Stops capture and the pump thread. */
+    /** Stops capture and parks the pump thread (thread itself is reusable). */
     fun stop() {
+        startJob?.cancel()
+        startJob = null
         pumpThread.stopFeeding()
-        viewModelScope.launch { controller.stopCapture() }
+        controller.stopCapture()
     }
 
     /**
@@ -70,15 +110,20 @@ open class ResonanceViewModel(application: Application) : AndroidViewModel(appli
     /** Reads the picked document and stages it as [importPayload]. */
     fun onImportUri(uri: Uri) {
         viewModelScope.launch {
+            // File I/O and the untrusted size cap stay off the main thread.
             val text = try {
-                getApplication<Application>()
-                    .contentResolver.openInputStream(uri)
-                    ?.use { it.readBytes().decodeToString() }
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>()
+                        .contentResolver.openInputStream(uri)
+                        ?.use { readBounded(it, MAX_IMPORT_BYTES) }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 null
             }
             if (text != null) _importPayload.value = text
-            // Unreadable documents are dropped silently here; malformed
+            // Unreadable/oversized documents are dropped here; malformed
             // CONTENT still flows through the codec and shows feedback.
         }
     }
@@ -91,44 +136,110 @@ open class ResonanceViewModel(application: Application) : AndroidViewModel(appli
     /** Writes all custom tunings to the destination document. */
     fun onExportUri(uri: Uri) {
         viewModelScope.launch {
-            getApplication<Application>()
-                .contentResolver.openOutputStream(uri)
-                ?.use { it.write(controller.exportCustomPresets().encodeToByteArray()) }
+            val payload = controller.exportCustomPresets().encodeToByteArray()
+            withContext(Dispatchers.IO) {
+                getApplication<Application>()
+                    .contentResolver.openOutputStream(uri)
+                    ?.use { it.write(payload) }
+            }
         }
     }
 
     override fun onCleared() {
-        stop()
+        loadJob?.cancel()
+        startJob?.cancel()
+        pumpThread.shutdown()
+        controller.stopCapture()
         super.onCleared()
     }
 
-    /**
-     * One dedicated thread pumps the engine on the audio clock. While
-     * capturing, each poll blocks ~21 ms on the chunk read; the short sleep
-     * prevents a spin when the orchestrator is not capturing.
-     */
-    private class PumpWorker(private val controller: TunerController) : Thread("resonance-pump") {
-        @Volatile
-        private var running = false
+    internal companion object {
+        /** Untrusted document bound; the codec's own payload cap is lower. */
+        const val MAX_IMPORT_BYTES = 1_048_576
 
-        fun startFeeding() {
-            if (running) return
+        internal fun readBounded(input: InputStream, maxBytes: Int): String? {
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > maxBytes) return null
+                out.write(buffer, 0, read)
+            }
+            return out.toByteArray().decodeToString()
+        }
+    }
+}
+
+/**
+ * One dedicated daemon thread pumps the engine on the audio clock while
+ * [startFeeding] is active. It is created once and parks on a monitor when
+ * idle — callable from any thread, restartable, and shut down with
+ * [shutdown]. While capturing, each poll blocks on the chunk read; the short
+ * sleep prevents a spin when the orchestrator is not capturing.
+ *
+ * Extracted and `internal` so the start→stop→start lifecycle is host-tested
+ * without a microphone.
+ */
+internal class ResonancePumpWorker(
+    private val pump: () -> Unit,
+    private val sleepMs: Long = 2,
+) : Thread("resonance-pump") {
+
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    private val monitor = Object()
+
+    @Volatile
+    private var running = false
+
+    @Volatile
+    private var stopped = false
+
+    init {
+        isDaemon = true
+        start()
+    }
+
+    fun startFeeding() {
+        synchronized(monitor) {
+            if (stopped) return
             running = true
-            start()
+            monitor.notifyAll()
         }
+    }
 
-        fun stopFeeding() {
+    fun stopFeeding() {
+        running = false
+    }
+
+    fun shutdown() {
+        synchronized(monitor) {
             running = false
-            join(500)
+            stopped = true
+            monitor.notifyAll()
         }
+    }
 
-        override fun run() {
-            while (running) {
-                controller.pump(SystemClock.elapsedRealtime())
+    override fun run() {
+        while (true) {
+            synchronized(monitor) {
+                while (!running && !stopped) {
+                    try {
+                        monitor.wait()
+                    } catch (e: InterruptedException) {
+                        return
+                    }
+                }
+                if (stopped) return
+            }
+            while (running && !stopped) {
+                pump()
                 try {
-                    sleep(2)
+                    sleep(sleepMs)
                 } catch (e: InterruptedException) {
-                    break
+                    return
                 }
             }
         }

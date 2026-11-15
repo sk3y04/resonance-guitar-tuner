@@ -86,6 +86,14 @@ class PresetSheetUiTest {
     fun stepConcertPitchClampsAtProductBounds() {
         assertEquals(400.0, PresetSheetUi.stepConcertPitch(400.0, up = false), 1e-9)
         assertEquals(480.0, PresetSheetUi.stepConcertPitch(480.0, up = true), 1e-9)
+        assertEquals(400.0, PresetSheetUi.stepConcertPitch(400.2, up = false, step = 1.0), 1e-9)
+        assertEquals(480.0, PresetSheetUi.stepConcertPitch(479.8, up = true, step = 1.0), 1e-9)
+    }
+
+    @Test
+    fun coarseConcertStepIsOneHertzAndStaysOnTheTenthGrid() {
+        assertEquals(441.0, PresetSheetUi.stepConcertPitch(440.0, up = true, step = 1.0), 1e-9)
+        assertEquals(431.0, PresetSheetUi.stepConcertPitch(432.0, up = false, step = 1.0), 1e-9)
     }
 
     @Test
