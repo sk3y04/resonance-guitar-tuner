@@ -19,40 +19,50 @@ import dev.anima.resonance.ui.tabularNumerals
  * `InstrumentPaletteContrastTest` (WCAG AA: 4.5:1 text, 3:1 graphics).
  */
 object InstrumentPalette {
-    // Enclosure — dark walnut
-    val walnut = Color(0xFF33221A)
-    val walnutDeep = Color(0xFF241610)
-    val walnutLight = Color(0xFF4A3323)
+    // Enclosure — deep espresso/wood chassis (warm vintage palette)
+    val walnut = Color(0xFF2B2019)
+    val walnutDeep = Color(0xFF1E1611)
+    val walnutLight = Color(0xFF3A2C20)
     val grainDark = Color(0xFF1A0F09)
     val grainLight = Color(0xFF5E4530)
 
     // Recessed panels (readout, control slots) — near-black warm brown
-    val recess = Color(0xFF1D130C)
+    val recess = Color(0xFF160F0B)
     val recessEdge = Color(0xFF0F0906)
 
-    // Meter face — warm ivory, charcoal ink
-    val ivory = Color(0xFFF1E8D4)
-    val ivoryEdge = Color(0xFFDDD0B4)
+    // Meter face — warm ivory/cream dial, charcoal ink
+    val ivory = Color(0xFFF3EBD8)
+    val ivoryEdge = Color(0xFFE4D7BE)
     val ink = Color(0xFF2A241C)
     val inkSoft = Color(0xFF6B6152)
 
-    // Hardware — muted brass
-    val brass = Color(0xFFB08D4F)
+    // Hardware — antique brass
+    val brass = Color(0xFFB89758)
     val brassLight = Color(0xFFD6B672)
     val brassDark = Color(0xFF6E5527)
 
     // Status jewels (always paired with text/shape, never color alone)
-    val lampGreen = Color(0xFF9FCF8B)
+    val lampGreen = Color(0xFF58C48A)
     val lampAmber = Color(0xFFE3B45C)
     val lampRed = Color(0xFFE2795B)
     val lampOff = Color(0xFF4A3B2E)
 
-    // In-tune band painted on the ivory face (darker than the jewel so it
-    // keeps graphic contrast on the light surface).
-    val bandGreen = Color(0xFF4F7A4A)
+    // In-tune target zone painted on the ivory face (emerald when in tune).
+    val bandGreen = Color(0xFF3D8B5E)
+    // Off-pitch target zone — muted sage/taupe (decorative shading on ivory).
+    val zoneOff = Color(0xFF8C8474)
 
     // Text on wood/recess
     val textMuted = Color(0xFFC9B99B)
+
+    // Illuminated digital readout
+    val noteIvory = Color(0xFFF5ECD8)     // detected note letter
+    val freqCream = Color(0xFFB8AA96)     // frequency readout
+    val taupe = Color(0xFF8C7F6A)         // micro-labels / dial stamp
+    val emeraldGlow = Color(0xFF58C48A)   // in-tune note glow
+    val terracotta = Color(0xFFC8795B)    // "tune down" badge
+    val backlightCenter = Color(0xFF291D15) // display backlight center
+    val backlightEdge = Color(0xFF160F0B)   // display backlight edge
 }
 
 /** Instrument materials for the current composition (see [InstrumentPalette]). */

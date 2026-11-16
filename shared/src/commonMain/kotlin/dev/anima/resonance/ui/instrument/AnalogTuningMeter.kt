@@ -1,7 +1,9 @@
 package dev.anima.resonance.ui.instrument
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -31,21 +33,22 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * The analog tuning meter — the centerpiece of the instrument.
- * A softly aged ivory face in a THIN aged-brass frame, mounted into the
- * walnut body (it casts a short shadow onto the wood). Fine dark-metal
- * needle on a brass pivot; needle, tick arc and pivot share one geometry.
+ * The flagship vintage analog dial — a Peterson/Boss/McIntosh-style
+ * moving-coil meter. A wide landscape cream window under recessed glass; the
+ * arc's geometric pivot sits BELOW the visible bottom edge so the needle
+ * emerges from a brass escutcheon at the bottom-center seam (the awkward tail
+ * is hidden). 90° sweep (±45° at ±50¢, 0¢ straight up), a 3-tier precision
+ * scale (major / medium / fine vernier near center), numerals outside the arc,
+ * a parallax mirror hairline, and an illuminated −3..+3¢ target zone.
  *
- * Source of truth is the tested normalized [position] (-1..1 over ±50¢).
- * Visual travel is clamped at the mechanical stops by [AnalogMeterGeometry];
- * the underlying pitch math is untouched. With no reliable reading
- * ([active] = false) the needle parks at the flat-side rest stop and the
- * face reads NO SIGNAL — never a centered "in tune" needle.
+ * Source of truth is the tested normalized [position] (-1..1 over ±50¢);
+ * negative cents deflect LEFT, positive RIGHT. The needle is ALWAYS drawn:
+ * with no reliable reading it rests just past the flat stop (≈ −52¢) via a
+ * damped spring, like an unpowered meter. Pitch math is untouched.
  *
- * Caching: static artwork lives in a drawWithCache modifier stabilized by
- * remember(active, inTune, clamped, compact) — the 20 Hz state ticker does
- * NOT rebuild it. TextMeasurer caches label measurements. Only the needle
- * reads the animated state. Spring matches the original dial (0.8 / 300).
+ * Caching: static artwork lives in drawWithCache keyed by stable flags + the
+ * measurer (NOT the high-frequency position). Only the needle angle and the
+ * animated zone color are read inside onDrawBehind.
  */
 @Composable
 fun AnalogTuningMeter(
@@ -55,62 +58,42 @@ fun AnalogTuningMeter(
     active: Boolean,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
-    aspectRatio: Float? = if (compact) 1.8f else 1.6f,
+    aspectRatio: Float? = if (compact) 1.8f else 1.5f,
     embedded: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
-    // With no reliable reading the needle fades out (hub stays) — it is
-    // never parked at the flat stop as if it were a measurement. The position
-    // still animates to centre while hidden so a new note fades in smoothly.
-    val target = (if (active) position.coerceIn(-1.0, 1.0) else 0.0).toFloat()
-    val needleState = animateFloatAsState(
-        targetValue = target,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
+    // Needle always rendered. Active → mapped cents angle; no signal →
+    // rest just past the flat stop. Damped spring gives a physical settle.
+    val targetAngle = (
+        if (active) AnalogMeterGeometry.needleAngle(position.coerceIn(-1.0, 1.0))
+        else AnalogMeterGeometry.REST_ANGLE
+        ).toFloat()
+    val needleAngle = animateFloatAsState(
+        targetValue = targetAngle,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 210f),
         label = "meter-needle",
     )
-    val needleAlpha = animateFloatAsState(
-        targetValue = if (AnalogMeterGeometry.needleShown(active)) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220),
-        label = "meter-needle-alpha",
+    val zoneColor = animateColorAsState(
+        targetValue = if (inTune) p.bandGreen else p.zoneOff,
+        animationSpec = tween(durationMillis = 260),
+        label = "meter-zone",
     )
     val measurer = rememberTextMeasurer()
 
     val drawModifier = remember(active, inTune, clamped, compact, embedded, measurer) {
-        // The painted band tracks the state machine's EXIT tolerance (±8¢):
-        // the needle inside the band is exactly when "In tune" can be claimed.
-        val bandHalfAngle = AnalogMeterGeometry.inTuneBandHalfAngle(8.0).toFloat()
-        val bandColor = when {
-            !active -> p.inkSoft.copy(alpha = 0.28f)
-            inTune -> p.bandGreen
-            else -> p.bandGreen.copy(alpha = 0.85f)
-        }
+        val zoneHalfAngle = AnalogMeterGeometry.inTuneBandHalfAngle(3.0).toFloat()
         Modifier.drawWithCache {
             val w = size.width
             val h = size.height
-            // Embedded into the measurement assembly: full-bleed ivory (the
-            // assembly supplies the frame); standalone: framed + cast shadow.
             val margin = if (embedded) 0.dp.toPx() else 2.dp.toPx()
             val faceLeft = margin
             val faceTop = margin
             val faceRight = w - margin
             val faceBottom = h - (if (embedded) 0.dp.toPx() else 6.dp.toPx())
             val frame = if (embedded) 0.dp.toPx() else 3.dp.toPx()
-            // Pivot raised so the needle's counterweight tail clears the
-            // face bottom; the arc radius is sized from the bounds below.
-            val pivot = Offset(w / 2f, faceBottom - (if (embedded) 40.dp.toPx() else 42.dp.toPx()))
-            // Size the arc from the available bounds AND the sweep. The
-            // scale numerals sit INSIDE the arc rim (classic moving-coil face),
-            // so the binding width constraint is the arc rim itself at the
-            // extreme tick angle: R·sin(half-sweep) must stay inside the face.
-            // This uses far more of the face width than the old conservative
-            // radius. The height limit keeps the arc clear of the top edge.
-            // Needle, ticks and numerals all share this one radius.
-            val halfSweepRad = (AnalogMeterGeometry.SWEEP_DEGREES / 2.0 * PI / 180.0).toFloat()
-            val sinHalf = sin(halfSweepRad)
-            val edgePad = 6.dp.toPx()
-            val widthLimit = ((faceRight - faceLeft) / 2f - edgePad) / sinHalf
-            val heightLimit = pivot.y - faceTop - 9.dp.toPx()
-            val radius = min(widthLimit, heightLimit).coerceAtLeast(10f)
+            // Pivot BELOW the visible bottom edge — the needle emerges from
+            // the bottom-center seam; its tail is hidden behind the escutcheon.
+            val pivot = Offset(w / 2f, faceBottom + 18.dp.toPx())
 
             fun unit(angleDeg: Float): Offset {
                 val rad = angleDeg * PI.toFloat() / 180f
@@ -118,22 +101,20 @@ fun AnalogTuningMeter(
             }
             fun at(angleDeg: Float, r: Float): Offset = pivot + unit(angleDeg) * r
 
-            // Thin aged-brass frame: dark muted metal with a catch-light on
-            // the upper edge — hardware, not a gold picture frame.
-            val frameBrush = Brush.linearGradient(
-                0f to p.brass.copy(alpha = 0.85f),
-                0.22f to p.brassDark,
-                1f to p.brassDark.copy(alpha = 0.92f),
-                start = Offset(0f, 0f),
-                end = Offset(w, h),
-            )
-            val faceBrush = Brush.verticalGradient(
-                0f to p.ivory,
-                1f to p.ivoryEdge,
-                startY = faceTop,
-                endY = faceBottom,
-            )
-            val faceCorner = if (embedded) 0.dp.toPx() else 9.dp.toPx()
+            // Radius from the bounds: numerals sit OUTSIDE the arc, so the
+            // extreme numeral (at ±45°) must stay inside the face width, and
+            // the top numeral must clear the top edge.
+            val halfSweepRad = (AnalogMeterGeometry.SWEEP_DEGREES / 2.0 * PI / 180.0).toFloat()
+            val sinHalf = sin(halfSweepRad)
+            val numeralOffset = 15.dp.toPx()
+            val numeralHalf = 13.dp.toPx()
+            val edgePad = 5.dp.toPx()
+            val widthLimit =
+                ((faceRight - faceLeft) / 2f - edgePad - numeralHalf) / sinHalf - numeralOffset
+            val heightLimit = pivot.y - faceTop - numeralOffset - 12.dp.toPx()
+            val radius = min(widthLimit, heightLimit).coerceAtLeast(10f)
+
+            val faceCorner = if (embedded) 0.dp.toPx() else 14.dp.toPx()
             val facePath = Path().apply {
                 addRoundRect(
                     RoundRect(
@@ -145,28 +126,38 @@ fun AnalogTuningMeter(
                     ),
                 )
             }
-            // Very subtle age mottling — deterministic, clipped to the face.
-            val ageSpots = listOf(
-                Offset(w * 0.30f, faceTop + (faceBottom - faceTop) * 0.32f),
-                Offset(w * 0.72f, faceTop + (faceBottom - faceTop) * 0.55f),
-                Offset(w * 0.48f, faceTop + (faceBottom - faceTop) * 0.78f),
+            // Recessed glass: warm radial ivory (bright upper-center → parchment
+            // edges) + a soft top-edge inner bezel shadow under the hood.
+            val glassBrush = Brush.radialGradient(
+                0f to p.ivory,
+                0.7f to p.ivory,
+                1f to p.ivoryEdge,
+                center = Offset(w / 2f, faceTop + (faceBottom - faceTop) * 0.30f),
+                radius = (faceRight - faceLeft) * 0.78f,
             )
-            val spotR = (faceRight - faceLeft) * 0.30f
+            val hoodShadow = Brush.verticalGradient(
+                0f to p.ink.copy(alpha = 0.20f),
+                1f to Color.Transparent,
+                startY = faceTop + frame,
+                endY = faceTop + frame + 8.dp.toPx(),
+            )
+            val frameBrush = Brush.linearGradient(
+                0f to p.brass.copy(alpha = 0.85f),
+                0.22f to p.brassDark,
+                1f to p.brassDark.copy(alpha = 0.92f),
+                start = Offset(0f, 0f),
+                end = Offset(w, h),
+            )
 
-            // Scale labels: fixed dp keeps geometry stable at any font scale.
-            // Larger, crisper numerals (the meter is the centerpiece).
+            // Scale numerals OUTSIDE (above) the arc — needle sweeps the inner
+            // ticks cleanly without overlapping text. Fixed dp keeps geometry
+            // stable at any font scale.
             val labelStyle = TextStyle(
-                fontSize = 14.dp.toSp(),
+                fontSize = 13.dp.toSp(),
                 fontWeight = FontWeight.SemiBold,
                 color = p.ink,
             )
             val zeroStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
-            val sideLabelStyle = TextStyle(
-                fontSize = 12.dp.toSp(),
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.dp.toSp(),
-                color = p.ink,
-            )
             data class Mark(val text: String, val style: TextStyle, val center: Offset, val halfW: Float, val halfH: Float)
             val marks = (-50..50 step 10).map { cents ->
                 val text = if (cents > 0) "+$cents" else "$cents"
@@ -174,39 +165,68 @@ fun AnalogTuningMeter(
                 val layout = measurer.measure(text, style)
                 Mark(
                     text, style,
-                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius - 26.dp.toPx()),
+                    at(AnalogMeterGeometry.tickAngle(cents).toFloat(), radius + numeralOffset),
                     layout.size.width / 2f, layout.size.height / 2f,
                 )
             }
-            val flatSize = measurer.measure("FLAT", sideLabelStyle).size
-            val sharpSize = measurer.measure("SHARP", sideLabelStyle).size
+            val sideStyle = TextStyle(
+                fontSize = 12.dp.toSp(),
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.dp.toSp(),
+                color = p.ink.copy(alpha = 0.30f),
+            )
+            val flatText = "FLAT ♭"
+            val sharpText = "♯ SHARP"
+            val flatSize = measurer.measure(flatText, sideStyle).size
+            val sharpSize = measurer.measure(sharpText, sideStyle).size
+            val stampStyle = TextStyle(
+                fontSize = 8.5.dp.toSp(),
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.6.dp.toSp(),
+                color = p.taupe.copy(alpha = 0.38f),
+            )
+            val stampText = "CENTS • 440Hz CALIBRATED"
+            val stampSize = measurer.measure(stampText, stampStyle).size
 
+            // 3-tier tick hierarchy pointing inward toward the pivot.
             data class Tick(val start: Offset, val end: Offset, val width: Float, val color: Color)
-            val ticks = (-50..50 step 5).map { cents ->
-                val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
-                val len = when {
-                    cents == 0 -> 18.dp.toPx()
-                    cents % 10 == 0 -> 15.dp.toPx()
-                    else -> 9.dp.toPx()
+            val ticks = buildList {
+                for (cents in -50..50 step 5) {
+                    val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
+                    val major = cents % 10 == 0
+                    val len = if (major) 14.dp.toPx() else 9.dp.toPx()
+                    val sw = if (major) 2.dp.toPx() else 1.25.dp.toPx()
+                    add(Tick(at(a, radius), at(a, radius - len), sw, if (major) p.ink else p.inkSoft))
                 }
-                Tick(
-                    start = at(a, radius),
-                    end = at(a, radius - len),
-                    width = when {
-                        cents == 0 -> 2.6.dp.toPx()
-                        cents % 10 == 0 -> 2.dp.toPx()
-                        else -> 1.1.dp.toPx()
-                    },
-                    color = if (cents % 10 == 0) p.ink else p.inkSoft,
-                )
+                // Fine vernier every 2¢ inside the critical −10..+10 zone.
+                for (cents in -10..10 step 2) {
+                    if (cents % 5 == 0) continue
+                    val a = AnalogMeterGeometry.tickAngle(cents).toFloat()
+                    add(Tick(at(a, radius), at(a, radius - 5.dp.toPx()), 0.8.dp.toPx(), p.inkSoft))
+                }
+            }
+            // Small downward triangle index (▼) centered directly above 0.
+            val zeroTip = at(0f, radius + 2.dp.toPx())
+            val triHalf = 3.5.dp.toPx()
+            val triHeight = 5.dp.toPx()
+            val triangle = Path().apply {
+                moveTo(zeroTip.x, zeroTip.y)
+                lineTo(zeroTip.x - triHalf, zeroTip.y - triHeight)
+                lineTo(zeroTip.x + triHalf, zeroTip.y - triHeight)
+                close()
             }
             val arcTopLeft = Offset(pivot.x - radius, pivot.y - radius)
             val arcSize = Size(radius * 2f, radius * 2f)
             val sweep = AnalogMeterGeometry.SWEEP_DEGREES.toFloat()
+            val innerRadius = radius - 18.dp.toPx()
+            val innerTopLeft = Offset(pivot.x - innerRadius, pivot.y - innerRadius)
+            val innerSize = Size(innerRadius * 2f, innerRadius * 2f)
+            // Needle reaches just past the inner tips of the major ticks.
+            val needleLen = radius - 10.dp.toPx()
+            val escR = 13.dp.toPx()
 
             onDrawBehind {
                 if (!embedded) {
-                    // Shadow cast onto the wood (light from upper left).
                     drawRoundRect(
                         color = p.recessEdge.copy(alpha = 0.30f),
                         topLeft = Offset(faceLeft + 1.dp.toPx(), faceTop + 3.5.dp.toPx()),
@@ -214,178 +234,148 @@ fun AnalogTuningMeter(
                         cornerRadius = CornerRadius(12.dp.toPx()),
                     )
                     drawRoundRect(
-                        color = p.recessEdge.copy(alpha = 0.18f),
-                        topLeft = Offset(faceLeft + 0.5.dp.toPx(), faceTop + 1.5.dp.toPx()),
-                        size = Size(faceRight - faceLeft, faceBottom - faceTop),
-                        cornerRadius = CornerRadius(12.dp.toPx()),
-                    )
-                    // Thin metal frame around the standalone face.
-                    drawRoundRect(
                         brush = frameBrush,
                         topLeft = Offset(faceLeft, faceTop),
                         size = Size(faceRight - faceLeft, faceBottom - faceTop),
                         cornerRadius = CornerRadius(12.dp.toPx()),
                     )
                 }
-                // Ivory face (full-bleed when embedded; the assembly frames it).
+                // Cream glass face.
                 drawRoundRect(
-                    brush = faceBrush,
+                    brush = glassBrush,
                     topLeft = Offset(faceLeft + frame, faceTop + frame),
                     size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
                     cornerRadius = CornerRadius(faceCorner),
                 )
                 clipPath(facePath) {
-                    ageSpots.forEach { c ->
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                0f to p.ivoryEdge.copy(alpha = 0.16f),
-                                1f to Color.Transparent,
-                                center = c,
-                                radius = spotR,
-                            ),
-                            radius = spotR,
-                            center = c,
+                    // Top-edge inner bezel shadow (recessed under the hood).
+                    drawRect(
+                        brush = hoodShadow,
+                        topLeft = Offset(faceLeft + frame, faceTop + frame),
+                        size = Size(faceRight - faceLeft - frame * 2, 8.dp.toPx()),
+                    )
+                    // Parallax mirror hairline (concentric, 18dp inside the arc).
+                    drawArc(
+                        color = p.ink.copy(alpha = 0.18f),
+                        startAngle = 270f - sweep / 2f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = innerTopLeft,
+                        size = innerSize,
+                        style = Stroke(width = 1.dp.toPx()),
+                    )
+                    // Main scale arc.
+                    drawArc(
+                        color = p.ink,
+                        startAngle = 270f - sweep / 2f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = arcTopLeft,
+                        size = arcSize,
+                        style = Stroke(width = 1.6.dp.toPx()),
+                    )
+                    // Illuminated −3..+3¢ target zone (animated sage → emerald).
+                    drawArc(
+                        color = zoneColor.value,
+                        startAngle = 270f - zoneHalfAngle,
+                        sweepAngle = zoneHalfAngle * 2f,
+                        useCenter = false,
+                        topLeft = arcTopLeft,
+                        size = arcSize,
+                        style = Stroke(width = 4.5.dp.toPx()),
+                    )
+                    ticks.forEach { t -> drawLine(t.color, t.start, t.end, strokeWidth = t.width) }
+                    drawPath(triangle, p.ink)
+                    marks.forEach { m ->
+                        drawText(
+                            textMeasurer = measurer,
+                            text = m.text,
+                            topLeft = Offset(m.center.x - m.halfW, m.center.y - m.halfH),
+                            style = m.style,
                         )
                     }
-                    // Inset edge: shadow along the top inner wall.
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            0f to p.ink.copy(alpha = 0.16f),
-                            0.10f to Color.Transparent,
-                            1f to Color.Transparent,
-                            startY = faceTop + frame,
-                            endY = faceBottom - frame,
-                        ),
-                        topLeft = Offset(faceLeft + frame + 0.5.dp.toPx(), faceTop + frame + 0.5.dp.toPx()),
-                        size = Size(
-                            faceRight - faceLeft - frame * 2 - 1.dp.toPx(),
-                            faceBottom - faceTop - frame * 2 - 1.dp.toPx(),
-                        ),
-                        cornerRadius = CornerRadius(8.dp.toPx()),
-                        style = Stroke(width = 1.5.dp.toPx()),
-                    )
-                }
-                // Hairline inset edge between frame and face (standalone only).
-                if (!embedded) {
-                    drawRoundRect(
-                        color = p.recessEdge.copy(alpha = 0.5f),
-                        topLeft = Offset(faceLeft + frame, faceTop + frame),
-                        size = Size(faceRight - faceLeft - frame * 2, faceBottom - faceTop - frame * 2),
-                        cornerRadius = CornerRadius(9.dp.toPx()),
-                        style = Stroke(width = 0.7.dp.toPx()),
-                    )
-                }
-
-                // Scale arc + restrained in-tune band.
-                drawArc(
-                    color = p.ink,
-                    startAngle = 270f - sweep / 2f,
-                    sweepAngle = sweep,
-                    useCenter = false,
-                    topLeft = arcTopLeft,
-                    size = arcSize,
-                    style = Stroke(width = 1.6.dp.toPx()),
-                )
-                drawArc(
-                    color = bandColor,
-                    startAngle = 270f - bandHalfAngle,
-                    sweepAngle = bandHalfAngle * 2f,
-                    useCenter = false,
-                    topLeft = arcTopLeft,
-                    size = arcSize,
-                    style = Stroke(width = 4.dp.toPx()),
-                )
-                ticks.forEach { t -> drawLine(t.color, t.start, t.end, strokeWidth = t.width) }
-                marks.forEach { m ->
+                    // Corner labels + vintage dial stamp (low contrast).
                     drawText(
                         textMeasurer = measurer,
-                        text = m.text,
-                        topLeft = Offset(m.center.x - m.halfW, m.center.y - m.halfH),
-                        style = m.style,
+                        text = flatText,
+                        topLeft = Offset(faceLeft + frame + 12.dp.toPx(), faceBottom - frame - flatSize.height - 10.dp.toPx()),
+                        style = sideStyle,
                     )
-                }
-                drawText(
-                    textMeasurer = measurer,
-                    text = "FLAT",
-                    topLeft = Offset(faceLeft + frame + 12.dp.toPx(), pivot.y - flatSize.height / 2f),
-                    style = sideLabelStyle,
-                )
-                drawText(
-                    textMeasurer = measurer,
-                    text = "SHARP",
-                    topLeft = Offset(
-                        faceRight - frame - 12.dp.toPx() - sharpSize.width,
-                        pivot.y - sharpSize.height / 2f,
-                    ),
-                    style = sideLabelStyle,
-                )
-                // ── Needle (the only per-frame state reads) ──────────────
-                // Hidden (faded out) when there is no reliable reading;
-                // the brass hub below stays visible. Never a flat-stop needle.
-                val needleVis = needleAlpha.value
-                if (needleVis > 0.02f) {
-                    val animated = needleState.value
-                    if (active && clamped) {
-                        val stopAngle = if (animated >= 0f) sweep / 2f else -sweep / 2f
-                        drawCircle(p.inkSoft.copy(alpha = needleVis), radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
-                    }
-                    val angle = AnalogMeterGeometry.needleAngle(animated.toDouble()).toFloat()
+                    drawText(
+                        textMeasurer = measurer,
+                        text = sharpText,
+                        topLeft = Offset(faceRight - frame - 12.dp.toPx() - sharpSize.width, faceBottom - frame - sharpSize.height - 10.dp.toPx()),
+                        style = sideStyle,
+                    )
+                    drawText(
+                        textMeasurer = measurer,
+                        text = stampText,
+                        topLeft = Offset(w / 2f - stampSize.width / 2f, faceBottom - frame - stampSize.height - 12.dp.toPx()),
+                        style = stampStyle,
+                    )
+
+                    // ── Needle (always rendered; the only per-frame angle read) ──
+                    val angle = needleAngle.value
                     val u = unit(angle)
                     val perp = Offset(u.y, -u.x)
-                    val len = radius * 0.985f
-                    val tail = radius * 0.14f
-                    val tip = pivot + u * len
-                    val baseL = pivot + perp * 1.7.dp.toPx()
-                    val baseR = pivot - perp * 1.7.dp.toPx()
-                    val tailL = pivot - u * tail + perp * 2.8.dp.toPx()
-                    val tailR = pivot - u * tail - perp * 2.8.dp.toPx()
+                    val tip = pivot + u * needleLen
+                    val baseHalf = 1.75.dp.toPx()
+                    val tipHalf = 0.5.dp.toPx()
                     fun needlePath(dx: Float, dy: Float): Path = Path().apply {
-                        moveTo(tip.x + dx, tip.y + dy)
-                        lineTo(baseL.x + dx, baseL.y + dy)
-                        lineTo(tailL.x + dx, tailL.y + dy)
-                        lineTo(tailR.x + dx, tailR.y + dy)
-                        lineTo(baseR.x + dx, baseR.y + dy)
+                        moveTo(tip.x + perp.x * tipHalf + dx, tip.y + perp.y * tipHalf + dy)
+                        lineTo(pivot.x + perp.x * baseHalf + dx, pivot.y + perp.y * baseHalf + dy)
+                        lineTo(pivot.x - perp.x * baseHalf + dx, pivot.y - perp.y * baseHalf + dy)
+                        lineTo(tip.x - perp.x * tipHalf + dx, tip.y - perp.y * tipHalf + dy)
                         close()
                     }
-                    drawPath(needlePath(1.dp.toPx(), 1.8.dp.toPx()), p.ink.copy(alpha = 0.16f * needleVis))
-                    drawPath(needlePath(0f, 0f), p.ink.copy(alpha = needleVis))
-                    // Fine metal sheen along one edge of the pointer.
+                    // Soft drop shadow cast onto the cream dial.
+                    drawPath(needlePath(2.5.dp.toPx(), 2.dp.toPx()), Color.Black.copy(alpha = 0.14f))
+                    drawPath(needlePath(0f, 0f), p.ink)
+                    // Fine metal sheen along one edge.
                     drawLine(
-                        color = p.ivory.copy(alpha = 0.22f * needleVis),
-                        start = pivot + u * (radius * 0.12f) + perp * 0.5.dp.toPx(),
-                        end = pivot + u * (radius * 0.9f) + perp * 0.5.dp.toPx(),
+                        color = p.ivory.copy(alpha = 0.22f),
+                        start = pivot + u * (needleLen * 0.18f) + perp * 0.5.dp.toPx(),
+                        end = pivot + u * (needleLen * 0.9f) + perp * 0.5.dp.toPx(),
                         strokeWidth = 0.6.dp.toPx(),
                     )
+                    if (active && clamped) {
+                        val stopAngle = if (angle >= 0f) sweep / 2f else -sweep / 2f
+                        drawCircle(p.inkSoft, radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
+                    }
                 }
-
-                // Brass pivot: seat shadow, ring, domed cap, slot, specular.
-                drawCircle(
-                    p.recessEdge.copy(alpha = 0.30f),
-                    radius = 10.5.dp.toPx(),
-                    center = Offset(pivot.x + 0.5.dp.toPx(), pivot.y + 1.dp.toPx()),
-                )
-                drawCircle(p.brassDark, radius = 9.5.dp.toPx(), center = pivot)
-                drawCircle(
+                // Brass escutcheon: a semicircular cap at the bottom-center seam
+                // hiding the needle tail (drawn over the needle exit).
+                val escCenter = Offset(w / 2f, faceBottom - frame)
+                val escPath = Path().apply {
+                    addArc(
+                        oval = androidx.compose.ui.geometry.Rect(
+                            escCenter.x - escR, escCenter.y - escR,
+                            escCenter.x + escR, escCenter.y + escR,
+                        ),
+                        startAngleDegrees = 180f,
+                        sweepAngleDegrees = 180f,
+                    )
+                    close()
+                }
+                drawPath(escPath, p.brassDark)
+                drawPath(
+                    escPath,
                     brush = Brush.radialGradient(
                         0f to p.brassLight,
-                        0.55f to p.brass,
+                        0.6f to p.brass,
                         1f to p.brassDark,
-                        center = Offset(pivot.x - 3.dp.toPx(), pivot.y - 3.dp.toPx()),
-                        radius = 9.dp.toPx(),
+                        center = Offset(escCenter.x - escR * 0.3f, escCenter.y - escR * 0.4f),
+                        radius = escR,
                     ),
-                    radius = 8.dp.toPx(),
-                    center = pivot,
                 )
-                drawLine(
-                    color = p.recessEdge.copy(alpha = 0.7f),
-                    start = Offset(pivot.x - 3.5.dp.toPx(), pivot.y),
-                    end = Offset(pivot.x + 3.5.dp.toPx(), pivot.y),
-                    strokeWidth = 1.1.dp.toPx(),
-                )
-                drawCircle(
-                    p.ivory.copy(alpha = 0.5f),
-                    radius = 1.2.dp.toPx(),
-                    center = Offset(pivot.x - 2.5.dp.toPx(), pivot.y - 2.5.dp.toPx()),
+                drawArc(
+                    color = p.recessEdge.copy(alpha = 0.6f),
+                    startAngle = 180f,
+                    sweepAngle = 180f,
+                    useCenter = false,
+                    topLeft = Offset(escCenter.x - escR, escCenter.y - escR),
+                    size = Size(escR * 2f, escR * 2f),
+                    style = Stroke(width = 0.8.dp.toPx()),
                 )
             }
         }

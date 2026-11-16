@@ -95,6 +95,8 @@ fun InstrumentKey(
     selected: Boolean = false,
     highlighted: Boolean = false,
     enabled: Boolean = true,
+    accentBorder: Boolean = false,
+    bevel: Boolean = false,
     shape: Shape = RoundedCornerShape(6.dp),
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     content: @Composable RowScope.() -> Unit,
@@ -102,10 +104,11 @@ fun InstrumentKey(
     val p = InstrumentTheme.palette
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val raised = selected && !pressed
+    val raised = (selected || accentBorder) && !pressed
     val capColor = when {
         !enabled -> p.walnut.copy(alpha = 0.55f)
         pressed -> p.walnutDeep
+        accentBorder -> p.walnutLight
         raised -> p.walnutLight
         highlighted -> p.walnut
         else -> p.recess
@@ -118,14 +121,15 @@ fun InstrumentKey(
         color = capColor,
         contentColor = p.ivory,
         border = BorderStroke(
-            width = 0.8.dp,
+            width = if (accentBorder) 1.5.dp else 1.dp,
             color = when {
+                accentBorder -> p.brass
                 raised -> p.walnutLight.copy(alpha = 0.9f)
                 pressed -> p.recessEdge
                 else -> p.recessEdge.copy(alpha = 0.85f)
             },
         ),
-        shadowElevation = if (raised) 3.dp else 0.dp,
+        shadowElevation = if (accentBorder) 2.dp else if (raised) 3.dp else 0.dp,
         interactionSource = interaction,
     ) {
         Row(
@@ -134,11 +138,11 @@ fun InstrumentKey(
                 .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
                 .drawBehind {
                     val r = 5.dp.toPx()
-                    if (raised) {
-                        // Proud cap: bevel catch-light along the top edge.
+                    if (raised || bevel) {
+                        // Proud cap / push-button: bevel catch-light along the top edge.
                         drawRoundRect(
                             brush = Brush.verticalGradient(
-                                0f to p.ivory.copy(alpha = 0.14f),
+                                0f to (if (bevel) p.brassLight.copy(alpha = 0.30f) else p.ivory.copy(alpha = 0.14f)),
                                 0.4f to Color.Transparent,
                             ),
                             cornerRadius = CornerRadius(r),
@@ -207,5 +211,35 @@ fun JewelLamp(
             radius = r * 0.14f,
             center = Offset(c.x - r * 0.2f, c.y - r * 0.24f),
         )
+    }
+}
+
+/**
+ * A small antique-brass gear/tuning icon for the settings push-button.
+ * Decorative (paired with the uppercase label); deterministic Canvas drawing.
+ */
+@Composable
+fun GearIcon(
+    modifier: Modifier = Modifier,
+    color: Color = InstrumentTheme.palette.brass,
+) {
+    val p = InstrumentTheme.palette
+    androidx.compose.foundation.Canvas(
+        modifier = modifier
+            .size(16.dp)
+            .clearAndSetSemantics {},
+    ) {
+        val c = center
+        val r = size.minDimension / 2f
+        drawCircle(color, radius = r * 0.70f, center = c)
+        val teeth = 8
+        for (i in 0 until teeth) {
+            val ang = i * 2.0 * kotlin.math.PI / teeth
+            val tx = c.x + (kotlin.math.cos(ang) * r * 0.80f).toFloat()
+            val ty = c.y + (kotlin.math.sin(ang) * r * 0.80f).toFloat()
+            drawCircle(color, radius = r * 0.24f, center = Offset(tx, ty))
+        }
+        drawCircle(p.recess, radius = r * 0.30f, center = c)
+        drawCircle(color.copy(alpha = 0.5f), radius = r * 0.30f, center = c, style = Stroke(width = r * 0.08f))
     }
 }

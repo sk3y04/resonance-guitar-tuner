@@ -1,6 +1,7 @@
 package dev.anima.resonance.ui.instrument
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,6 +102,7 @@ fun InstrumentStringSelector(
                                 onClick = { onStringSelect(i) },
                                 selected = locked,
                                 highlighted = active && !locked,
+                                accentBorder = active,
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = keyHeight)
@@ -118,34 +121,44 @@ fun InstrumentStringSelector(
                                     vertical = 4.dp,
                                 ),
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center,
+                                // Number strictly centered above the note in BOTH
+                                // states; the active dot sits in the top-right
+                                // corner so selecting never shifts the text.
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = keyHeight - 10.dp),
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                    ) {
                                         Text(
                                             text = "${i + 1}",
                                             style = InstrumentType.engraved.copy(fontSize = 9.sp),
                                             maxLines = 1,
                                             modifier = Modifier.clearAndSetSemantics {},
                                         )
-                                        if (active) {
-                                            Spacer(Modifier.size(3.dp))
-                                            JewelLamp(
-                                                lit = true,
-                                                color = if (locked) p.lampAmber else p.lampGreen,
-                                                size = 6.dp,
-                                            )
-                                        }
+                                        Text(
+                                            text = label,
+                                            style = InstrumentType.keyLabel.copy(
+                                                fontSize = 16.sp,
+                                                color = if (active) p.ivory else p.ivory.copy(alpha = 0.88f),
+                                            ),
+                                            maxLines = 1,
+                                        )
                                     }
-                                    Text(
-                                        text = label,
-                                        style = InstrumentType.keyLabel.copy(
-                                            fontSize = 16.sp,
-                                            color = if (active) p.ivory else p.ivory.copy(alpha = 0.88f),
-                                        ),
-                                        maxLines = 1,
-                                    )
+                                    if (active) {
+                                        JewelLamp(
+                                            lit = true,
+                                            color = if (locked) p.lampAmber else p.lampGreen,
+                                            size = 6.dp,
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(2.dp),
+                                        )
+                                    }
                                 }
                             }
                         }

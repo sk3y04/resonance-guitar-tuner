@@ -9,17 +9,17 @@ import kotlin.test.assertTrue
 /**
  * Pure needle/tick geometry for the analog meter. The meter maps the
  * existing normalized cents position (-1..1, 0 = center) onto a symmetric
- * needle sweep around vertical; travel is clamped at the mechanical stops
- * without touching the underlying pitch calculation.
+ * 90° needle sweep around vertical (±45° at ±50¢); travel is clamped at the
+ * mechanical stops without touching the underlying pitch calculation.
  *
- * The sweep is deepened to 100° (±50°) so the dial reads as a larger,
- * deeper analog instrument while the cents mapping stays linear and
- * center-zero. The mapping contract (linearity, clamping, agreement with the
- * tested UI position, tick symmetry, in-tune band) is unchanged.
+ * Flagship vintage dial: the needle is ALWAYS rendered. With no reliable
+ * reading it rests gently just past the flat-side stop (≈ −52¢, like an
+ * unpowered analog meter) rather than disappearing. The cents mapping stays
+ * linear and center-zero; negative cents deflect LEFT, positive RIGHT.
  */
 class AnalogMeterGeometryTest {
 
-    private val halfSweep = 35.0 // SWEEP_DEGREES / 2
+    private val halfSweep = 45.0 // SWEEP_DEGREES / 2 (90° sweep)
 
     @Test
     fun centerPositionPointsStraightUp() {
@@ -36,6 +36,13 @@ class AnalogMeterGeometryTest {
     fun mappingIsLinearAcrossTheScale() {
         assertEquals(halfSweep * 0.5, AnalogMeterGeometry.needleAngle(0.5), 1e-9)
         assertEquals(-halfSweep * 0.25, AnalogMeterGeometry.needleAngle(-0.25), 1e-9)
+    }
+
+    @Test
+    fun negativeCentsDeflectLeftPositiveRight() {
+        assertTrue(AnalogMeterGeometry.needleAngleForCents(-9) < 0.0, "flat must deflect left")
+        assertTrue(AnalogMeterGeometry.needleAngleForCents(9) > 0.0, "sharp must deflect right")
+        assertEquals(-9.0 / 50.0 * halfSweep, AnalogMeterGeometry.needleAngleForCents(-9), 1e-9)
     }
 
     @Test
@@ -93,33 +100,28 @@ class AnalogMeterGeometryTest {
                 1e-9,
             )
         }
-        assertEquals(
-            -AnalogMeterGeometry.tickAngle(30),
-            AnalogMeterGeometry.tickAngle(-30),
-            1e-9,
-        )
+        assertEquals(-AnalogMeterGeometry.tickAngle(30), AnalogMeterGeometry.tickAngle(-30), 1e-9)
     }
 
     @Test
     fun inTuneBandMatchesTheStateMachineExitTolerance() {
-        // The state machine exits "in tune" beyond ±8 cents; the painted
-        // band must cover exactly that region on the same angular scale.
         assertEquals(8.0 / 50.0 * halfSweep, AnalogMeterGeometry.inTuneBandHalfAngle(8.0), 1e-9)
         assertEquals(0.0, AnalogMeterGeometry.inTuneBandHalfAngle(0.0), 1e-9)
     }
 
     @Test
-    fun restAngleIsTheFlatMechanicalStop() {
-        // The mechanical rest stop is the flat side (a geometric constant)…
-        assertEquals(-halfSweep, AnalogMeterGeometry.REST_ANGLE, 1e-9)
-        assertTrue(AnalogMeterGeometry.REST_ANGLE < 0.0)
+    fun restAngleIsJustPastTheFlatMechanicalStop() {
+        // The unpowered rest sits just past the −50¢ stop (≈ −52¢), like a
+        // real analog meter at rest — never centered, never a valid reading.
+        assertTrue(AnalogMeterGeometry.REST_ANGLE < -halfSweep, "rest must be past the flat stop")
+        assertTrue(AnalogMeterGeometry.REST_ANGLE > -halfSweep - 5.0, "rest only slightly past the stop")
+        assertEquals(-52.0 / 50.0 * halfSweep, AnalogMeterGeometry.REST_ANGLE, 1e-9)
     }
 
     @Test
-    fun noSignalHidesTheNeedleRatherThanParkingAtFlatStop() {
-        // …but with no reliable reading the needle is HIDDEN (hub stays),
-        // so the meter never implies a flat pitch. Only a live reading shows it.
-        assertFalse(AnalogMeterGeometry.needleShown(active = false))
+    fun needleIsAlwaysRenderedEvenWithNoSignal() {
+        // The needle never disappears; no-signal rests it at the left stop.
+        assertTrue(AnalogMeterGeometry.needleShown(active = false))
         assertTrue(AnalogMeterGeometry.needleShown(active = true))
     }
 }

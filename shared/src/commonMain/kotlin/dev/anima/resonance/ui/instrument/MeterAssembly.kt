@@ -50,6 +50,7 @@ fun MeterAssembly(
     modifier: Modifier = Modifier,
     availableHeightDp: Float = 4096f,
     readoutCapDp: Float = MeterAssemblyLayout.MAX_READOUT_DP,
+    minGaugeAspect: Float = MeterAssemblyLayout.MIN_GAUGE_ASPECT,
 ) {
     val p = InstrumentTheme.palette
     val fontScale = LocalDensity.current.fontScale
@@ -58,39 +59,46 @@ fun MeterAssembly(
         // readout is compact. Surplus goes to the string keys (instrument) or
         // the readout (chromatic). Fill the slot exactly (minus the divider).
         val targetH = minOf(availableHeightDp, maxHeight.value)
-        val spec = MeterAssemblyLayout.compute(maxWidth.value, targetH - 1.5f, readoutCapDp)
+        val spec = MeterAssemblyLayout.compute(maxWidth.value, targetH - 1.5f, readoutCapDp, minGaugeAspect)
         val gaugeH = spec.gaugeHeightDp.dp
         val readoutH = spec.readoutHeightDp.dp
-        val noteSp = (readoutH.value * 0.70f).coerceIn(40f, 76f)
-        val noteSize = (noteSp / fontScale).coerceAtMost(76f).sp
-        val centsSize = (noteSp * 0.45f / fontScale).coerceAtMost(34f).sp
+        val noteSp = (readoutH.value * 0.48f).coerceIn(40f, 54f)
+        val noteSize = (noteSp / fontScale).coerceAtMost(54f).sp
+        val centsSize = (noteSp * 0.52f / fontScale).coerceAtMost(28f).sp
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(p.recess)
                 .drawBehind {
-                    // One shared mounting rim: muted brass hairline with a
-                    // directional inner lip (light upper-left).
-                    val inset = 0.75.dp.toPx()
+                    // Unified beveled bezel: a subtle outer rim highlight
+                    // (lit upper-left) + a crisp 1dp dark inner inset border, so
+                    // dial + readout read as one module behind instrument glass.
+                    val r = 14.dp.toPx()
                     drawRoundRect(
                         brush = Brush.linearGradient(
-                            0f to p.brass.copy(alpha = 0.85f),
-                            0.5f to p.brassDark,
-                            1f to p.brassDark.copy(alpha = 0.9f),
+                            0f to p.brassLight.copy(alpha = 0.55f),
+                            0.4f to p.brass.copy(alpha = 0.30f),
+                            1f to p.brassDark.copy(alpha = 0.65f),
                             start = Offset(0f, 0f),
                             end = Offset(size.width, size.height),
                         ),
+                        cornerRadius = CornerRadius(r),
+                        style = Stroke(width = 1.5.dp.toPx()),
+                    )
+                    val inset = 1.5.dp.toPx()
+                    drawRoundRect(
+                        color = p.recessEdge.copy(alpha = 0.95f),
                         topLeft = Offset(inset, inset),
                         size = Size(size.width - inset * 2, size.height - inset * 2),
-                        cornerRadius = CornerRadius(11.dp.toPx()),
-                        style = Stroke(width = 1.5.dp.toPx()),
+                        cornerRadius = CornerRadius(r - inset),
+                        style = Stroke(width = 1.dp.toPx()),
                     )
                 },
         ) {
             Column(Modifier.fillMaxWidth()) {
-                // ── Ivory gauge (scale + needle only; messages live below) ──
+                // ── Ivory analog dial (rounded top corners via the bezel) ──
                 Box(Modifier.fillMaxWidth().height(gaugeH)) {
                     AnalogTuningMeter(
                         position = state.meterPosition,
@@ -102,14 +110,22 @@ fun MeterAssembly(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                // Hairline brass divider between the two recessed surfaces.
+                // Recessed divider seam between the dial and the display window.
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(1.5.dp)
-                        .background(p.brassDark.copy(alpha = 0.7f)),
+                        .height(2.dp)
+                        .drawBehind {
+                            drawRect(p.recessEdge)
+                            drawLine(
+                                color = p.brassDark.copy(alpha = 0.45f),
+                                start = Offset(0f, size.height - 0.5.dp.toPx()),
+                                end = Offset(size.width, size.height - 0.5.dp.toPx()),
+                                strokeWidth = 0.75.dp.toPx(),
+                            )
+                        },
                 )
-                // ── Note readout (adjoining recess; carries the message) ──
+                // ── Illuminated digital readout (rounded bottom corners) ──
                 NoteReadout(
                     state = state,
                     noteSize = noteSize,

@@ -91,7 +91,7 @@ object MainScreenUi {
                     null
                 }
             status == TunerStatus.UNSTABLE -> "Hold the note steady…"
-            else -> "Play a note"
+            else -> "Pluck a string"
         }
 
         val directionText = when {

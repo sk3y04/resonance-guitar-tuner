@@ -14,15 +14,16 @@ package dev.anima.resonance.ui.instrument
  */
 object MeterAssemblyLayout {
     const val MIN_READOUT_DP = 76f
-    /** Compact, content-driven readout — secondary to the meter. */
-    const val MAX_READOUT_DP = 100f
+    /** Fixed illuminated display height (104–112dp), zero layout jump. */
+    const val MAX_READOUT_DP = 112f
     const val MIN_NOTE_SP = 40f
     const val MAX_NOTE_SP = 96f
 
-    /** Natural gauge width:height — larger dial (70° sweep, full-width arc,
-     *  pivot raised for the needle tail). ~Square face fills the width. */
-    const val GAUGE_ASPECT = 1.0f
-    private const val MIN_GAUGE_ASPECT = 1.0f
+    /** Natural gauge width:height — wide landscape instrument window. */
+    const val GAUGE_ASPECT = 1.5f
+    /** On tall screens the dial may deepen to this aspect to absorb spare
+     *  height coherently (still a landscape instrument, never a tall empty face). */
+    const val MIN_GAUGE_ASPECT = 1.2f
     private const val MAX_GAUGE_ASPECT = 1.8f
 
     data class Spec(
@@ -31,27 +32,35 @@ object MeterAssemblyLayout {
         val noteGlyphSp: Float,
     )
 
-    /** Tallest the assembly grows for a given width at the compact cap. */
+    /** Tallest the assembly grows for a given width (dial deepened to MIN aspect). */
     fun maxHeightDp(widthDp: Float): Float =
-        widthDp.coerceAtLeast(1f) / GAUGE_ASPECT + MAX_READOUT_DP
+        widthDp.coerceAtLeast(1f) / MIN_GAUGE_ASPECT + MAX_READOUT_DP
 
     /**
      * @param readoutCapDp how tall the readout may grow to absorb spare height.
      *   Instrument mode uses the compact cap (surplus goes to the string keys);
      *   chromatic mode (no string grid) lets the readout grow further.
      */
-    fun compute(widthDp: Float, heightDp: Float, readoutCapDp: Float = MAX_READOUT_DP): Spec {
+    fun compute(
+        widthDp: Float,
+        heightDp: Float,
+        readoutCapDp: Float = MAX_READOUT_DP,
+        minGaugeAspect: Float = MIN_GAUGE_ASPECT,
+    ): Spec {
         val w = widthDp.coerceAtLeast(1f)
         val h = heightDp.coerceAtLeast(1f)
         val cap = readoutCapDp.coerceAtLeast(MIN_READOUT_DP)
+        val minAsp = minGaugeAspect.coerceIn(0.8f, MAX_GAUGE_ASPECT)
         val naturalGauge = w / GAUGE_ASPECT
-        val usedH = minOf(h, naturalGauge + cap)
+        // Spare height deepens the dial (down to minAsp) before the readout
+        // grows; the readout itself stays at the compact fixed cap.
+        val usedH = minOf(h, w / minAsp + cap)
 
         // The readout absorbs spare height first, up to its cap.
         var readout = (usedH - naturalGauge).coerceIn(MIN_READOUT_DP, cap)
         var gauge = usedH - readout
         // Keep the gauge at an arc-filling aspect (never a tall empty face).
-        gauge = gauge.coerceIn(w / MAX_GAUGE_ASPECT, w / MIN_GAUGE_ASPECT)
+        gauge = gauge.coerceIn(w / MAX_GAUGE_ASPECT, w / minAsp)
         readout = (usedH - gauge).coerceAtLeast(20f)
         gauge = usedH - readout
 

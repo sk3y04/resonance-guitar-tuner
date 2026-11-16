@@ -1,6 +1,7 @@
 package dev.anima.resonance.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +43,7 @@ import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.instrument.AnalogTuningMeter
 import dev.anima.resonance.ui.instrument.InstrumentFaceplate
 import dev.anima.resonance.ui.instrument.InstrumentKey
+import dev.anima.resonance.ui.instrument.GearIcon
 import dev.anima.resonance.ui.instrument.InstrumentStringSelector
 import dev.anima.resonance.ui.instrument.InstrumentTheme
 import dev.anima.resonance.ui.instrument.InstrumentType
@@ -108,9 +111,9 @@ fun TunerScreen(
                 BoxWithConstraints(
                     Modifier
                         .align(Alignment.TopCenter)
-                        .fillMaxSize()
                         .widthIn(max = 480.dp)
-                        .padding(12.dp),
+                        .fillMaxSize()
+                        .padding(androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 12.dp)),
                 ) {
                     val innerW = maxWidth
                     val innerH = maxHeight
@@ -133,12 +136,34 @@ fun TunerScreen(
                         else -> 129.dp // caption + gap + two 56dp rows + 6dp gap
                     }
                     val controlsNaturalH = 56.dp + stringsH + 48.dp
-                    // Reserve the small group gaps (50dp) + a modest bottom
-                    // enclosure margin (16dp) before sizing the meter assembly.
                     val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 66.dp
                     // Fixed layout when the gauge has real room; otherwise an
                     // accessible scrolling fallback (large fonts / tiny screens).
                     val fallback = largeText || availableAssemblyH < 160.dp
+                    // The wide landscape dial frees vertical space. Redistribute
+                    // it as balanced breathing room between the control groups
+                    // (dynamic gaps, capped) plus a modest coherent deepening of the
+                    // dial — never one large empty footer band, never stretched keys.
+                    val nGaps = if (hasStrings) 4 else 3
+                    val baseGap = 14f
+                    val gaugeNatural = innerW.value / MeterAssemblyLayout.GAUGE_ASPECT
+                    val assemblyNatural =
+                        gaugeNatural + MeterAssemblyLayout.MAX_READOUT_DP + 1.5f
+                    val naturalH =
+                        24f + assemblyNatural + controlsNaturalH.value + baseGap * nGaps + 24f
+                    val spare = (innerH.value - naturalH).coerceAtLeast(0f)
+                    // The dial deepens coherently first; the remainder becomes
+                    // balanced breathing room between groups (fewer groups in
+                    // chromatic => larger gaps). Residual is a modest wood margin.
+                    val minAspect =
+                        if (hasStrings) MeterAssemblyLayout.MIN_GAUGE_ASPECT else 1.0f
+                    val gaugeMaxGrow = innerW.value / minAspect - gaugeNatural
+                    val gaugeGrow = spare.coerceIn(0f, gaugeMaxGrow)
+                    val remSpare = (spare - gaugeGrow).coerceAtLeast(0f)
+                    val maxGapExtra = if (hasStrings) 24f else 44f
+                    val gapExtra = (remSpare / nGaps).coerceAtMost(maxGapExtra)
+                    val sectionGap = (baseGap + gapExtra).dp
+                    val assemblyAvailH = assemblyNatural + gaugeGrow
 
                     if (fallback) {
                         FallbackLayout(
@@ -157,9 +182,9 @@ fun TunerScreen(
                     } else {
                         Column(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(sectionGap),
                         ) {
-                            LabelStrip(state)
+                            LabelStrip(state, onOpenSheet)
                             if (!granted || state.captureError) {
                                 CapturePanel(
                                     state = state,
@@ -179,10 +204,11 @@ fun TunerScreen(
                                     largeText = false,
                                     onRetryCapture = onRetryCapture,
                                     availableHeightDp = minOf(
-                                        innerW.value / MeterAssemblyLayout.GAUGE_ASPECT + 101.5f,
+                                        assemblyAvailH,
                                         availableAssemblyH.value,
                                     ),
                                     readoutCapDp = MeterAssemblyLayout.MAX_READOUT_DP,
+                                    minGaugeAspect = minAspect,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -202,16 +228,16 @@ fun TunerScreen(
                             }
                             InstrumentKey(
                                 onClick = onOpenSheet,
+                                bevel = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 48.dp)
                                     .testTag("resonance.openSheet"),
                             ) {
+                                GearIcon()
+                                Spacer(Modifier.size(8.dp))
                                 Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
                             }
-                            // ONE modest bottom enclosure margin absorbs any surplus
-                            // the width-bound meter cannot use coherently.
-                            Spacer(Modifier.weight(1f))
                         }
                     }
                 }
@@ -220,28 +246,42 @@ fun TunerScreen(
     }
 }
 
-/** Compact faceplate label strip: tuning name, capture state, A4 reference. */
+/** Header: preset selector (with chevron), live status, A4 reference —
+ *  one crisp horizontal baseline, balanced spacing, tabular reference pitch. */
 @Composable
-private fun LabelStrip(state: MainScreenUiState) {
+private fun LabelStrip(state: MainScreenUiState, onOpenSheet: () -> Unit = {}) {
+    val p = InstrumentTheme.palette
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = state.presetName ?: "Chromatic",
-            style = InstrumentType.engravedStrong,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .testTag("resonance.preset")
-                .semantics { heading() },
-        )
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = state.presetName ?: "Chromatic",
+                style = InstrumentType.engravedStrong,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .clickable(onClick = onOpenSheet)
+                    .testTag("resonance.preset")
+                    .semantics { heading() },
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(
+                text = "▾",
+                style = InstrumentType.engraved.copy(fontSize = 11.sp, color = p.brass),
+                maxLines = 1,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
+        }
         MicStatusLine(
             text = state.micStatusText,
             isError = state.captureError,
         )
-        Spacer(Modifier.size(10.dp))
+        Spacer(Modifier.size(12.dp))
         ConcertPitchText(hz = state.concertPitchHz)
     }
 }
@@ -325,7 +365,7 @@ private fun FallbackLayout(
             .testTag("resonance.scroll"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        LabelStrip(state)
+        LabelStrip(state, onOpenSheet)
         if (!granted || state.captureError) {
             CapturePanel(
                 state = state,
@@ -370,11 +410,16 @@ private fun FallbackLayout(
         }
         InstrumentKey(
             onClick = onOpenSheet,
+            bevel = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .testTag("resonance.openSheet"),
-        ) { Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel) }
+        ) {
+            GearIcon()
+            Spacer(Modifier.size(8.dp))
+            Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
+        }
         Spacer(Modifier.height(14.dp))
     }
 }

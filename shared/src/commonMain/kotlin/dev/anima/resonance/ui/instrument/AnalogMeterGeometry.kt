@@ -20,30 +20,27 @@ object AnalogMeterGeometry {
     const val FULL_SCALE_CENTS: Double = MainScreenUi.METER_FULL_SCALE_CENTS
 
     /** Total needle travel in degrees (±half around vertical).
-     *  The dial is rebuilt as a larger, deeper instrument. A 70° sweep
-     *  (±35°) lets the arc radius grow to use the full face width (the old
-     *  90°/conservative-radius dial wasted ~37% of the width), giving a much
-     *  larger scale, longer needle and taller coherent face. The cents mapping
-     *  stays linear and center-zero. */
-    const val SWEEP_DEGREES: Double = 70.0
+     *  A classic 90° sweep (±45° at ±50¢, 0¢ straight up) — the authentic
+     *  Peterson/Boss-style instrument arc. The cents mapping stays linear and
+     *  center-zero; negative cents deflect left, positive right. */
+    const val SWEEP_DEGREES: Double = 90.0
 
     private const val HALF_SWEEP = SWEEP_DEGREES / 2.0
 
     /**
-     * Rest position with no reliable reading: the flat-side stop, like a
-     * real meter at rest. Never the center — a centered needle would claim
-     * "in tune" while nothing is being measured.
+     * Rest position with no reliable reading — just past the flat-side
+     * stop (≈ −52¢), like an unpowered analog meter resting against its pin.
+     * Never the center (a centered needle would claim "in tune" while nothing
+     * is being measured). The needle is always drawn and animates to here.
      */
-    const val REST_ANGLE: Double = -HALF_SWEEP
+    const val REST_ANGLE: Double = -(52.0 / FULL_SCALE_CENTS) * HALF_SWEEP
 
     /**
-     * Whether the needle is drawn at all. With no reliable reading the
-     * needle is hidden (the brass hub stays visible) so the meter never implies
-     * a flat — or any — pitch while nothing is being measured. A live reading
-     * shows the needle. The mechanical [REST_ANGLE] remains a geometric
-     * constant but is no longer presented as a "reading" at rest.
+     * The needle is ALWAYS rendered (flagship vintage dial). With no
+     * reliable reading it rests at [REST_ANGLE] rather than disappearing, so
+     * the dial never looks blank or powered-off.
      */
-    fun needleShown(active: Boolean): Boolean = active
+    fun needleShown(active: Boolean): Boolean = true
 
     /** Needle angle (degrees from vertical) for a normalized position. */
     fun needleAngle(position: Double): Double =

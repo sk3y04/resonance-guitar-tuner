@@ -1,6 +1,45 @@
 # STATE — Resonance
 
-- Phase: 16 COMPLETE — composition correction: meter dominant, readout and
+- Phase: 17 COMPLETE — flagship vintage-analog overhaul (2026-11-15). Full
+  visual/structural pass to one convincing hardware instrument; DSP/mic/
+  persistence, G3 fix, calibration, favorites, import/export, alternate tunings,
+  settings-overlay structure and the semantic/test contract all preserved.
+  (1) Header (`TunerScreen.LabelStrip`): preset selector now interactive with a
+  brass `▾` chevron (click lives on the preset Text so its tag/heading stay in the
+  merged semantics tree), live status lamp + Tracking/Listening, A4 reference —
+  one baseline, 20dp effective horizontal padding, `tnum` reference.
+  (2) Unified recessed housing (`MeterAssembly`): dial + readout in ONE 14dp
+  beveled module (1.5dp brass rim highlight + 1dp dark inner inset), rounded top
+  dial / crisp divider seam / rounded bottom display.
+  (3) Dial (`AnalogTuningMeter`, `AnalogMeterGeometry`): wide landscape window
+  (aspect 1.5, deepening to 1.2 instrument / 1.0 chromatic on tall slots), pivot
+  BELOW the face (+18dp) hidden behind a brass escutcheon, exact 90° sweep
+  (±45°), numerals OUTSIDE the arc, 3-tier ticks (major 14dp/2dp + ▼ index over 0,
+  medium 9dp/1.25dp, fine 2¢ vernier 5dp/0.8dp in −10..+10), 18dp parallax hairline
+  @18%, radial ivory→parchment glass + 8dp top inner shadow, animated −3..+3¢
+  target zone (sage→emerald #3D8B5E), FLAT/SHARP corners + CENTS calibration stamp.
+  (4) Needle: strict sign sync (negative→LEFT), NEVER hidden — damped-spring
+  `animateFloatAsState` rest at −52¢ off-scale when no signal; tapered 3.5→1dp
+  polygon + 14% black drop shadow (+2.5,+2dp). Geometry/no-signal tests updated.
+  (5) Illuminated readout (`NoteReadout`): fixed 112dp (zero layout jump), 1dp
+  inset + warm radial backlight (#291D15→#160F0B) + 12% emerald ambient when in
+  tune; balanced 3 columns — TARGET/DETECTED micro-label + 54sp note (accidental
+  superscript, brass octave, emerald #58C48A glow when in tune) | direction
+  reticle ▸▸/▸●◂/◂◂ + 13sp tnum frequency | 28sp tnum cents + ✓/▲/▼ status badge.
+  No-signal keeps the same grid at 35% alpha: ghosted `--`, centered "Pluck a
+  string" + pulsing dot, `-- cents`.
+  (6) Tactile controls: recessed rocker mode switch; string keys with the number
+  strictly centered above the note in BOTH states and the active jewel in the
+  top-right corner (no text shift) + 1.5dp brass active border; settings
+  push-button with 1dp bronze top bevel + gear icon + press feedback.
+  (7) Layout root-cause fixes: `widthIn(max=480)` moved BEFORE `fillMaxSize` (the
+  old order fixed the width at the full viewport, ballooning the gauge and
+  crushing the readout on wide test viewports); the vertical space freed by the
+  wide dial is redistributed as balanced breathing room (dynamic capped gaps) +
+  coherent dial deepening, leaving ONE modest wood footer in both modes.
+  Gates: jvmTest 333/333, androidHostTest 290/290, demo 5/5, verify.sh 7/7.
+  Details: docs/TDD_LOG.md (flagship vintage overhaul).
+- Prior: milestone COMPLETE — composition correction: meter dominant, readout and
   string controls compact (2026-11-15). Reverses the finishing-pass proportion regression.
   Regression cause (from source): the finishing pass gave the string grid `weight(1f)` with
   weight-distributed rows (oversized, separated buttons), expanded the chromatic
@@ -121,7 +160,25 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, composition correction): :shared:jvmTest 332/332,
+- Last green checkpoint (2026-11-15, vintage overhaul): :shared:jvmTest 333/333,
+  :shared:testAndroidHostTest 290/290, run-demo 5/5, verify.sh 7/7 PASS
+  (offline contract + lint included). Geometry tests updated to the 90° sweep
+  (±45°) + always-visible needle resting at −52¢; MeterAssemblyLayout aspect
+  range 1.2..1.85 with mode-aware deepening. Root-cause layout fix: widthIn
+  before fillMaxSize (the reversed order crushed the readout on wide viewports).
+  Dial vision-verified: wide landscape, numerals outside the arc, 3-tier ticks +
+  ▼ index, hidden pivot + brass escutcheon, radial glass + top shadow, illuminated
+  target zone, FLAT/SHARP + CENTS stamp. Instrument screen vision-verified:
+  cohesive flagship instrument, modest wood footer, balanced breathing room, no
+  stretched controls. Readout pixel-verified at a stable 112dp in EVERY state
+  (zero layout jump), compact in both modes; in-tune zone exact emerald #3D8B5E.
+  Needle pixel-mapped: −3¢→−2.5° (LEFT), 0¢→0°, +120¢→+45° stop, no-signal rests
+  −47° (visible, span 38). Small phone 360×640dp + large-text fallback unclipped;
+  all nine render states fit. Chromatic/small-phone vision reviews rate-limited
+  (pixel-verified instead). APK installed on the ASUS phone; on-device
+  capture still blocked by the secure lock screen (headless renders + tests stand
+  in). Real-device verification (mic/screen reader) + live-guitar G3 remain unverified.
+- Prior checkpoint (2026-11-15, composition correction): :shared:jvmTest 332/332,
   :shared:testAndroidHostTest 289/289, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). Geometry tests updated to the 70° sweep
   (±35°); MeterAssemblyLayout aspect/fixtures aligned to the larger dial.

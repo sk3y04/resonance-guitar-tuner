@@ -1318,3 +1318,78 @@ emulator/device screenshot; real-device rendering remains the real-device gate.
   On-device capture still blocked by the secure lock screen. The real-device
   mic/screen-reader and live-guitar G3 confirmation remain open; this visual
   pass claims nothing about G3 or tuning accuracy.
+
+## Flagship vintage-analog overhaul (2026-11-15)
+
+Goal: make the whole screen read as ONE flagship vintage hardware instrument
+(Peterson / Boss TU-12 / McIntosh VU lineage) per the detailed spec, preserving
+all audio/DSP/state flows, the warm palette, the settings-overlay structure and
+the semantic/test contract. UI-only; no DSP/mic/persistence changes.
+
+TDD (pure logic first): rewrote `AnalogMeterGeometryTest` to the 90° sweep
+(±45°) and an always-visible needle with a −52¢ rest angle (RED), then
+`AnalogMeterGeometry.SWEEP_DEGREES` 70→90 + `REST_ANGLE`; updated
+`NoSignalPresentationTest` to the new "Pluck a string" prompt + visible resting
+needle (the design deliberately reverses the earlier hidden needle). `MeterAssemblyLayout`
+gained a fixed 112dp readout, GAUGE_ASPECT 1.5, mode-aware MIN deepening
+(1.2 instrument / 1.0 chromatic) and a `minGaugeAspect` compute param; tests
+aligned (aspect 1.2..1.85, maxHeightDp at the deepened dial).
+
+Implementation (named composables):
+- `TunerScreen.LabelStrip`: interactive preset + brass ▾ chevron; click placed on
+  the preset Text (NOT a wrapping clickable Row) so its testTag/heading survive
+  semantics merging. `ConcertPitchText` uses `readoutSmall.tabularNumerals`.
+- `MeterAssembly`: one 14dp beveled recess (1.5dp brass rim + 1dp inner inset),
+  rounded-top dial / 2dp divider seam / rounded-bottom display; `minGaugeAspect`
+  forwarded to the layout math.
+- `AnalogTuningMeter`: pivot at faceBottom+18dp behind a brass escutcheon; exact
+  90° sweep; numerals outside the arc; major 14dp/2dp + ▼ index, medium 9dp/1.25dp,
+  2¢ vernier 5dp/0.8dp in −10..+10; 18dp parallax hairline @18%; radial
+  ivory→parchment glass + 8dp top inner shadow; animated −3..+3¢ zone
+  (sage→#3D8B5E); FLAT/SHARP corners + CENTS stamp; tapered 3.5→1dp needle +
+  14% shadow (+2.5,+2dp); damped-spring `animateFloatAsState`, never hidden.
+- `NoteReadout` (rewritten): fixed 112dp, 1dp inset + radial backlight
+  (#291D15→#160F0B) + 12% emerald ambient; 3 columns — TARGET/DETECTED micro-label
+  (9sp, 1.5sp tracking, #8C7F6A) + 54sp note (#F5ECD8, accidental superscript,
+  brass octave, #58C48A glow when in tune) | reticle ▸▸/▸●◂/◂◂ + 13sp tnum
+  frequency (#B8AA96) | 28sp tnum cents + ✓/▲/▼ badge. No-signal keeps the grid at
+  35% alpha (ghosted --, "Pluck a string" + pulsing dot, -- cents). Semantic tags
+  (note/frequency/direction only when tracking; hint only when no-signal; cents
+  always) preserved.
+- `InstrumentStringSelector`: number strictly centered above the note in both
+  states; active jewel moved to the top-right corner (no horizontal text shift);
+  1.5dp brass active border via `InstrumentKey(accentBorder=…)`.
+- `InstrumentKeys`: `accentBorder` + `bevel` params; new `GearIcon`; settings
+  push-button uses bevel + gear + press feedback. `MechanicalModeSelector` rocker.
+- `InstrumentPalette`: added the spec hexes (#3D8B5E band, #58C48A glow, #F5ECD8
+  note, #B8AA96 freq, #8C7F6A taupe, #C8795B terracotta, #291D15/#160F0B backlight).
+
+Two root-cause layout bugs found by reading code + a wide-viewport debug render
+(not guessed):
+1. `widthIn(max=480)` was AFTER `fillMaxSize()` on the faceplate BoxWithConstraints.
+   fillMaxSize fixes minWidth=maxWidth at the full viewport, so widthIn could not
+   reduce it — on the 1024×768dp test viewport the gauge ballooned to ~983dp wide
+   and the readout was crushed to ~20dp (note clipped → 4 UI tests failed). Moving
+   widthIn BEFORE fillMaxSize caps the width correctly. Latent since the composition correction, masked
+   then by the old note Box heightIn(min=48).
+2. A wrapping `clickable` Row around the preset Text merged its semantics, hiding
+   resonance.preset from the merged tree (assertExists failed). Click moved onto
+   the Text itself.
+
+Vertical-space redistribution: the wide 1.5 dial frees height vs the earlier square
+dial. Rather than one large footer band, `TunerScreen` now deepens the dial
+coherently first (mode-aware min aspect), then spreads the remainder as balanced
+breathing room (dynamic capped gaps; fewer chromatic groups → larger gaps),
+leaving ONE modest wood margin. Removed the wasteful weighted bottom spacer (its
+preceding spacedBy gap added ~36dp below the settings button). Result: instrument
+gauge ~265dp / chromatic ~318dp on a 360×800dp phone, ~45dp wood footer in both.
+
+Verification: jvmTest 333/333, androidHostTest 290/290, demo 5/5, verify.sh 7/7.
+Needle pixel-mapped (−3¢→−2.5° LEFT, 0¢→0°, +120¢→+45° stop, no-signal −47° visible
+span 38). Readout stable 112dp in all nine render states (zero layout jump);
+in-tune zone exact #3D8B5E. Dial + instrument-screen vision reviews positive
+(cohesive flagship instrument, modest footer, balanced breathing room, no
+stretched controls). Chromatic/small-phone vision rate-limited → pixel-verified
+(all states fit, small phone + large-text fallback unclipped, ≥48dp keys). APK
+installed. On-device capture still blocked by the secure lock screen; the device gate +
+live-guitar G3 remain open. No DSP/tuning-accuracy claims.
