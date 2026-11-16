@@ -1393,3 +1393,80 @@ stretched controls). Chromatic/small-phone vision rate-limited → pixel-verifie
 (all states fit, small phone + large-text fallback unclipped, ≥48dp keys). APK
 installed. On-device capture still blocked by the secure lock screen; the device gate +
 live-guitar G3 remain open. No DSP/tuning-accuracy claims.
+
+## Coherent physical-instrument refinement + honest signal presentation (2026-11-16)
+
+Goal: one cohesive, readable physical tuning instrument; the meter dominates,
+controls are compact and predictable, settings prioritize useful choices, and
+every displayed measurement accurately communicates whether a valid pitch
+exists. UI-only — no DSP/detection/threshold changes.
+
+Signal-state findings (from reading the code, not guessing): the state machine
+already distinguishes LISTENING (never had pitch) / UNSTABLE (brief gap <600ms) /
+STALE (>600ms) / INSUFFICIENT_SIGNAL / CLIPPING, but nulls the reading on any gap.
+`MainScreenUi` set meterPosition=0 when inactive, yet `AnalogTuningMeter` always
+draw a −52¢ rest needle (vintage dial) — a far-left needle that reads as a live flat
+measurement while the header said "Listening" and the readout said "Signal lost".
+Fix: pure `SignalPresentation.phase(...)` → SignalPhase
+{WAITING,TRACKING,HOLDING,LOST,MIC_OFF,MIC_ERROR}; `needleShown(active)=active`
+(the needle fades out with no reliable pitch, never parked at a scale value);
+micStatusText now coherent (lost → "No signal"); a bounded `SignalHold`
+(HOLD_MS=400, MIN_ALPHA=0.35) holds the last reliable reading visibly faded after
+a brief interruption (needle inactive, inTune=false, no hint), then invalidates.
+The host ticker drives the hold with a virtual tick clock. Pure logic host-tested
+(SignalPresentationTest, 11 cases). Geometry/no-signal/wording tests updated.
+
+Visual hierarchy: `InstrumentFaceplate` rebuilt as flat warm charcoal (wood grain
+removed from the interior; wood stays at the perimeter via WoodenEnclosure);
+`InstrumentPalette` gained faceplate/faceplateDeep/faceplateLip + an
+`InstrumentTokens` spacing/shape set; `MeterAssembly` bezel simplified to one
+recessed glass edge (heavy brass rim removed). Meter rebalanced: GAUGE_ASPECT 1.6
+(MIN 1.4) so the width-limited arc fills the face; pivot raised to faceBottom+12dp;
+top clearance tightened; numerals 14dp; decorative calibration stamp removed.
+Readout simplified: dropped the tiny tracked TARGET/DETECTED micro-label and the
+redundant direction reticle (the badge + needle carry direction); one type
+hierarchy, tabular numerals; held readings render faded and are not announced live.
+
+Stable lower area + config entry: `railStringCount` (selected preset string count,
+both modes, from the controller) reserves the string rail in chromatic as modest
+negative space, so meter/readout geometry and the config-entry position are
+identical across modes (pixel-verified: gauge 84–311dp in instrument/chromatic/
+no-signal). `ConfigurationEntry` replaces the oversized "TUNINGS & SETTINGS"
+button: preset name + note sequence + A4 (Instrument) or "Tuner settings" + A4 +
+spelling (Chromatic). Whole-area tap target via `semantics { onClick }` +
+pointerInput press feedback — NOT a merging clickable/Surface, so the child
+resonance.preset / resonance.concert tags stay findable (the vintage-overhaul merge bug).
+
+Settings overlay: mode-aware order (Instrument: presets → reference → spelling;
+Chromatic: reference → spelling → "Instrument tunings / Applies to Instrument
+mode"); selected preset checkmark ✓ distinct from the favorite ★; calibration
+rebuilt (`CalibrationControls`) as A4 [−][440.0 Hz][+] with an explicit 1 Hz /
+0.1 Hz step selector, direct validated numeric entry (`PresetSheetUi.
+parseConcertPitch`, locale-friendly, never coerces), and Reset to 440 (shown only
+when ≠440); Import/Export moved to a secondary "More" area, "+ New tuning"
+prominent; Close → Done. `onConcertSet` wired through MainScreen → controller.
+Calibration tests updated to the step-selector interaction + new reset/direct-edit
+cases; pure parser tests added.
+
+Two API traps hit and fixed: `LiveRegionMode` has no Off/None constant usable here
+(default unset = non-live; set Polite only when live); `semantics.onClick` action
+returns Boolean and needs `import androidx.compose.ui.semantics.onClick`;
+`PressInteraction.Release` takes the Press object, not the Offset.
+
+Verification: UI suite jvmTest 361/361; verified 344/344 against the committed
+DSP. Needle pixel-mapped: −3¢→−2.5° (LEFT), 0¢→0°, +120¢→+45° stop, no-signal
+HIDDEN (radial score 5 vs 41–44 tracking). Gauge geometry identical across modes;
+scale fills the face (~36dp above-scale tall phone, ~8dp small phone). Overlay
+vision-verified (Done header, presets-first, checkmark vs star, More area).
+Instrument-screen vision rate-limited → pixel-verified (charcoal faceplate + wood
+perimeter, config entry present, modest footer, all states fit).
+
+IMPORTANT — concurrent pitch-tracking work: the working tree contains a separate, in-progress
+Pitch-tracking DSP changeset (untracked PitchTracker/PitchTrackerTest/PitchLab*/YinSpectralTest
++ modified Yin.kt/TunerReading/TunerStateMachine) being developed in parallel. Its
+octave-detection tests fail/flake (E2↔E4, A2↔A4). The UI refinement did NOT touch DSP; the UI
+commit (the UI refinement commit) selectively stages only the UI/presentation files. verify.sh's
+host gate fails on those pitch-tracking DSP tests, not on the UI. A temporary stash used to
+verify the UI against the committed DSP was consumed by the concurrent process; the pitch-tracking work
+was left intact in the tree. Real-device verification (mic/screen reader) + live-guitar
+G3 remain open; on-device capture still blocked by the secure lock screen.

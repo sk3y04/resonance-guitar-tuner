@@ -1,6 +1,43 @@
 # STATE — Resonance
 
-- Phase: 17 COMPLETE — flagship vintage-analog overhaul (2026-11-15). Full
+- Phase: 18 COMPLETE — coherent physical-instrument refinement + honest signal
+  presentation (2026-11-16). UI-only; no DSP/detection changes.
+  (1) Visual hierarchy: flat warm-charcoal faceplate (`InstrumentFaceplate`,
+  `InstrumentPalette.faceplate`), wood only at the outer perimeter; restrained
+  recessed glass bezel (brass reserved for the needle pivot + a few accents);
+  shared `InstrumentTokens` spacing/shape set.
+  (2) Meter rebalanced (`AnalogTuningMeter`, `MeterAssemblyLayout` GAUGE_ASPECT
+  1.6): the width-limited scale fills the ivory face (no tall dead band above the
+  arc; ~36dp clearance on a tall phone, ~8dp on a small phone vs ~82dp before);
+  decorative "CENTS • 440Hz CALIBRATED" stamp removed; numerals 14dp.
+  (3) Signal honesty (core): explicit `SignalPhase`
+  (waiting/tracking/holding/lost/mic-off/mic-error) via pure `SignalPresentation`;
+  the needle is live ONLY with a reliable pitch and fades out otherwise
+  (`AnalogMeterGeometry.needleShown(active)=active`) — never a fake reading at a
+  scale stop; header status agrees with the readout (lost reads "No signal", not
+  "Listening" beside "Signal lost"); a bounded 400ms `SignalHold` shows the last
+  reading visibly faded after a brief interruption, then invalidates it.
+  (4) Stable lower area: meter/readout geometry IDENTICAL across modes (the
+  string rail is reserved in chromatic as modest negative space via
+  `railStringCount`); a compact informative `ConfigurationEntry` replaces the
+  oversized settings button (preset + notes + A4, or A4 + spelling), whole-area
+  tap target via semantics onClick (child preset/concert tags stay unmerged).
+  (5) Readout simplified (`NoteReadout`): one type hierarchy, tabular numerals,
+  redundant direction reticle dropped (badge + needle carry direction); held
+  readings render faded, never announced live.
+  (6) Settings overlay (`TuningsOverlay`, `CalibrationControls`): mode-aware order
+  (presets first in Instrument; reference + spelling first in Chromatic with the
+  preset list labelled "Applies to Instrument mode"); selected checkmark distinct
+  from the favorite star; calibration rebuilt as A4 [−][value][+] with an explicit
+  1/0.1 Hz step selector, direct validated numeric entry (`parseConcertPitch`),
+  and Reset to 440; Import/Export in a secondary "More" area; Close → Done.
+  Gates: UI suite jvmTest 361/361; verified 344/344 against the committed DSP.
+  Needle pixel-verified hidden in no-signal (score 5) vs live when tracking
+  (41–44); gauge geometry identical across modes. Overlay vision-verified.
+  NOTE: the working tree also carries a separate, in-progress pitch-tracking DSP changeset
+  (PitchTracker + spectral Yin, uncommitted) with failing/flaky octave-detection
+  tests; it was left untouched and is NOT part of the UI refinement. Details: docs/TDD_LOG.md (physical-instrument refinement + signal honesty).
+- Prior: milestone COMPLETE — flagship vintage-analog overhaul (2026-11-15). Full
   visual/structural pass to one convincing hardware instrument; DSP/mic/
   persistence, G3 fix, calibration, favorites, import/export, alternate tunings,
   settings-overlay structure and the semantic/test contract all preserved.
