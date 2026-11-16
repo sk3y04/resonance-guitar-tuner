@@ -37,6 +37,8 @@ object MainScreenUi {
         // True while capture is actually open. Defaults to the common
         // test/demo assumption; the controller always passes the real flag.
         captureActive: Boolean = permission == MicPermissionState.GRANTED,
+        // Selected preset string count for stable cross-mode layout.
+        presetStringCount: Int = 0,
     ): MainScreenUiState {
         val status = snapshot?.status ?: TunerStatus.IDLE
         val reading = snapshot?.reading
@@ -91,7 +93,7 @@ object MainScreenUi {
                     null
                 }
             status == TunerStatus.UNSTABLE -> "Hold the note steady…"
-            else -> "Pluck a string"
+            else -> "Play a string"
         }
 
         val directionText = when {
@@ -101,14 +103,17 @@ object MainScreenUi {
             else -> "Tune down"
         }
 
-        val micStatusText = when {
-            !granted -> "Microphone off"
-            captureError -> "Microphone unavailable"
-            !captureActive -> "Microphone off"
-            // Distinguish a live reading from mere microphone activity.
-            reliable -> "Tracking"
-            else -> "Listening"
-        }
+        // One coherent signal phase drives the header status, so the
+        // lamp/text never contradict the readout (a lost note reads "No
+        // signal", not "Listening" beside a "Signal lost" message).
+        val signalPhase = SignalPresentation.phase(
+            status = status,
+            permission = permission,
+            captureError = captureError,
+            captureActive = captureActive,
+            reliable = reliable,
+        )
+        val micStatusText = SignalPresentation.micStatusText(signalPhase)
 
         // AUTO mode compares against the nearest preset string but the old
         // screen only highlighted a manual lock, leaving the player unable to
@@ -163,6 +168,9 @@ object MainScreenUi {
             concertLabel = PresetSheetUi.concertPitchLabel(concertPitchHz),
             concertError = PresetSheetUi.concertPitchError(concertPitchHz),
             accidentalSpelling = accidentalSpelling,
+            signalPhase = signalPhase,
+            readingAlpha = 1f,
+            railStringCount = presetStringCount,
         )
     }
 

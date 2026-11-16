@@ -55,8 +55,8 @@ class MeterAssemblyLayoutTest {
 
     @Test
     fun spareHeightGrowsTheReadoutUpToItsCap() {
-        val a = MeterAssemblyLayout.compute(w, 316f)
-        val b = MeterAssemblyLayout.compute(w, 320f)
+        val a = MeterAssemblyLayout.compute(w, 290f)
+        val b = MeterAssemblyLayout.compute(w, 300f)
         assertTrue(b.readoutHeightDp > a.readoutHeightDp, "taller slot grows the readout")
         val capped = MeterAssemblyLayout.compute(w, 560f)
         assertEquals(MeterAssemblyLayout.MAX_READOUT_DP, capped.readoutHeightDp, 0.01f)

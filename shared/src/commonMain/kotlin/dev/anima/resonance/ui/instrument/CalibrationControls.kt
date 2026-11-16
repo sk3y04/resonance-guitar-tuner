@@ -10,64 +10,179 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.music.Spelling
+import dev.anima.resonance.presentation.PresetSheetUi
+import kotlin.math.roundToLong
 
 /**
- * Calibration hardware redesigned as one coherent control. A clear
- * "Reference pitch" label and the live value ("A4 · 440 Hz"), with the coarse
- * (±1 Hz) and fine (±0.1 Hz) steppers grouped and explicitly labelled so their
- * purpose is obvious. Tags, spoken descriptions, limits and callbacks are
- * identical to the tested contract.
+ * Calibration as ONE coherent control instead of four equal-priority
+ * steppers. A compact row — A4 [−] [440.0 Hz] [+] — whose ± keys use the
+ * explicitly selected step (1 Hz or 0.1 Hz). Tapping the value opens direct
+ * numeric entry (locale-friendly, validated, never silently coerced). A Reset
+ * to 440 Hz appears only when the reference differs. Tags/limits/callbacks of
+ * the tested contract are preserved (minus/plus step by the selected amount).
  */
 @Composable
 fun CalibrationControls(
-    concertValue: String,
+    concertHz: Double,
     concertError: String?,
     onConcertStep: (Boolean) -> Unit,
     onConcertStepCoarse: (Boolean) -> Unit,
+    onConcertSet: (Double) -> Unit,
     largeText: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val p = InstrumentTheme.palette
+    var coarse by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+
+    fun step(up: Boolean) {
+        if (coarse) onConcertStepCoarse(up) else onConcertStep(up)
+    }
+
+    fun applyEdit() {
+        val parsed = PresetSheetUi.parseConcertPitch(editText)
+        when {
+            parsed == null -> editError = "Enter a number like 440.0"
+            PresetSheetUi.concertPitchError(parsed) != null ->
+                editError = PresetSheetUi.concertPitchError(parsed)
+            else -> {
+                onConcertSet(parsed)
+                editing = false
+                editError = null
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag("resonance.sheet.concert"),
     ) {
         Text("Reference pitch", style = InstrumentType.engraved)
-        Spacer(Modifier.size(4.dp))
-        Text(
-            text = concertValue,
-            style = InstrumentType.readout.copy(fontSize = 22.sp),
-            modifier = Modifier.semantics {
-                contentDescription = "Reference pitch $concertValue"
-            },
-        )
-        Spacer(Modifier.size(10.dp))
-        if (largeText) {
-            StepperGroup("±1 Hz", coarse = true, onStep = onConcertStepCoarse, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.size(8.dp))
-            StepperGroup("±0.1 Hz", coarse = false, onStep = onConcertStep, modifier = Modifier.fillMaxWidth())
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Spacer(Modifier.size(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("A4", style = InstrumentType.engravedStrong)
+            InstrumentKey(
+                onClick = { step(false) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .widthIn(min = 48.dp)
+                    .testTag("resonance.sheet.concert.minus")
+                    .semantics { contentDescription = "Decrease A4 reference by ${if (coarse) "1" else "0.1"} hertz" },
+            ) { Text("−", style = InstrumentType.keyLabel.copy(fontSize = 18.sp)) }
+            // The value is a button that opens direct entry (whole-area target).
+            InstrumentKey(
+                onClick = {
+                    editing = !editing
+                    editText = formatHz1(concertHz)
+                    editError = null
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .testTag("resonance.sheet.concert.value")
+                    .semantics { contentDescription = "Reference pitch ${formatHz1(concertHz)} hertz, tap to edit" },
             ) {
-                StepperGroup("±1 Hz", coarse = true, onStep = onConcertStepCoarse, modifier = Modifier.weight(1f))
-                StepperGroup("±0.1 Hz", coarse = false, onStep = onConcertStep, modifier = Modifier.weight(1f))
+                Text(
+                    text = "${formatHz1(concertHz)} Hz",
+                    style = InstrumentType.readout.copy(fontSize = 20.sp),
+                    maxLines = 1,
+                )
             }
+            InstrumentKey(
+                onClick = { step(true) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .widthIn(min = 48.dp)
+                    .testTag("resonance.sheet.concert.plus")
+                    .semantics { contentDescription = "Increase A4 reference by ${if (coarse) "1" else "0.1"} hertz" },
+            ) { Text("+", style = InstrumentType.keyLabel.copy(fontSize = 18.sp)) }
+        }
+        Spacer(Modifier.size(8.dp))
+        // Explicit step selection.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Step", style = InstrumentType.engraved)
+            StepKey("1 Hz", coarse, { coarse = true }, "resonance.sheet.concert.step.coarse", Modifier.weight(1f))
+            StepKey("0.1 Hz", !coarse, { coarse = false }, "resonance.sheet.concert.step.fine", Modifier.weight(1f))
+        }
+        if (editing) {
+            Spacer(Modifier.size(8.dp))
+            OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it; editError = null },
+                label = { Text("A4 (Hz)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                isError = editError != null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("resonance.sheet.concert.input"),
+            )
+            editError?.let {
+                Text(
+                    text = it,
+                    color = p.lampRed,
+                    style = InstrumentType.readoutSmall,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .testTag("resonance.sheet.concert.editError"),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = { applyEdit() },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.sheet.concert.apply"),
+                ) { Text("Apply", color = p.brassLight) }
+                TextButton(
+                    onClick = { editing = false; editError = null },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("resonance.sheet.concert.cancel"),
+                ) { Text("Cancel", color = p.textMuted) }
+            }
+        }
+        // Reset is offered only when the reference differs from 440 Hz.
+        if (concertHz != 440.0) {
+            Spacer(Modifier.size(4.dp))
+            TextButton(
+                onClick = { onConcertSet(440.0) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("resonance.sheet.concert.reset"),
+            ) { Text("Reset to 440 Hz", color = p.textMuted) }
         }
         concertError?.let { error ->
             Text(
@@ -82,44 +197,39 @@ fun CalibrationControls(
     }
 }
 
-/** A labelled pair of stepper keys (−step / +step) with comfortable targets. */
 @Composable
-private fun StepperGroup(
+private fun StepKey(
     label: String,
-    coarse: Boolean,
-    onStep: (Boolean) -> Unit,
+    selected: Boolean,
+    onClick: () -> Unit,
+    tag: String,
     modifier: Modifier = Modifier,
 ) {
-    val step = if (coarse) "1" else "0.1"
-    val minusTag = if (coarse) "resonance.sheet.concert.coarseMinus" else "resonance.sheet.concert.minus"
-    val plusTag = if (coarse) "resonance.sheet.concert.coarsePlus" else "resonance.sheet.concert.plus"
-    Column(modifier = modifier) {
+    val p = InstrumentTheme.palette
+    InstrumentKey(
+        onClick = onClick,
+        selected = selected,
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .testTag(tag)
+            .semantics {
+                contentDescription = "Step $label"
+                stateDescription = if (selected) "Selected" else "Not selected"
+                this.selected = selected
+            },
+    ) {
         Text(
             text = label,
-            style = InstrumentType.engraved,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            style = InstrumentType.keyLabel.copy(color = if (selected) p.ivory else p.textMuted),
+            maxLines = 1,
         )
-        Spacer(Modifier.size(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            InstrumentKey(
-                onClick = { onStep(false) },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .testTag(minusTag)
-                    .semantics { contentDescription = "Decrease A4 reference by $step hertz" },
-            ) { Text("−$step", style = InstrumentType.keyLabel) }
-            InstrumentKey(
-                onClick = { onStep(true) },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .testTag(plusTag)
-                    .semantics { contentDescription = "Increase A4 reference by $step hertz" },
-            ) { Text("+$step", style = InstrumentType.keyLabel) }
-        }
     }
+}
+
+/** One-decimal Hz value for the calibration readout/edit field (440.0). */
+private fun formatHz1(hz: Double): String {
+    val tenths = (hz * 10).roundToLong()
+    return "${tenths / 10}.${tenths % 10}"
 }
 
 /**

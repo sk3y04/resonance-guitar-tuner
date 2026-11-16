@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.ui.tabularNumerals
 
@@ -63,6 +64,29 @@ object InstrumentPalette {
     val terracotta = Color(0xFFC8795B)    // "tune down" badge
     val backlightCenter = Color(0xFF291D15) // display backlight center
     val backlightEdge = Color(0xFF160F0B)   // display backlight edge
+
+    // Faceplate — warm charcoal, mostly flat. Wood belongs at the outer
+    // perimeter (the enclosure); the shared faceplate is a quiet charcoal
+    // surface the meter and controls are mounted into.
+    val faceplate = Color(0xFF2B2723)
+    val faceplateDeep = Color(0xFF211E1A)
+    val faceplateLip = Color(0xFF3D372F)
+}
+
+/**
+ * A small shared set of spacing / shape tokens so sections are styled
+ * consistently rather than each inventing its own gaps and corners.
+ */
+object InstrumentTokens {
+    val gapXs = 4.dp
+    val gapSm = 8.dp
+    val gapMd = 12.dp
+    val gapLg = 16.dp
+    val cornerSm = 6.dp
+    val cornerMd = 10.dp
+    val cornerLg = 14.dp
+    /** Minimum interactive touch target (accessibility floor). */
+    val touchMin = 48.dp
 }
 
 /** Instrument materials for the current composition (see [InstrumentPalette]). */

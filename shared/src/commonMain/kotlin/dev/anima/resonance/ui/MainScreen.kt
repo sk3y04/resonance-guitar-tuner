@@ -17,6 +17,8 @@ import dev.anima.resonance.engine.TunerController
 import dev.anima.resonance.presentation.CustomEditorUi
 import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.EditorStringUi
+import dev.anima.resonance.presentation.MainScreenUiState
+import dev.anima.resonance.presentation.SignalHold
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -64,20 +66,36 @@ fun MainScreen(
     platformBack: @Composable (Boolean, () -> Unit) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
-    var ui by remember(controller) { mutableStateOf(controller.state()) }
-    // Last import/export result message (UI-local; the ticker merges
-    // it into the mapped state so it survives refreshes).
     var importMessage by remember(controller) { mutableStateOf<String?>(null) }
+    // Bounded hold of the last reliable reading across brief interruptions.
+    // A virtual tick clock (tick × refreshMs) drives the named, testable window.
+    var lastReliable by remember(controller) { mutableStateOf<MainScreenUiState?>(null) }
+    var tick by remember(controller) { mutableStateOf(0L) }
+    var lastReliableTick by remember(controller) { mutableStateOf(0L) }
+
+    fun computeUi(): MainScreenUiState {
+        val base = controller.state().copy(importResultText = importMessage)
+        tick++
+        if (base.meterActive) {
+            lastReliable = base
+            lastReliableTick = tick
+            return base
+        }
+        val elapsedMs = (tick - lastReliableTick) * refreshMs
+        return SignalHold.apply(base, lastReliable, elapsedMs)
+    }
+
+    var ui by remember(controller) { mutableStateOf(computeUi()) }
 
     LaunchedEffect(controller) {
         while (isActive) {
-            ui = controller.state().copy(importResultText = importMessage)
+            ui = computeUi()
             delay(refreshMs)
         }
     }
 
     fun refresh() {
-        ui = controller.state().copy(importResultText = importMessage)
+        ui = computeUi()
     }
 
     /**
@@ -215,6 +233,12 @@ fun MainScreen(
             onConcertStepCoarse = { up ->
                 scope.launch {
                     controller.stepConcertPitch(up, stepHz = 1.0)
+                    refresh()
+                }
+            },
+            onConcertSet = { hz ->
+                scope.launch {
+                    controller.setConcertPitch(hz)
                     refresh()
                 }
             },

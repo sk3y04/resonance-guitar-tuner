@@ -37,7 +37,7 @@ class NoSignalPresentationTest {
     @Test
     fun listeningMessageIsShortAndInviting() {
         val s = state(TunerStatus.LISTENING)
-        assertTrue(s.statusHint!!.contains("Pluck", ignoreCase = true), "got '${s.statusHint}'")
+        assertTrue(s.statusHint!!.contains("Play", ignoreCase = true), "got '${s.statusHint}'")
         assertTrue(s.statusHint!!.length <= 24, "primary message must be short, got '${s.statusHint}'")
         assertFalse(s.meterActive, "no live reading while listening")
         assertNull(s.noteLabel)

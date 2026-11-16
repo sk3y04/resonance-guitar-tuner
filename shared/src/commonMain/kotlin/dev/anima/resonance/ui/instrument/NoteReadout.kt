@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -40,22 +39,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.presentation.MainScreenUiState
+import dev.anima.resonance.presentation.SignalPhase
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.tabularNumerals
 import kotlin.math.abs
 
 /**
- * The illuminated digital note readout — a hardware display module behind
- * the same instrument glass as the dial. A warm radial backlight, a 1dp
- * recessed inner border, and a smooth emerald ambient tint when in tune. The
- * container height is fixed by the assembly so there is ZERO vertical layout
- * jump between signal and no-signal.
+ * The digital note readout — a compact display mounted behind the same
+ * instrument glass as the dial. One coherent type hierarchy (no tiny tracked
+ * micro-labels), tabular numerals for changing values, and stable positions
+ * across signal states.
  *
- * Tracking: a balanced 3-column grid — note (micro-label + letter + superscript
- * accidental + brass octave) | direction reticle + frequency | signed cents +
- * action badge. No signal: the SAME grid dimmed to placeholders (ghosted note,
- * centered "Pluck a string" prompt with a pulsing dot, "-- cents"). The
- * semantic contract (tags + spoken descriptions) is unchanged.
+ * Three columns: detected/target note (+ accidental + octave) | frequency |
+ * signed cents + a single direction/in-tune badge. The direction badge is the
+ * ONE direction indicator (the needle also shows it); a redundant reticle was
+ * removed.
+ *
+ * Signal honesty: values render only while a reading is present — live
+ * ([SignalPhase.TRACKING]) or briefly held after an interruption
+ * ([SignalPhase.HOLDING], visibly faded, never announced as live). With no
+ * usable pitch the SAME grid shows dimmed placeholders + one calm prompt, so
+ * the container height never jumps. The semantic tag contract is preserved.
  */
 @Composable
 fun NoteReadout(
@@ -68,9 +72,13 @@ fun NoteReadout(
     onRetryCapture: () -> Unit = {},
 ) {
     val p = InstrumentTheme.palette
-    val tracking = state.meterActive
+    val live = state.meterActive
+    val holding = state.signalPhase == SignalPhase.HOLDING
+    val showing = live || holding
+    val alpha = if (live) 1f else state.readingAlpha
     val centsDescription = when {
-        !tracking || state.centsText == null -> "No current reading"
+        !showing || state.centsText == null -> "No current reading"
+        holding -> "Last reading ${state.centsText} cents, signal interrupted"
         state.inTune -> "In tune"
         state.directionText == "Tune up" ->
             "${abs(state.centsText.toIntOrNull() ?: 0)} cents flat, tune up"
@@ -78,12 +86,12 @@ fun NoteReadout(
             "${abs(state.centsText.toIntOrNull() ?: 0)} cents sharp, tune down"
     }
     val noteColor by animateColorAsState(
-        targetValue = if (tracking && state.inTune) p.emeraldGlow else p.noteIvory,
+        targetValue = if (live && state.inTune) p.emeraldGlow else p.noteIvory,
         animationSpec = tween(280),
         label = "readout-note-color",
     )
     val ambient by animateColorAsState(
-        targetValue = if (tracking && state.inTune) p.bandGreen.copy(alpha = 0.12f) else Color.Transparent,
+        targetValue = if (live && state.inTune) p.bandGreen.copy(alpha = 0.12f) else Color.Transparent,
         animationSpec = tween(320),
         label = "readout-ambient",
     )
@@ -102,7 +110,6 @@ fun NoteReadout(
                         radius = size.width * 0.7f,
                     ),
                 )
-                // In-tune emerald ambient tint.
                 drawRect(ambient)
                 // 1dp recessed inner border.
                 drawRect(
@@ -122,11 +129,11 @@ fun NoteReadout(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NoteColumn(state, noteSize, noteColor, tracking)
+            NoteColumn(state, noteSize, noteColor, showing, live, alpha)
             Spacer(Modifier.size(10.dp))
-            CenterColumn(state, tracking, onRetryCapture, Modifier.weight(1f))
+            CenterColumn(state, showing, alpha, onRetryCapture, Modifier.weight(1f))
             Spacer(Modifier.size(10.dp))
-            CentsColumn(state, centsSize, tracking, centsDescription)
+            CentsColumn(state, centsSize, showing, live, alpha, centsDescription)
         }
     }
 }
@@ -136,27 +143,17 @@ private fun NoteColumn(
     state: MainScreenUiState,
     noteSize: androidx.compose.ui.unit.TextUnit,
     noteColor: Color,
-    tracking: Boolean,
+    showing: Boolean,
+    live: Boolean,
+    alpha: Float,
 ) {
     val p = InstrumentTheme.palette
-    val microLabel = if (state.mode == TunerMode.INSTRUMENT) "TARGET" else "DETECTED"
     Column(
-        modifier = Modifier.widthIn(min = 76.dp),
+        modifier = Modifier.widthIn(min = 72.dp),
         horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = microLabel,
-            style = TextStyle(
-                fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.5.sp,
-                color = p.taupe,
-            ),
-            maxLines = 1,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
-        Spacer(Modifier.height(2.dp))
-        if (tracking && state.noteLabel != null) {
+        if (showing && state.noteLabel != null) {
             val label = state.noteLabel!!
             val root = label.first().toString()
             val accidental = label.drop(1)
@@ -168,12 +165,7 @@ private fun NoteColumn(
                     style = TextStyle(
                         fontSize = noteSize,
                         fontWeight = FontWeight.SemiBold,
-                        color = noteColor,
-                        shadow = if (state.inTune) {
-                            Shadow(color = p.emeraldGlow.copy(alpha = 0.55f), blurRadius = 10f)
-                        } else {
-                            null
-                        },
+                        color = noteColor.copy(alpha = alpha),
                     ),
                     maxLines = 1,
                     modifier = Modifier
@@ -181,8 +173,9 @@ private fun NoteColumn(
                         .semantics {
                             contentDescription =
                                 (if (state.mode == TunerMode.INSTRUMENT) "Target note" else "Detected note") +
-                                    " ${label}${state.octave ?: ""}"
-                            liveRegion = LiveRegionMode.Polite
+                                    " ${label}${state.octave ?: ""}" +
+                                    (if (live) "" else ", signal interrupted")
+                            if (live) liveRegion = LiveRegionMode.Polite
                         },
                 )
                 if (accidental.isNotEmpty() || state.octave != null) {
@@ -196,7 +189,7 @@ private fun NoteColumn(
                             style = TextStyle(
                                 fontSize = (noteSize.value * 0.42f).sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = noteColor,
+                                color = noteColor.copy(alpha = alpha),
                             ),
                             maxLines = 1,
                             modifier = Modifier.clearAndSetSemantics {},
@@ -206,7 +199,7 @@ private fun NoteColumn(
                             style = TextStyle(
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = p.brass,
+                                color = p.brass.copy(alpha = alpha),
                             ).tabularNumerals,
                             maxLines = 1,
                             modifier = Modifier.clearAndSetSemantics {},
@@ -217,7 +210,7 @@ private fun NoteColumn(
         } else {
             // Ghosted note placeholder — same grid, no fake glyph, no note tag.
             Text(
-                text = "--",
+                text = "–",
                 style = TextStyle(
                     fontSize = noteSize,
                     fontWeight = FontWeight.SemiBold,
@@ -233,7 +226,8 @@ private fun NoteColumn(
 @Composable
 private fun CenterColumn(
     state: MainScreenUiState,
-    tracking: Boolean,
+    showing: Boolean,
+    alpha: Float,
     onRetryCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -243,31 +237,22 @@ private fun CenterColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (tracking) {
-            val reticle: String
-            val reticleColor: Color
-            when {
-                state.inTune -> { reticle = "▸ ● ◂"; reticleColor = p.emeraldGlow }
-                state.directionText == "Tune up" -> { reticle = "▸ ▸"; reticleColor = p.lampAmber }
-                else -> { reticle = "◂ ◂"; reticleColor = p.terracotta }
-            }
-            Text(
-                text = reticle,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = reticleColor),
-                maxLines = 1,
-                modifier = Modifier.clearAndSetSemantics {},
-            )
-            Spacer(Modifier.height(5.dp))
+        if (showing) {
             state.frequencyText?.let {
                 Text(
                     text = it,
-                    style = TextStyle(fontSize = 13.sp, color = p.freqCream).tabularNumerals,
+                    style = TextStyle(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = p.freqCream.copy(alpha = alpha),
+                    ).tabularNumerals,
                     maxLines = 1,
-                    modifier = Modifier.testTag("resonance.frequency"),
+                    modifier = Modifier
+                        .testTag("resonance.frequency"),
                 )
             }
         } else {
-            // Centered prompt with a subtle pulsing olive/amber dot.
+            // One calm prompt with a subtle pulsing dot (waiting / no signal).
             val pulse by rememberInfiniteTransition(label = "readout-pulse").animateFloat(
                 initialValue = 0.35f,
                 targetValue = 1f,
@@ -285,7 +270,7 @@ private fun CenterColumn(
                 )
                 Spacer(Modifier.size(7.dp))
                 Text(
-                    text = state.statusHint ?: "Pluck a string",
+                    text = state.statusHint ?: "Play a string",
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = p.noteIvory),
                     maxLines = 2,
                     modifier = Modifier
@@ -310,7 +295,9 @@ private fun CenterColumn(
 private fun CentsColumn(
     state: MainScreenUiState,
     centsSize: androidx.compose.ui.unit.TextUnit,
-    tracking: Boolean,
+    showing: Boolean,
+    live: Boolean,
+    alpha: Float,
     centsDescription: String,
 ) {
     val p = InstrumentTheme.palette
@@ -320,11 +307,11 @@ private fun CentsColumn(
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                text = if (tracking) (state.centsText ?: "--") else "--",
+                text = if (showing) (state.centsText ?: "–") else "–",
                 style = TextStyle(
                     fontSize = centsSize,
                     fontWeight = FontWeight.Bold,
-                    color = if (tracking) p.noteIvory else p.noteIvory.copy(alpha = 0.35f),
+                    color = if (showing) p.noteIvory.copy(alpha = alpha) else p.noteIvory.copy(alpha = 0.35f),
                 ).tabularNumerals,
                 maxLines = 1,
                 modifier = Modifier
@@ -341,7 +328,7 @@ private fun CentsColumn(
                     .clearAndSetSemantics {},
             )
         }
-        if (tracking) {
+        if (showing) {
             Spacer(Modifier.height(5.dp))
             val badge: String
             val badgeColor: Color
@@ -353,18 +340,18 @@ private fun CentsColumn(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = badge,
-                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = badgeColor),
+                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = badgeColor.copy(alpha = alpha)),
                     maxLines = 1,
                     modifier = Modifier.clearAndSetSemantics {},
                 )
                 Spacer(Modifier.size(4.dp))
                 Text(
                     text = state.directionText ?: "—",
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = badgeColor),
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = badgeColor.copy(alpha = alpha)),
                     maxLines = 1,
                     modifier = Modifier
                         .testTag("resonance.direction")
-                        .semantics { liveRegion = LiveRegionMode.Polite },
+                        .semantics { if (live) liveRegion = LiveRegionMode.Polite },
                 )
             }
         }

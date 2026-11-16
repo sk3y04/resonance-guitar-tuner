@@ -62,16 +62,22 @@ fun AnalogTuningMeter(
     embedded: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
-    // Needle always rendered. Active → mapped cents angle; no signal →
-    // rest just past the flat stop. Damped spring gives a physical settle.
+    // The needle is live ONLY while a reliable pitch is tracked. With no
+    // signal it fades out (never parked at a scale value as a fake reading).
+    // Critically damped spring: responsive settle, no decorative bounce.
     val targetAngle = (
         if (active) AnalogMeterGeometry.needleAngle(position.coerceIn(-1.0, 1.0))
         else AnalogMeterGeometry.REST_ANGLE
         ).toFloat()
     val needleAngle = animateFloatAsState(
         targetValue = targetAngle,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 210f),
+        animationSpec = spring(dampingRatio = 1f, stiffness = 280f),
         label = "meter-needle",
+    )
+    val needleAlpha = animateFloatAsState(
+        targetValue = if (AnalogMeterGeometry.needleShown(active)) 1f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "meter-needle-alpha",
     )
     val zoneColor = animateColorAsState(
         targetValue = if (inTune) p.bandGreen else p.zoneOff,
@@ -91,9 +97,10 @@ fun AnalogTuningMeter(
             val faceRight = w - margin
             val faceBottom = h - (if (embedded) 0.dp.toPx() else 6.dp.toPx())
             val frame = if (embedded) 0.dp.toPx() else 3.dp.toPx()
-            // Pivot BELOW the visible bottom edge — the needle emerges from
+            // Pivot just below the bottom edge — the needle emerges from
             // the bottom-center seam; its tail is hidden behind the escutcheon.
-            val pivot = Offset(w / 2f, faceBottom + 18.dp.toPx())
+            // Raised from the earlier dial so the width-limited arc fills the face height.
+            val pivot = Offset(w / 2f, faceBottom + 12.dp.toPx())
 
             fun unit(angleDeg: Float): Offset {
                 val rad = angleDeg * PI.toFloat() / 180f
@@ -111,7 +118,7 @@ fun AnalogTuningMeter(
             val edgePad = 5.dp.toPx()
             val widthLimit =
                 ((faceRight - faceLeft) / 2f - edgePad - numeralHalf) / sinHalf - numeralOffset
-            val heightLimit = pivot.y - faceTop - numeralOffset - 12.dp.toPx()
+            val heightLimit = pivot.y - faceTop - numeralOffset - 6.dp.toPx()
             val radius = min(widthLimit, heightLimit).coerceAtLeast(10f)
 
             val faceCorner = if (embedded) 0.dp.toPx() else 14.dp.toPx()
@@ -153,7 +160,7 @@ fun AnalogTuningMeter(
             // ticks cleanly without overlapping text. Fixed dp keeps geometry
             // stable at any font scale.
             val labelStyle = TextStyle(
-                fontSize = 13.dp.toSp(),
+                fontSize = 14.dp.toSp(),
                 fontWeight = FontWeight.SemiBold,
                 color = p.ink,
             )
@@ -179,14 +186,6 @@ fun AnalogTuningMeter(
             val sharpText = "♯ SHARP"
             val flatSize = measurer.measure(flatText, sideStyle).size
             val sharpSize = measurer.measure(sharpText, sideStyle).size
-            val stampStyle = TextStyle(
-                fontSize = 8.5.dp.toSp(),
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.6.dp.toSp(),
-                color = p.taupe.copy(alpha = 0.38f),
-            )
-            val stampText = "CENTS • 440Hz CALIBRATED"
-            val stampSize = measurer.measure(stampText, stampStyle).size
 
             // 3-tier tick hierarchy pointing inward toward the pivot.
             data class Tick(val start: Offset, val end: Offset, val width: Float, val color: Color)
@@ -307,40 +306,37 @@ fun AnalogTuningMeter(
                         topLeft = Offset(faceRight - frame - 12.dp.toPx() - sharpSize.width, faceBottom - frame - sharpSize.height - 10.dp.toPx()),
                         style = sideStyle,
                     )
-                    drawText(
-                        textMeasurer = measurer,
-                        text = stampText,
-                        topLeft = Offset(w / 2f - stampSize.width / 2f, faceBottom - frame - stampSize.height - 12.dp.toPx()),
-                        style = stampStyle,
-                    )
 
-                    // ── Needle (always rendered; the only per-frame angle read) ──
-                    val angle = needleAngle.value
-                    val u = unit(angle)
-                    val perp = Offset(u.y, -u.x)
-                    val tip = pivot + u * needleLen
-                    val baseHalf = 1.75.dp.toPx()
-                    val tipHalf = 0.5.dp.toPx()
-                    fun needlePath(dx: Float, dy: Float): Path = Path().apply {
-                        moveTo(tip.x + perp.x * tipHalf + dx, tip.y + perp.y * tipHalf + dy)
-                        lineTo(pivot.x + perp.x * baseHalf + dx, pivot.y + perp.y * baseHalf + dy)
-                        lineTo(pivot.x - perp.x * baseHalf + dx, pivot.y - perp.y * baseHalf + dy)
-                        lineTo(tip.x - perp.x * tipHalf + dx, tip.y - perp.y * tipHalf + dy)
-                        close()
-                    }
-                    // Soft drop shadow cast onto the cream dial.
-                    drawPath(needlePath(2.5.dp.toPx(), 2.dp.toPx()), Color.Black.copy(alpha = 0.14f))
-                    drawPath(needlePath(0f, 0f), p.ink)
-                    // Fine metal sheen along one edge.
-                    drawLine(
-                        color = p.ivory.copy(alpha = 0.22f),
-                        start = pivot + u * (needleLen * 0.18f) + perp * 0.5.dp.toPx(),
-                        end = pivot + u * (needleLen * 0.9f) + perp * 0.5.dp.toPx(),
-                        strokeWidth = 0.6.dp.toPx(),
-                    )
-                    if (active && clamped) {
-                        val stopAngle = if (angle >= 0f) sweep / 2f else -sweep / 2f
-                        drawCircle(p.inkSoft, radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
+                    // ── Needle (live only with a reliable pitch; fades out) ──
+                    val na = needleAlpha.value
+                    if (na > 0.01f) {
+                        val angle = needleAngle.value
+                        val u = unit(angle)
+                        val perp = Offset(u.y, -u.x)
+                        val tip = pivot + u * needleLen
+                        val baseHalf = 1.75.dp.toPx()
+                        val tipHalf = 0.5.dp.toPx()
+                        fun needlePath(dx: Float, dy: Float): Path = Path().apply {
+                            moveTo(tip.x + perp.x * tipHalf + dx, tip.y + perp.y * tipHalf + dy)
+                            lineTo(pivot.x + perp.x * baseHalf + dx, pivot.y + perp.y * baseHalf + dy)
+                            lineTo(pivot.x - perp.x * baseHalf + dx, pivot.y - perp.y * baseHalf + dy)
+                            lineTo(tip.x - perp.x * tipHalf + dx, tip.y - perp.y * tipHalf + dy)
+                            close()
+                        }
+                        // Soft drop shadow cast onto the cream dial.
+                        drawPath(needlePath(2.5.dp.toPx(), 2.dp.toPx()), Color.Black.copy(alpha = 0.14f * na))
+                        drawPath(needlePath(0f, 0f), p.ink.copy(alpha = na))
+                        // Fine metal sheen along one edge.
+                        drawLine(
+                            color = p.ivory.copy(alpha = 0.22f * na),
+                            start = pivot + u * (needleLen * 0.18f) + perp * 0.5.dp.toPx(),
+                            end = pivot + u * (needleLen * 0.9f) + perp * 0.5.dp.toPx(),
+                            strokeWidth = 0.6.dp.toPx(),
+                        )
+                        if (active && clamped) {
+                            val stopAngle = if (angle >= 0f) sweep / 2f else -sweep / 2f
+                            drawCircle(p.inkSoft.copy(alpha = na), radius = 2.5.dp.toPx(), center = at(stopAngle, radius))
+                        }
                     }
                 }
                 // Brass escutcheon: a semicircular cap at the bottom-center seam

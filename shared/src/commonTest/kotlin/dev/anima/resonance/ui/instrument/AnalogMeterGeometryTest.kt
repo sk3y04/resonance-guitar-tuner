@@ -119,9 +119,9 @@ class AnalogMeterGeometryTest {
     }
 
     @Test
-    fun needleIsAlwaysRenderedEvenWithNoSignal() {
-        // The needle never disappears; no-signal rests it at the left stop.
-        assertTrue(AnalogMeterGeometry.needleShown(active = false))
+    fun needleIsLiveOnlyWithAReliablePitch() {
+        // No-signal hides the needle (never a fake reading at a scale stop).
+        assertFalse(AnalogMeterGeometry.needleShown(active = false))
         assertTrue(AnalogMeterGeometry.needleShown(active = true))
     }
 }

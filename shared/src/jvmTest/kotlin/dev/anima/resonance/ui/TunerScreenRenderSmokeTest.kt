@@ -198,6 +198,7 @@ class TunerScreenRenderSmokeTest {
         favoritePresetIds = if (withSheet) setOf("standard") else emptySet(),
         selectedPresetId = "standard",
         captureActive = permission == MicPermissionState.GRANTED,
+        presetStringCount = BuiltInTunings.standard.strings.size,
     )
 
     private fun measured(
@@ -232,6 +233,7 @@ class TunerScreenRenderSmokeTest {
             favoritePresetIds = if (withSheet) setOf("standard") else emptySet(),
             selectedPresetId = "standard",
             captureActive = true,
+            presetStringCount = BuiltInTunings.standard.strings.size,
         )
 
     private data class RenderCase(

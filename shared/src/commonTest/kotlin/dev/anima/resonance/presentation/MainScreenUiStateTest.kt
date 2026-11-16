@@ -123,7 +123,7 @@ class MainScreenUiStateTest {
             preset = null,
             selectedStringIndex = null,
         )
-        assertTrue(s.statusHint!!.contains("Pluck", ignoreCase = true), "welcoming hint, got '${s.statusHint}'")
+        assertTrue(s.statusHint!!.contains("Play", ignoreCase = true), "welcoming hint, got '${s.statusHint}'")
         assertNull(s.frequencyText, "no fake 0 Hz frequency while listening")
         assertNull(s.noteLabel)
     }
@@ -289,7 +289,7 @@ class MainScreenUiStateTest {
             captureActive = true,
         )
         assertEquals("Listening", s.micStatusText)
-        assertTrue(s.statusHint!!.contains("Pluck", ignoreCase = true))
+        assertTrue(s.statusHint!!.contains("Play", ignoreCase = true))
     }
 
     @Test

@@ -60,10 +60,12 @@ class P15StatusWordingTest {
     }
 
     @Test
-    fun waitingAndLostSignalAreNonMeasuringListening() {
+    fun waitingIsListeningButLostSignalIsCoherent() {
+        // Waiting reads "Listening"; a lost note reads "No signal" so the
+        // header never contradicts the readout's lost/weak guidance.
         assertEquals("Listening", state(TunerStatus.LISTENING).micStatusText)
-        assertEquals("Listening", state(TunerStatus.STALE).micStatusText)
-        assertEquals("Listening", state(TunerStatus.INSUFFICIENT_SIGNAL).micStatusText)
+        assertEquals("No signal", state(TunerStatus.STALE).micStatusText)
+        assertEquals("No signal", state(TunerStatus.INSUFFICIENT_SIGNAL).micStatusText)
         assertEquals(false, state(TunerStatus.STALE).meterActive)
     }
 

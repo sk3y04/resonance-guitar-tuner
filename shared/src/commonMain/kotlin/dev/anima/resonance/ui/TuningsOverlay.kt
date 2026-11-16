@@ -48,6 +48,7 @@ import dev.anima.resonance.presentation.CustomEditorUiState
 import dev.anima.resonance.presentation.MainScreenUiState
 import dev.anima.resonance.presentation.PresetRowUi
 import dev.anima.resonance.presentation.PresetSheetUi
+import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.instrument.CalibrationControls
 import dev.anima.resonance.ui.instrument.InstrumentKey
 import dev.anima.resonance.ui.instrument.InstrumentTheme
@@ -70,6 +71,7 @@ fun TuningsOverlay(
     onClose: () -> Unit,
     onConcertStep: (Boolean) -> Unit = {},
     onConcertStepCoarse: (Boolean) -> Unit = {},
+    onConcertSet: (Double) -> Unit = {},
     onSpellingSelect: (Spelling) -> Unit = {},
     onPresetSelect: (String) -> Unit = {},
     onToggleFavorite: (String) -> Unit = {},
@@ -144,7 +146,7 @@ fun TuningsOverlay(
                                 .testTag("resonance.overlay.close")
                                 .semantics { contentDescription = "Close tunings and settings" },
                             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                        ) { Text("Close", style = InstrumentType.keyLabel) }
+                        ) { Text("Done", style = InstrumentType.keyLabel) }
                     }
                     HairlineDivider()
                     // ── Content (scrolls) ────────────────────────────────
@@ -172,6 +174,7 @@ fun TuningsOverlay(
                                 state = state,
                                 onConcertStep = onConcertStep,
                                 onConcertStepCoarse = onConcertStepCoarse,
+                                onConcertSet = onConcertSet,
                                 onSpellingSelect = onSpellingSelect,
                                 onPresetSelect = onPresetSelect,
                                 onToggleFavorite = onToggleFavorite,
@@ -189,24 +192,25 @@ fun TuningsOverlay(
                                 .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            if (largeText) {
-                                FooterAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.fillMaxWidth())
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    FooterAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                                    FooterAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-                                }
-                            } else {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    FooterAction("+ New", "resonance.sheet.add", onAddTuning, Modifier.weight(1f))
-                                    FooterAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
-                                    FooterAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
-                                }
+                            // "New tuning" stays discoverable and prominent;
+                            // Import/Export move into a clearly labelled secondary
+                            // "More" management area (not three equal buttons).
+                            FooterAction("+ New tuning", "resonance.sheet.add", onAddTuning, Modifier.fillMaxWidth())
+                            Text(
+                                text = "MORE",
+                                style = InstrumentType.engraved.copy(
+                                    color = p.brassLight,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 2.sp,
+                                ),
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FooterAction("Import", "resonance.sheet.import", onImportRequested, Modifier.weight(1f))
+                                FooterAction("Export", "resonance.sheet.export", onExportRequested, Modifier.weight(1f))
                             }
                         }
                     }
@@ -216,12 +220,16 @@ fun TuningsOverlay(
     }
 }
 
-/** The configuration body: CALIBRATION then TUNINGS, one shared surface. */
+/** The configuration body. Instrument-mode order: presets, reference pitch,
+ *  note spelling, then secondary management. Chromatic: the relevant settings
+ *  (reference + spelling) first, with the instrument-preset list clearly labelled
+ *  as applying to Instrument mode. One shared surface. */
 @Composable
 private fun SheetBody(
     state: MainScreenUiState,
     onConcertStep: (Boolean) -> Unit,
     onConcertStepCoarse: (Boolean) -> Unit,
+    onConcertSet: (Double) -> Unit,
     onSpellingSelect: (Spelling) -> Unit,
     onPresetSelect: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
@@ -229,15 +237,20 @@ private fun SheetBody(
     onDeleteTuning: (String) -> Unit,
 ) {
     val p = InstrumentTheme.palette
-    Column(Modifier.testTag("resonance.sheet")) {
-        SectionLabel("CALIBRATION")
+    val largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f
+    val instrument = state.mode == TunerMode.INSTRUMENT
+
+    @Composable
+    fun CalibrationSection() {
+        SectionLabel("REFERENCE PITCH")
         Spacer(Modifier.size(8.dp))
         CalibrationControls(
-            concertValue = PresetSheetUi.referencePitchValue(state.concertPitchHz),
+            concertHz = state.concertPitchHz,
             concertError = state.concertError,
             onConcertStep = onConcertStep,
             onConcertStepCoarse = onConcertStepCoarse,
-            largeText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f,
+            onConcertSet = onConcertSet,
+            largeText = largeText,
         )
         Spacer(Modifier.size(14.dp))
         Column(
@@ -245,19 +258,41 @@ private fun SheetBody(
                 .fillMaxWidth()
                 .testTag("resonance.sheet.spelling"),
         ) {
-            Text("Accidental display", style = InstrumentType.engraved)
+            Text("Note spelling", style = InstrumentType.engraved)
             Spacer(Modifier.size(6.dp))
             SpellingKeys(state.accidentalSpelling, onSpellingSelect, Modifier.fillMaxWidth())
         }
+    }
 
-        Spacer(Modifier.size(16.dp))
-        HairlineDivider()
-        Spacer(Modifier.size(16.dp))
-
-        SectionLabel("TUNINGS")
+    @Composable
+    fun TuningsSection() {
+        SectionLabel(if (instrument) "TUNINGS" else "INSTRUMENT TUNINGS")
+        if (!instrument) {
+            Text(
+                text = "Applies to Instrument mode",
+                style = InstrumentType.readoutSmall,
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+            )
+        }
         Spacer(Modifier.size(8.dp))
         state.presetRows.forEach { row ->
             TuningRow(row, onPresetSelect, onToggleFavorite, onEditTuning, onDeleteTuning)
+        }
+    }
+
+    Column(Modifier.testTag("resonance.sheet")) {
+        if (instrument) {
+            TuningsSection()
+            Spacer(Modifier.size(16.dp))
+            HairlineDivider()
+            Spacer(Modifier.size(16.dp))
+            CalibrationSection()
+        } else {
+            CalibrationSection()
+            Spacer(Modifier.size(16.dp))
+            HairlineDivider()
+            Spacer(Modifier.size(16.dp))
+            TuningsSection()
         }
         state.importResultText?.let { message ->
             Text(
@@ -310,9 +345,9 @@ private fun TuningRow(
                 )
                 if (row.selected) {
                     Text(
-                        text = "●",
+                        text = "✓",
                         color = p.brassLight,
-                        style = InstrumentType.readoutSmall,
+                        style = InstrumentType.readoutSmall.copy(fontWeight = FontWeight.Bold),
                         modifier = Modifier
                             .padding(start = 6.dp)
                             .clearAndSetSemantics {},

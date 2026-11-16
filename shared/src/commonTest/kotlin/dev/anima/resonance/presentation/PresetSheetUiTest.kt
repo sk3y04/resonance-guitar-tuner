@@ -8,6 +8,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PresetSheetUiTest {
@@ -101,5 +102,21 @@ class PresetSheetUiTest {
         // Spec §2: 0.1 Hz steps — the label must not truncate the tenth.
         assertEquals("A4 = 439.9 Hz", PresetSheetUi.concertPitchLabel(439.9))
         assertEquals("A4 = 440 Hz", PresetSheetUi.concertPitchLabel(440.0))
+    }
+
+    @Test
+    fun parseConcertPitchAcceptsPeriodAndCommaAndRoundsToTenth() {
+        assertEquals(442.5, PresetSheetUi.parseConcertPitch("442.5")!!, 1e-9)
+        assertEquals(442.5, PresetSheetUi.parseConcertPitch("442,5")!!, 1e-9)
+        assertEquals(440.0, PresetSheetUi.parseConcertPitch(" 440 ")!!, 1e-9)
+        assertEquals(442.3, PresetSheetUi.parseConcertPitch("442.34")!!, 1e-9)
+    }
+
+    @Test
+    fun parseConcertPitchRejectsBlankAndGarbageWithoutCoercing() {
+        assertNull(PresetSheetUi.parseConcertPitch(""))
+        assertNull(PresetSheetUi.parseConcertPitch("   "))
+        assertNull(PresetSheetUi.parseConcertPitch("abc"))
+        assertNull(PresetSheetUi.parseConcertPitch("44x0"))
     }
 }

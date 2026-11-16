@@ -56,4 +56,12 @@ data class MainScreenUiState(
     val accidentalSpelling: dev.anima.resonance.music.Spelling = dev.anima.resonance.music.Spelling.NATURAL,
     // Last import/export result message (null = nothing to show)
     val importResultText: String? = null,
+    // Explicit signal presentation phase + readout opacity (1 = live;
+    // a brief interruption holds the last reading faded, never as live).
+    val signalPhase: SignalPhase = SignalPhase.WAITING,
+    val readingAlpha: Float = 1f,
+    // The selected instrument preset's string count, available in BOTH
+    // modes so the meter/readout geometry and the config-entry position stay
+    // stable when switching modes (chromatic reserves the rail as negative space).
+    val railStringCount: Int = 0,
 )

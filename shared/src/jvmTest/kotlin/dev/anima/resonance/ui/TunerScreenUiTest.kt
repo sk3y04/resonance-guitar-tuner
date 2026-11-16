@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.anima.resonance.music.BuiltInTunings
@@ -100,6 +102,7 @@ class TunerScreenUiTest {
         onPresetSelect: (String) -> Unit = {},
         onConcertStep: (Boolean) -> Unit = {},
         onConcertStepCoarse: (Boolean) -> Unit = {},
+        onConcertSet: (Double) -> Unit = {},
         onSpellingSelect: (dev.anima.resonance.music.Spelling) -> Unit = {},
         editor: CustomEditorUiState? = null,
         onEditorNameChange: (String) -> Unit = {},
@@ -119,6 +122,7 @@ class TunerScreenUiTest {
                     onPresetSelect = onPresetSelect,
                     onConcertStep = onConcertStep,
                     onConcertStepCoarse = onConcertStepCoarse,
+                    onConcertSet = onConcertSet,
                     onSpellingSelect = onSpellingSelect,
                     editor = editor,
                     onEditorNameChange = onEditorNameChange,
@@ -438,17 +442,74 @@ class TunerScreenUiTest {
     }
 
     @Test
-    fun overlayCoarseConcertSteppersInvokeTheOneHertzCallback() {
+    fun overlayCoarseStepSelectionRoutesToOneHertzCallback() {
         val calls = mutableListOf<Boolean>()
         val ui = state(status = TunerStatus.LISTENING).copy(
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             concertLabel = "A4 = 440 Hz",
         )
         showOverlay(ui, onConcertStepCoarse = { calls += it })
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.coarsePlus"))
-        rule.onNodeWithTag("resonance.sheet.concert.coarseMinus").performClick()
-        rule.onNodeWithTag("resonance.sheet.concert.coarsePlus").performClick()
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.step.coarse"))
+        // Select the 1 Hz step, then the shared −/+ keys route to it.
+        rule.onNodeWithTag("resonance.sheet.concert.step.coarse").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.minus").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
         assertEquals(listOf(false, true), calls)
+    }
+
+    @Test
+    fun overlayResetAppearsOnlyWhenReferenceDiffersAndResetsTo440() {
+        val sets = mutableListOf<Double>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            concertPitchHz = 442.0,
+        )
+        showOverlay(ui, onConcertSet = { sets += it })
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.reset"))
+        rule.onNodeWithTag("resonance.sheet.concert.reset").performClick()
+        assertEquals(listOf(440.0), sets)
+    }
+
+    @Test
+    fun overlayResetHiddenAt440() {
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+            concertPitchHz = 440.0,
+        )
+        showOverlay(ui)
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
+        rule.onNodeWithTag("resonance.sheet.concert.reset").assertDoesNotExist()
+    }
+
+    @Test
+    fun overlayDirectEditAppliesValidValue() {
+        val sets = mutableListOf<Double>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+        )
+        showOverlay(ui, onConcertSet = { sets += it })
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
+        rule.onNodeWithTag("resonance.sheet.concert.value").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.input").performTextClearance()
+        rule.onNodeWithTag("resonance.sheet.concert.input").performTextInput("442.5")
+        rule.onNodeWithTag("resonance.sheet.concert.apply").performClick()
+        assertEquals(listOf(442.5), sets)
+    }
+
+    @Test
+    fun overlayDirectEditRejectsOutOfRangeWithoutCoercing() {
+        val sets = mutableListOf<Double>()
+        val ui = state(status = TunerStatus.LISTENING).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+        )
+        showOverlay(ui, onConcertSet = { sets += it })
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
+        rule.onNodeWithTag("resonance.sheet.concert.value").performClick()
+        rule.onNodeWithTag("resonance.sheet.concert.input").performTextClearance()
+        rule.onNodeWithTag("resonance.sheet.concert.input").performTextInput("500")
+        rule.onNodeWithTag("resonance.sheet.concert.apply").performClick()
+        assertEquals(emptyList<Double>(), sets, "out-of-range input is never applied")
+        rule.onNodeWithTag("resonance.sheet.concert.editError").assertIsDisplayed()
     }
 
     @Test

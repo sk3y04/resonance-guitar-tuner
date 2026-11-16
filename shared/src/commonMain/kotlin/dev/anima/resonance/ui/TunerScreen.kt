@@ -1,7 +1,12 @@
 package dev.anima.resonance.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -19,18 +24,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -39,13 +52,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.presentation.MainScreenUiState
 import dev.anima.resonance.presentation.MicPermissionState
+import dev.anima.resonance.presentation.SignalPhase
 import dev.anima.resonance.presentation.TunerMode
+import dev.anima.resonance.music.Spelling
 import dev.anima.resonance.ui.instrument.AnalogTuningMeter
 import dev.anima.resonance.ui.instrument.InstrumentFaceplate
 import dev.anima.resonance.ui.instrument.InstrumentKey
 import dev.anima.resonance.ui.instrument.GearIcon
 import dev.anima.resonance.ui.instrument.InstrumentStringSelector
 import dev.anima.resonance.ui.instrument.InstrumentTheme
+import dev.anima.resonance.ui.instrument.InstrumentTokens
 import dev.anima.resonance.ui.instrument.InstrumentType
 import dev.anima.resonance.ui.instrument.JewelLamp
 import dev.anima.resonance.ui.instrument.MechanicalModeSelector
@@ -127,24 +143,30 @@ fun TunerScreen(
                     // beyond that is a single wood enclosure margin, never an
                     // empty internal panel or stretched buttons.
                     val hasStrings = state.targetLabels.isNotEmpty()
-                    val n = state.targetLabels.size
-                    val singleRow = hasStrings && n in 1..8 &&
-                        innerW >= 48.dp * n + 4.dp * (n - 1)
+                    // Reserve the string rail in BOTH modes (from the
+                    // selected preset's string count) so the meter/readout
+                    // geometry and the config-entry position are IDENTICAL when
+                    // switching modes. Chromatic leaves the rail as modest
+                    // intentional negative space rather than resizing the meter.
+                    val railN = if (hasStrings) state.targetLabels.size else state.railStringCount
+                    val railSingleRow = railN in 1..8 &&
+                        innerW >= 48.dp * railN + 4.dp * (railN - 1)
                     val stringsH = when {
-                        !hasStrings -> 0.dp
-                        singleRow -> 69.dp // caption + gap + one 52dp row
+                        railN <= 0 -> 0.dp
+                        railSingleRow -> 69.dp // caption + gap + one 52dp row
                         else -> 129.dp // caption + gap + two 56dp rows + 6dp gap
                     }
-                    val controlsNaturalH = 56.dp + stringsH + 48.dp
+                    val configH = 64.dp
+                    val controlsNaturalH = 56.dp + stringsH + configH
                     val availableAssemblyH = innerH - 24.dp - controlsNaturalH - 66.dp
                     // Fixed layout when the gauge has real room; otherwise an
                     // accessible scrolling fallback (large fonts / tiny screens).
                     val fallback = largeText || availableAssemblyH < 160.dp
-                    // The wide landscape dial frees vertical space. Redistribute
-                    // it as balanced breathing room between the control groups
-                    // (dynamic gaps, capped) plus a modest coherent deepening of the
-                    // dial — never one large empty footer band, never stretched keys.
-                    val nGaps = if (hasStrings) 4 else 3
+                    // One predictable stack — status, meter+readout, mode,
+                    // string rail (or reserved space), config entry. Spare height
+                    // deepens the dial coherently first, then becomes balanced
+                    // breathing room; the residual is a modest enclosure margin.
+                    val nGaps = if (stringsH > 0.dp) 4 else 3
                     val baseGap = 14f
                     val gaugeNatural = innerW.value / MeterAssemblyLayout.GAUGE_ASPECT
                     val assemblyNatural =
@@ -152,16 +174,11 @@ fun TunerScreen(
                     val naturalH =
                         24f + assemblyNatural + controlsNaturalH.value + baseGap * nGaps + 24f
                     val spare = (innerH.value - naturalH).coerceAtLeast(0f)
-                    // The dial deepens coherently first; the remainder becomes
-                    // balanced breathing room between groups (fewer groups in
-                    // chromatic => larger gaps). Residual is a modest wood margin.
-                    val minAspect =
-                        if (hasStrings) MeterAssemblyLayout.MIN_GAUGE_ASPECT else 1.0f
+                    val minAspect = MeterAssemblyLayout.MIN_GAUGE_ASPECT
                     val gaugeMaxGrow = innerW.value / minAspect - gaugeNatural
                     val gaugeGrow = spare.coerceIn(0f, gaugeMaxGrow)
                     val remSpare = (spare - gaugeGrow).coerceAtLeast(0f)
-                    val maxGapExtra = if (hasStrings) 24f else 44f
-                    val gapExtra = (remSpare / nGaps).coerceAtMost(maxGapExtra)
+                    val gapExtra = (remSpare / nGaps).coerceAtMost(24f)
                     val sectionGap = (baseGap + gapExtra).dp
                     val assemblyAvailH = assemblyNatural + gaugeGrow
 
@@ -184,7 +201,7 @@ fun TunerScreen(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(sectionGap),
                         ) {
-                            LabelStrip(state, onOpenSheet)
+                            LabelStrip(state)
                             if (!granted || state.captureError) {
                                 CapturePanel(
                                     state = state,
@@ -225,19 +242,16 @@ fun TunerScreen(
                                     stringLocked = state.stringLocked,
                                     onStringSelect = onStringSelect,
                                 )
+                            } else if (stringsH > 0.dp) {
+                                // Chromatic: reserve the rail as modest negative
+                                // space so the config entry stays put.
+                                Spacer(Modifier.fillMaxWidth().height(stringsH))
                             }
-                            InstrumentKey(
-                                onClick = onOpenSheet,
-                                bevel = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .testTag("resonance.openSheet"),
-                            ) {
-                                GearIcon()
-                                Spacer(Modifier.size(8.dp))
-                                Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
-                            }
+                            ConfigurationEntry(
+                                state = state,
+                                onOpenSheet = onOpenSheet,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                 }
@@ -246,43 +260,114 @@ fun TunerScreen(
     }
 }
 
-/** Header: preset selector (with chevron), live status, A4 reference —
- *  one crisp horizontal baseline, balanced spacing, tabular reference pitch. */
+/** Header: a minimal status strip — the live signal state only. Preset,
+ *  reference pitch and spelling live in the compact configuration entry below
+ *  (no duplicated config, no top bar full of controls). */
 @Composable
-private fun LabelStrip(state: MainScreenUiState, onOpenSheet: () -> Unit = {}) {
-    val p = InstrumentTheme.palette
+private fun LabelStrip(state: MainScreenUiState) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = state.presetName ?: "Chromatic",
-                style = InstrumentType.engravedStrong,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clickable(onClick = onOpenSheet)
-                    .testTag("resonance.preset")
-                    .semantics { heading() },
-            )
+        MicStatusLine(state = state)
+    }
+}
+
+/**
+ * The compact, informative configuration entry that replaces the oversized
+ * "TUNINGS & SETTINGS" button. The whole area is the tap target (the gear icon
+ * is decorative, never the only hit area). It adapts to the actual settings:
+ * Instrument shows the preset name + note sequence + A4; Chromatic shows
+ * "Tuner settings" + A4 + accidental preference (the saved instrument preset
+ * does NOT constrain chromatic detection, so it is not implied here).
+ */
+@Composable
+private fun ConfigurationEntry(
+    state: MainScreenUiState,
+    onOpenSheet: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = InstrumentTheme.palette
+    val instrument = state.mode == TunerMode.INSTRUMENT
+    val title = if (instrument) (state.presetName ?: "Standard") else "Tuner settings"
+    val notes = state.targetLabels.joinToString(" ") { it.dropLast(1) }
+    val a4 = "A4 ${state.concertPitchHz.toIntIfWholeOrOneDecimal()} Hz"
+    val spellingWord = when (state.accidentalSpelling) {
+        Spelling.SHARP -> "Sharps"
+        Spelling.FLAT -> "Flats"
+        else -> "Naturals"
+    }
+    // Whole-area tap target with press feedback. The click is exposed via
+    // semantics onClick (NOT a merging clickable/Surface) so the preset and
+    // reference-pitch child tags stay findable in the merged semantics tree.
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Box(
+        modifier = modifier
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(InstrumentTokens.cornerMd))
+            .background(if (pressed) p.walnutLight else p.recess)
+            .pointerInput(onOpenSheet) {
+                detectTapGestures(
+                    onPress = {
+                        val press = PressInteraction.Press(it)
+                        interaction.tryEmit(press)
+                        tryAwaitRelease()
+                        interaction.tryEmit(PressInteraction.Release(press))
+                    },
+                    onTap = { onOpenSheet() },
+                )
+            }
+            .testTag("resonance.openSheet")
+            .semantics {
+                contentDescription = "Tunings and settings. $title. $a4."
+                onClick(label = "Open tunings and settings") { onOpenSheet(); true }
+            },
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = InstrumentType.keyLabel.copy(color = p.ivory),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("resonance.preset"),
+                )
+                GearIcon(modifier = Modifier.size(16.dp), color = p.brass)
+            }
             Spacer(Modifier.size(4.dp))
-            Text(
-                text = "▾",
-                style = InstrumentType.engraved.copy(fontSize = 11.sp, color = p.brass),
-                maxLines = 1,
-                modifier = Modifier.clearAndSetSemantics {},
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (instrument) {
+                    Text(
+                        text = notes,
+                        style = InstrumentType.readoutSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clearAndSetSemantics {},
+                    )
+                }
+                Text(
+                    text = a4,
+                    style = InstrumentType.readoutSmall,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .testTag("resonance.concert")
+                        .semantics { contentDescription = "Reference pitch $a4" },
+                )
+                if (!instrument) {
+                    Text(
+                        text = " · $spellingWord",
+                        style = InstrumentType.readoutSmall,
+                        maxLines = 1,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
+                }
+            }
         }
-        MicStatusLine(
-            text = state.micStatusText,
-            isError = state.captureError,
-        )
-        Spacer(Modifier.size(12.dp))
-        ConcertPitchText(hz = state.concertPitchHz)
     }
 }
 
@@ -365,7 +450,7 @@ private fun FallbackLayout(
             .testTag("resonance.scroll"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        LabelStrip(state, onOpenSheet)
+        LabelStrip(state)
         if (!granted || state.captureError) {
             CapturePanel(
                 state = state,
@@ -408,63 +493,45 @@ private fun FallbackLayout(
                 onStringSelect = onStringSelect,
             )
         }
-        InstrumentKey(
-            onClick = onOpenSheet,
-            bevel = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .testTag("resonance.openSheet"),
-        ) {
-            GearIcon()
-            Spacer(Modifier.size(8.dp))
-            Text("TUNINGS & SETTINGS", style = InstrumentType.keyLabel)
-        }
+        ConfigurationEntry(
+            state = state,
+            onOpenSheet = onOpenSheet,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(14.dp))
     }
 }
 
 @Composable
 private fun MicStatusLine(
-    text: String,
-    isError: Boolean,
+    state: MainScreenUiState,
     modifier: Modifier = Modifier,
 ) {
     val p = InstrumentTheme.palette
-    val active = (text == "Listening" || text == "Tracking") && !isError
+    // The lamp agrees with the signal phase — green only while tracking,
+    // amber while waiting, dim when lost, red on a capture error. Never colour
+    // alone: the adjacent text carries the same state.
+    val color: Color
+    val lit: Boolean
+    when (state.signalPhase) {
+        SignalPhase.TRACKING -> { color = p.lampGreen; lit = true }
+        SignalPhase.WAITING, SignalPhase.HOLDING -> { color = p.lampAmber; lit = true }
+        SignalPhase.LOST -> { color = p.lampAmber; lit = false }
+        SignalPhase.MIC_OFF -> { color = p.lampOff; lit = false }
+        SignalPhase.MIC_ERROR -> { color = p.lampRed; lit = true }
+    }
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        JewelLamp(
-            lit = active || isError,
-            color = if (isError) p.lampRed else p.lampGreen,
-            size = 10.dp,
-        )
+        JewelLamp(lit = lit, color = color, size = 10.dp)
         Spacer(Modifier.size(6.dp))
         Text(
-            text = text,
+            text = state.micStatusText,
             style = InstrumentType.readoutSmall,
             modifier = Modifier.testTag("resonance.micStatus"),
         )
     }
-}
-
-@Composable
-private fun ConcertPitchText(
-    hz: Double,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text = "A4 ${hz.toIntIfWholeOrOneDecimal()} Hz",
-        style = InstrumentType.readoutSmall,
-        modifier = modifier
-            .testTag("resonance.concert")
-            .semantics {
-                contentDescription =
-                    "Reference pitch A4 ${hz.toIntIfWholeOrOneDecimal()} hertz"
-            },
-    )
 }
 
 private fun Double.toIntIfWholeOrOneDecimal(): String {

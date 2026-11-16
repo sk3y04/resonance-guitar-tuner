@@ -85,12 +85,9 @@ class TunerController(
         // Defense in depth: a dangling persisted preset id (custom tuning
         // deleted elsewhere / interrupted restore) must never restore into an
         // instrument screen with zero target strings.
-        val preset = if (instrument) {
-            data.presets.firstOrNull { it.id == settings.selectedPresetId }
-                ?: data.presets.firstOrNull { it.id == "standard" }
-        } else {
-            null
-        }
+        val selectedPreset = data.presets.firstOrNull { it.id == settings.selectedPresetId }
+            ?: data.presets.firstOrNull { it.id == "standard" }
+        val preset = if (instrument) selectedPreset else null
         return MainScreenUi.toUiState(
             snapshot = if (data.capturing) data.snapshot else null,
             permission = permission,
@@ -104,6 +101,7 @@ class TunerController(
             selectedPresetId = settings.selectedPresetId,
             accidentalSpelling = settings.accidentalSpelling,
             captureActive = data.capturing,
+            presetStringCount = selectedPreset?.strings?.size ?: 0,
         )
     }
 

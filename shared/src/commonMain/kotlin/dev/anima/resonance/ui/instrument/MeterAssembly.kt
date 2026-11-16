@@ -72,27 +72,22 @@ fun MeterAssembly(
                 .clip(RoundedCornerShape(14.dp))
                 .background(p.recess)
                 .drawBehind {
-                    // Unified beveled bezel: a subtle outer rim highlight
-                    // (lit upper-left) + a crisp 1dp dark inner inset border, so
-                    // dial + readout read as one module behind instrument glass.
-                    val r = 14.dp.toPx()
+                    // One restrained recessed glass edge — a crisp dark
+                    // inner inset + a faint top catch-light where the faceplate
+                    // overhangs the glass. No heavy brass rim (brass is reserved
+                    // for the needle pivot and a few meaningful accents).
+                    val r = InstrumentTokens.cornerLg.toPx()
                     drawRoundRect(
-                        brush = Brush.linearGradient(
-                            0f to p.brassLight.copy(alpha = 0.55f),
-                            0.4f to p.brass.copy(alpha = 0.30f),
-                            1f to p.brassDark.copy(alpha = 0.65f),
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, size.height),
+                        color = p.recessEdge,
+                        cornerRadius = CornerRadius(r),
+                        style = Stroke(width = 1.dp.toPx()),
+                    )
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            0f to p.faceplateLip.copy(alpha = 0.45f),
+                            0.3f to Color.Transparent,
                         ),
                         cornerRadius = CornerRadius(r),
-                        style = Stroke(width = 1.5.dp.toPx()),
-                    )
-                    val inset = 1.5.dp.toPx()
-                    drawRoundRect(
-                        color = p.recessEdge.copy(alpha = 0.95f),
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - inset * 2, size.height - inset * 2),
-                        cornerRadius = CornerRadius(r - inset),
                         style = Stroke(width = 1.dp.toPx()),
                     )
                 },

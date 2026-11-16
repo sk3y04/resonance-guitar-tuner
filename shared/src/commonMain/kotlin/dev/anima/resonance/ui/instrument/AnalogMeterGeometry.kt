@@ -36,11 +36,13 @@ object AnalogMeterGeometry {
     const val REST_ANGLE: Double = -(52.0 / FULL_SCALE_CENTS) * HALF_SWEEP
 
     /**
-     * The needle is ALWAYS rendered (flagship vintage dial). With no
-     * reliable reading it rests at [REST_ANGLE] rather than disappearing, so
-     * the dial never looks blank or powered-off.
+     * The needle is drawn ONLY while a reliable pitch is tracked. With no
+     * usable measurement it is hidden (the dial shows the scale + hub, never a
+     * needle parked at a scale value that could read as a live flat/sharp/in-tune
+     * measurement). A brief interruption may hold the last reading faded in the
+     * readout, but the needle itself stays deactivated until pitch returns.
      */
-    fun needleShown(active: Boolean): Boolean = true
+    fun needleShown(active: Boolean): Boolean = active
 
     /** Needle angle (degrees from vertical) for a normalized position. */
     fun needleAngle(position: Double): Double =

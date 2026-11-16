@@ -77,6 +77,21 @@ object PresetSheetUi {
         if (hz in CONCERT_MIN_HZ..CONCERT_MAX_HZ) null
         else "Concert pitch must be 400–480 Hz (got ${hz.toInt()})"
 
+    /**
+     * Parse direct numeric entry of the A4 reference. Accepts a period or
+     * comma decimal separator (locale-friendly), trims whitespace, and rounds
+     * to the product's 0.1 Hz precision. Returns null for blank/invalid input
+     * (never silently coerces a garbage value). Range is checked separately by
+     * [concertPitchError] so the caller can show helpful feedback.
+     */
+    fun parseConcertPitch(text: String): Double? {
+        val cleaned = text.trim().replace(',', '.')
+        if (cleaned.isEmpty()) return null
+        val value = cleaned.toDoubleOrNull() ?: return null
+        if (value.isNaN() || value.isInfinite()) return null
+        return (value * 10).roundToLong() / 10.0
+    }
+
     /** Signed integer cents: +12 / -3 / 0 (0 when |cents| < CENTS_ZERO_DISPLAY). */
     fun centsLabel(cents: Double): String {
         val rounded = kotlin.math.round(kotlin.math.abs(cents)).toInt()

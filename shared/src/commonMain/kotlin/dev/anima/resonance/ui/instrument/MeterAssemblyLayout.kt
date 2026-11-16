@@ -19,12 +19,13 @@ object MeterAssemblyLayout {
     const val MIN_NOTE_SP = 40f
     const val MAX_NOTE_SP = 96f
 
-    /** Natural gauge width:height — wide landscape instrument window. */
-    const val GAUGE_ASPECT = 1.5f
-    /** On tall screens the dial may deepen to this aspect to absorb spare
-     *  height coherently (still a landscape instrument, never a tall empty face). */
-    const val MIN_GAUGE_ASPECT = 1.2f
-    private const val MAX_GAUGE_ASPECT = 1.8f
+    /** Natural gauge width:height — landscape window sized so the
+     *  width-limited arc FILLS the face (no tall band of unused ivory above
+     *  the scale). */
+    const val GAUGE_ASPECT = 1.6f
+    /** On tall screens the dial may deepen slightly, still landscape. */
+    const val MIN_GAUGE_ASPECT = 1.4f
+    private const val MAX_GAUGE_ASPECT = 1.85f
 
     data class Spec(
         val gaugeHeightDp: Float,
