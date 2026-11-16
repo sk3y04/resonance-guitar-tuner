@@ -1470,3 +1470,87 @@ host gate fails on those pitch-tracking DSP tests, not on the UI. A temporary st
 verify the UI against the committed DSP was consumed by the concurrent process; the pitch-tracking work
 was left intact in the tree. Real-device verification (mic/screen reader) + live-guitar
 G3 remain open; on-device capture still blocked by the secure lock screen.
+
+---
+
+# Unstable pitch tracking + smooth presentation (2026-11-16)
+
+Parallel-agent boundary: the pitch-tracking work touched only audio/DSP/tracking/presentation-state
+and tests. The UI work was already committed (the UI refinement commit and its docs follow-up) when the pitch-tracking work
+landed, so no UI file was overwritten. The only shared-file edit is an additive
+`meterPosition(cents: Double)` overload + two call sites in `MainScreenUi`
+(documented in `docs/PITCH_PIPELINE_CONTRACT.md`).
+
+## Method
+
+1. Trace the real pipeline (capture → ring → conditioning → YIN → state machine
+   → mapper) and list every hypothesis from the report (fixed timers, confidence
+   vs. decay, attack-tied gates, harmonic candidates, lag bounds near G3, sample
+   rate, window/hop timing, debounce operators, resets on recomposition).
+2. Build an offline harness BEFORE changing code: `PitchLabSignals` (seeded
+   plucked-string models: per-partial decay, inharmonicity, pick transient,
+   mic/body resonance, white/pink floors, hum, rumble, sympathetic strings) +
+   `PitchLab` (replays the production path with a virtual clock and computes the
+   metrics).
+3. Measure, then fix only what the measurements showed; re-measure.
+
+Two harness bugs were found and fixed before trusting any conclusion: the
+hum/rumble dB convention was inverted (making the "hum" 10x louder than the
+tone), and the first evaluation window ran to the end of the file instead of the
+SNR horizon (which inflated the before-jitter). The reported numbers come from
+the corrected harness run against both code states.
+
+## RED (new tests, failing on the old code)
+
+- `YinSpectralTest` (11): inharmonic strings ±2 cents; sympathetic fourth ±3
+  cents with ≤4 cents beat-phase swing; sympathetic major third not silenced;
+  no pitch from noise/silence (30 seeds, white + pink); clean tones ±1 cent;
+  detuned strings ±1.5 cents; raw estimate std ≤ 3.5 on low E @20 dB; every
+  estimate carries a reason; random frames stay in band.
+- `PitchTrackerTest` (16): single octave outlier does not flicker the label; a
+  new note after a gap is followed in ≤3 frames; conflicting evidence releases a
+  stale lock (no impossible cents); octave fold + real octave change; LIVE/HELD/
+  NONE with growing `ageMs`; held readings never refresh themselves; decay to the
+  sustain floor keeps tracking; silence invalidates in ≤800 ms; jitter ≤0.45
+  cents with a non-quantized display; 18-cent step in ≤2 frames; ramp lag ≤2
+  cents; cadence-independent step response; no interpolation across a gap; cents
+  against a 432 Hz reference; manual target; reference change does not renew a
+  stale note; 2000-frame contract consistency fuzz.
+- `PitchPipelineAcceptanceTest` (10): every string acquired ≤250 ms and tracked
+  with 0 lost frames and 0 label changes through its decay; detuned strings report
+  their real deviation; G3+D3 (−10/−14 dB) and E4+B3 (−12 dB) keep tracking; a
+  decaying string stays ≥97% live while usable and is invalidated ≤800 ms after
+  silence; a 200-cent glide passes G3→G#3→A3 with exactly 2 label changes; ramp
+  lag ≤3 cents; snapshot validity coherent end to end; manual lock; trace off by
+  default and bounded when enabled; `TunerStateMachine` is a pure adapter.
+
+## Failure → cause → fix
+
+| RED failure | Cause | Fix |
+| --- | --- | --- |
+| inharmonic E2/A2/G3 +7..+11 cents | period is a compromise over stretched partials | harmonic-energy refinement (±60 cents, magnitude only) |
+| G3+D3 −14 dB: −10..−28 cents, drifting | dip pulled by the 4:3 partner; ±4% peak re-centering is phase sensitive | refine on the harmonic sum; dip only anchors "periodicity exists"; boundary climb for a dip pulled >60 cents |
+| E4+B3 −12 dB: no pitch at all | no in-band dip passes any guard | spectral band scan (fundamental presence → harmonic score → absolute presence + peakiness + runner-up + periodicity gates) |
+| clean 82.4 Hz read −5.2 cents after the first refinement | rectangular-window DTFT peak is displaced when the window holds a non-integer number of periods | Hann-windowed spectral evaluation for the spectral paths only; `MIN_REFINE_PERIODS` guard |
+| `detectsLowE2`/`fullBandSineScan` regressed | refinement ran on 2048-sample windows (3.5 periods at 82 Hz) where the lobe is ±490 cents | same `MIN_REFINE_PERIODS` guard |
+| `overwhelminglySympatheticMixStaysHonest` locked D3 | spectral path answered a mix dominated by the other string | the reported pitch must itself be periodic (d′ ≤ 0.40 at its lag) |
+| `manualTargetChangesCentsNotMeasurement`, `successivePlucks…`, `selectStringLocks…` | the fold covered 2 octaves (E2↔E4) | fold exactly one octave |
+| `instrumentTargetSetRestrictsNoteIdentity` oscillated LIVE/HELD | a mistuned string stayed outside the ±50-cent band every frame | a confirmed candidate equal to the current note keeps the numeric reading |
+| `PitchTrackerTest` jitter 1.5 → 0.45 | — | median-of-3 + time-aware one-pole with a snap at 3 cents |
+
+## GREEN
+
+`:shared:jvmTest` **390/390**, `:shared:testAndroidHostTest` **342/342**
+(new DSP/tracker tests included in both), `run-demo` **5/5**, `scripts/verify.sh`
+**7/7 PASS** (offline contract, lint, assembleDebug, instrumented APK compile).
+
+Measured before/after and the pass/fail criteria: `docs/QUALITY_REPORT.md` (pitch-tracking stability section).
+Presentation contract for the UI agent: `docs/PITCH_PIPELINE_CONTRACT.md`.
+
+Correction to the UI-refinement note above ("pitch-tracking DSP tests fail/flake (E2↔E4, A2↔A4)"):
+that was the mid-flight state where the fold covered two octaves. The fold is now
+one octave and guarded by the confirm window; all of the named tests pass, and
+the suite is green as listed.
+
+Remaining: real-device verification (mic/screen reader) and the live-guitar G3 check.
+Synthetic evidence cannot substitute for a recorded real-guitar fixture.

@@ -339,3 +339,124 @@ Synthetic G4 replay holds G4 through the whole sympathetic decay.
 no playing gap is indistinguishable from the bleed and stays G4 until a
 gap. The real-phone capture attempts were inconclusive (near-silent input),
 so the musical confirmation is the installed build, not a recorded fixture.
+
+---
+
+# Pitch tracking stability and presentation (2026-11-16)
+
+User report: "a plucked string is identified, then lost or switched after
+~1-2 s while it is still ringing (G3 especially), and the cents indication is
+jumpy/discontinuous."
+
+## Root causes (measured, not assumed)
+
+Everything below was reproduced offline first: `PitchLabProbe` replays
+deterministic synthetic strings through the *exact* production path
+(chunk → `StreamingAnalyzer` → `Yin` → tracker → `TunerReading`) with a virtual
+clock. Signals model partial-specific decay, inharmonicity
+(f_h = h·f0·√(1+B·h²)), a pick transient, body/mic resonance, white or pink
+floors, mains hum, rumble and sympathetic strings.
+
+1. **Aperiodic sympathetic mixes biased or destroyed the pitch estimate** (the
+   "loses it after 1-2 s" symptom).
+   - A 4:3 G3/D3 mix is periodic only at 49 Hz — below the 55 Hz band edge — so
+     the dip-based estimate was pulled off the played period. Measured on the
+     G3+D3 mix: the dip sat at 186-195 Hz (−10 to −50 cents) and **drifted 20+
+     cents with the beat phase**; the old sub-threshold recovery returned that
+     dip directly (with a ±4% spectral re-centering that is itself phase
+     sensitive), and the state machine's >50-cent guard then dropped the note.
+   - E4 (329.63) + B3 (246.94) at −12 dB share a near-coincidence (E4's 3rd
+     partial 988.9 Hz ≈ B3's 4th 987.8), so no in-band lag was periodic and
+     every guard rejected every dip: **the reading stopped entirely** (93 of 205
+     analysed frames in the usable window had no live reading).
+2. **Inharmonic (stiff) strings read sharp.** A period estimate is a compromise
+   across stretched partials. Measured on E2/A2/G3 with B = 4e-4: **+7 to +11
+   cents**, stable but wrong.
+3. **Window-alignment bias in the spectral refinement.** A rectangular window
+   displaces the DTFT peak when the window does not hold a whole number of
+   periods: measured **−5.2 cents at 82.4 Hz** (7.03 periods in 4096 samples),
+   −1.7 at 110 Hz, −0.04 at 196 Hz. (Found while fixing 1-2 — the first version
+   of the refinement introduced it.)
+4. **Presentation smoothing was both jumpy and laggy.** The display value was a
+   5-frame median over raw frame frequencies (≈105 ms at the 21 ms hop),
+   *cleared on any dropout* (so it re-started and jumped), and emitted as an
+   integer, which quantized the needle to 2% of full scale per step. Measured
+   before: 6.3 cents std-dev on low E in a 20 dB pink room, p95 error 17 cents.
+5. **Not root causes** (hypotheses tested and rejected): decay itself does not
+   lower the detector's confidence (it is the normalized aperiodicity — 0.65-0.86
+   at the usable horizon of a decaying pluck); mains hum at −20 dB and 35 Hz
+   rumble at −18 dB are handled (jitter ≤ 1.1 cents); no fixed 1-2 s timer exists
+   in the pipeline; the ring buffer and virtual clock are correct.
+
+## Fixes
+
+| Layer | Change |
+| --- | --- |
+| `Yin` | harmonic-energy refinement of every candidate (magnitude only → phase-insensitive, centred on the fundamental partial); boundary climb (bounded to ±120 cents) for a pulled dip; spectral band scan with a strict tonal gate instead of "no pitch" when nothing in band is periodic; Goertzel guard evaluation; Hann-windowed spectral evaluation; `PitchReason` on every estimate |
+| `PitchTracker` (new) | evidence floors with hysteresis (0.5 acquire / 0.35 sustain), time-based confirmation (40 ms), harmonic fold (one octave, only while the same string rings), full history release on confirm, log-domain time-aware smoothing (3-frame median + adaptive one-pole), `validity`/`ageMs`/`targetHz` |
+| `TunerStateMachine` | now a thin, behaviour-preserving adapter over `PitchTracker` (same constructor and methods) |
+| `TunerReading` | additive `centsFine`, `validity`, `ageMs`, `targetHz` |
+| `StreamingAnalyzer` | analysis hop is a property of the analyzer (default ¼ window) instead of per caller chunk; snapshot carries the raw estimate and its reason |
+| `PitchTrace` (new) | bounded, opt-in diagnostics (off by default, metrics only, no audio) |
+| `MainScreenUi` | meter consumes `centsFine` (additive `Double` overload; the Int overload is kept) |
+
+## Before / after (same harness, same windows, same seeds)
+
+205 analysed frames per scenario; window = 0 ms → the last ms where the modelled
+SNR is still ≥ 10 dB. `lost` = frames in that window with no live reading of the
+played note (including frames that showed a different note).
+
+| scenario | lost before → after | jitter (cents) | median err | p95 err | max err |
+| --- | --- | --- | --- | --- | --- |
+| pink 20 dB E2 | 0 → 0 | 6.3 → **1.9** | 1.0 → 0.4 | 17.0 → **4.3** | 33.0 → 11.9 |
+| pink 20 dB A2 | 0 → 0 | 4.4 → **1.1** | 1.0 → 0.2 | 12.0 → 2.5 | 19.0 → 4.7 |
+| pink 20 dB D3 | 0 → 0 | 3.3 → **0.7** | 1.0 → 0.1 | 8.0 → 1.9 | 16.0 → 3.0 |
+| pink 20 dB G3 | 0 → 0 | 2.5 → **0.3** | 1.0 → 0.1 | 5.0 → 0.6 | 14.0 → 1.8 |
+| pink 20 dB B3 | 0 → 0 | 2.6 → **0.1** | 0.0 → 0.0 | 9.0 → 0.4 | 10.0 → 0.6 |
+| pink 20 dB E4 | 0 → 0 | 1.6 → **0.0** | 0.0 → 0.0 | 4.0 → 0.1 | 6.0 → 0.4 |
+| G3 + sympathetic D3 −10 dB | **12 → 0** | 3.7 → 0.1 | 3.0 → 0.1 | 12.0 → 0.3 | 16.0 → 0.4 |
+| G3 + sympathetic D3 −14 dB | **15 → 0** | 7.9 → 0.1 | 11.0 → **0.0** | 26.0 → **0.2** | 27.0 → 0.3 |
+| E4 + sympathetic B3 −12 dB | **93 → 0** | 7.0 → 0.0 | 12.0 → **0.0** | 22.0 → **0.0** | 27.0 → 0.0 |
+| E2/A2/G3 inharmonic B=4e-4 | 0 → 0 | — | **+7..+11 → 1.0** | — | 11 → 1.4 |
+
+Dynamic behaviour (pipeline end to end):
+
+| metric | before | after | condition |
+| --- | --- | --- | --- |
+| acquisition (6 strings, median) | 126 ms | 126 ms | window-limited (85 ms window + 40 ms confirm) |
+| live reading ends after silence | 37 ms | **16 ms** | last live frame vs. silence start |
+| reading invalidated after silence | 37 ms | 625 ms | HELD (never live, needle inactive) for the 600 ms stale window, then NONE |
+| STALE state | — | 625 ms | same frame as NONE: holding and staleness end together, so the screen never says "hold the note steady" for a signal that is gone |
+| step response (15 cents) | 81 ms | 81 ms | window-limited: an 85 ms window smears any step |
+| ramp lag (25 cents / 1.8 s) | 1.83 c | 1.91 c | max \|shown − truth\|, contract ≤ 3 |
+| re-acquire new string | 72 ms | **51 ms** | E2 → 450 ms gap → A2 |
+| detector cost (JVM, 4096 frame) | 3.68 ms | 3.17 ms | 17% → 15% of one core at a 21 ms hop |
+| cost vs chunk size | scales with chunk | **fixed hop** | a 512-sample stream used to double the work for the same audio |
+
+## Pass/fail criteria chosen for this work
+
+- acquisition ≤ 250 ms from the pluck (measured 126 ms);
+- **0** frames lost in the usable window (SNR ≥ 10 dB) on all six strings and on
+  the sympathetic mixes;
+- no wrong-note or octave switches;
+- p95 cents error ≤ 4 (measured ≤ 4.3) and jitter ≤ 2 cents on low E in 20 dB pink;
+- ramp lag ≤ 3 cents (jitter must not be bought with stickiness);
+- a live reading ends within one hop of the evidence ending, and the state is
+  invalidated honestly within 800 ms;
+- detector cost ≤ 20% of one core at the 21 ms hop on the JVM (measured 15%;
+  the margin is for the phone, not a guarantee).
+
+## Honest limitations
+
+- **Synthetic only.** These signals model the mechanisms, not a specific guitar,
+  pickup, room or phone microphone. Real-device verification (mic) is still open.
+- The remaining low-E error (p95 4.3 cents, max 11.9) is the physical limit of a
+  4096-sample window at 82 Hz in a 20 dB pink floor; the presentation smoother
+  brings the display to ~2 cents std-dev.
+- A mix in which the *other* string is louder than the played note is still
+  refused rather than guessed (measured d′ 0.45-0.69 at both candidates): the
+  reading goes invalid instead of reporting a note.
+- One harmonic fold (one octave) is supported. A 2-octave fold would collide
+  with E2↔E4, so it is deliberately not done.
+- The 400 ms HELD window is a UX decision (fade, never live); if a UI wants a
+  shorter one it should drive it from `TrackedPitch.ageMs`.

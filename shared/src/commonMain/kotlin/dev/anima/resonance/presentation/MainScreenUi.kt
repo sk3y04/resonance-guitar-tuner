@@ -13,12 +13,23 @@ object MainScreenUi {
 
     const val METER_FULL_SCALE_CENTS: Double = 50.0
 
-    /** Normalized dial position for [cents]: linear, clamped to -1..1. */
-    fun meterPosition(cents: Int): Double =
+    /**
+     * Normalized dial position for [cents]: linear, clamped to -1..1.
+     *
+     * The Double overload is the one the screen uses: feeding the needle
+     * the *integer* cents quantized every position to 2% of full scale, which is
+     * exactly the "moves in visible steps" complaint. The Int overload stays for
+     * callers and tests that only have the rounded value.
+     */
+    fun meterPosition(cents: Int): Double = meterPosition(cents.toDouble())
+
+    fun meterPosition(cents: Double): Double =
         (cents / METER_FULL_SCALE_CENTS).coerceIn(-1.0, 1.0)
 
     /** True when |cents| exceeds the meter's full scale (pointer clamped). */
-    fun isMeterClamped(cents: Int): Boolean = abs(cents) > METER_FULL_SCALE_CENTS
+    fun isMeterClamped(cents: Int): Boolean = isMeterClamped(cents.toDouble())
+
+    fun isMeterClamped(cents: Double): Boolean = abs(cents) > METER_FULL_SCALE_CENTS
 
     fun toUiState(
         snapshot: TunerSnapshot?,
@@ -59,6 +70,9 @@ object MainScreenUi {
         val liveReading = if (hasLivePitch) reading else null
         val note = liveReading?.note
         val cents = if (reliable) liveReading?.cents ?: 0 else 0
+        // The needle/meter consume the continuous value; the numeric
+        // readout keeps the rounded one. Same measurement, no visual steps.
+        val centsFine = if (reliable) liveReading?.centsFine ?: 0.0 else 0.0
 
         val granted = permission == MicPermissionState.GRANTED
         val permissionHint = when (permission) {
@@ -142,8 +156,8 @@ object MainScreenUi {
             permissionCtaText = ctaText,
             permissionCtaOpensSettings = permission == MicPermissionState.DENIED_PERMANENT,
             permissionHint = permissionHint,
-            meterPosition = if (reliable) meterPosition(cents) else 0.0,
-            meterClamped = if (reliable) isMeterClamped(cents) else false,
+            meterPosition = if (reliable) meterPosition(centsFine) else 0.0,
+            meterClamped = if (reliable) isMeterClamped(centsFine) else false,
             meterActive = reliable,
             noteLabel = spelled?.dropLast(1),
             octave = spelled?.last()?.toString(),

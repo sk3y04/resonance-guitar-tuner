@@ -1,6 +1,37 @@
 # STATE — Resonance
 
-- Phase: 18 COMPLETE — coherent physical-instrument refinement + honest signal
+- Phase: 19 COMPLETE — stable pitch tracking + smooth presentation (2026-11-16).
+  DSP/tracking only (the UI is untouched).
+  Root causes (measured with a new offline harness, not assumed):
+  (a) aperiodic sympathetic mixes biased the pitch estimate — a 4:3 G3/D3 mix is
+  periodic only at 49 Hz, below the 55 Hz band edge, so the dip sat 10-50 cents
+  off and drifted 20+ cents with the beat phase; E4+B3 at -12 dB shared a
+  partial coincidence and lost the note entirely (93/205 frames silent);
+  (b) inharmonic (stiff) strings read +7..+11 cents;
+  (c) a rectangular-window DTFT peak is displaced when the window holds a
+  non-integer number of periods (-5.2 cents at 82.4 Hz in 4096 samples);
+  (d) display smoothing was a cleared-on-dropout 5-frame median (≈105 ms lag,
+  still 6.3 cents std on low E) emitted as an integer, which quantized the
+  needle to 2%-of-scale steps.
+  Fixes: `Yin` harmonic-energy refinement (±60 cents, magnitude-only) + boundary
+  climb + a gated spectral band scan instead of "no pitch" + Goertzel guards +
+  Hann-windowed spectral evaluation + `PitchReason`; new `PitchTracker`
+  (evidence floors 0.5/0.35, 40 ms time-based confirmation, one-octave fold
+  released after a gap, log-domain time-aware smoothing, `validity`/`ageMs`/
+  `targetHz`); `TunerStateMachine` is now a pure adapter over it (same API);
+  `StreamingAnalyzer` owns the analysis hop (fixed cadence regardless of chunk
+  size) and exposes the raw estimate; `PitchTrace` bounded opt-in diagnostics;
+  `MainScreenUi` meters `centsFine` (additive overload).
+  Measured (205 frames/scenario, window to the 10 dB SNR horizon): G3+D3 -14 dB
+  lost frames 15 → 0 (median error 11 → 0.0 cents, p95 26 → 0.2); E4+B3 -12 dB
+  93 → 0; low-E jitter @20 dB pink 6.3 → 1.9 cents (p95 17 → 4.3); inharmonic
+  bias +7..+11 → 1.0 cents; ramp lag 1.83 → 1.91 cents (still ≤3); re-acquire
+  72 → 51 ms; live reading ends 16 ms after silence (400 ms HELD fade before
+  NONE); detector cost 3.68 → 3.17 ms/frame with a fixed hop.
+  Gates: jvmTest 390/390, androidHostTest 342/342, demo 5/5, verify.sh 7/7 PASS.
+  Details: docs/TDD_LOG.md (pitch tracking stability), docs/QUALITY_REPORT.md (pitch-tracking stability section), and the UI-facing
+  contract in docs/PITCH_PIPELINE_CONTRACT.md.
+- Prior: milestone COMPLETE — coherent physical-instrument refinement + honest signal
   presentation (2026-11-16). UI-only; no DSP/detection changes.
   (1) Visual hierarchy: flat warm-charcoal faceplate (`InstrumentFaceplate`,
   `InstrumentPalette.faceplate`), wood only at the outer perimeter; restrained
@@ -197,7 +228,14 @@
   docs/QUALITY_REPORT.md; host render evidence in shared/build/render/.
   Headless host renders RESOLVED; real-device verification (mic/
   screen reader) is the only remaining external gate.
-- Last green checkpoint (2026-11-15, vintage overhaul): :shared:jvmTest 333/333,
+- Last green checkpoint (2026-11-16, pitch tracking): :shared:jvmTest 390/390,
+  :shared:testAndroidHostTest 342/342, run-demo 5/5, verify.sh 7/7 PASS.
+  New DSP/tracking tests: YinSpectralTest 11, PitchTrackerTest 16,
+  PitchPipelineAcceptanceTest 10, PitchLab harness + PitchLabProbe
+  (shared/build/pitch-lab/report.md). Before/after numbers and pass criteria in
+  docs/QUALITY_REPORT.md (pitch-tracking stability section). Real-device verification (mic/screen reader) and the
+  live-guitar G3 check remain open; synthetic audio is not real-guitar proof.
+- Prior checkpoint (2026-11-15, vintage overhaul): :shared:jvmTest 333/333,
   :shared:testAndroidHostTest 290/290, run-demo 5/5, verify.sh 7/7 PASS
   (offline contract + lint included). Geometry tests updated to the 90° sweep
   (±45°) + always-visible needle resting at −52¢; MeterAssemblyLayout aspect
