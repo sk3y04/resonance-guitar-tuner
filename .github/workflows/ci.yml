@@ -1,0 +1,69 @@
+# CI: the project's own gate suite (scripts/verify.sh), inspected and used
+# as-is. Device/emulator tests are deliberately NOT run here (hardware gate;
+# see scripts/test-device.sh). No publishing, no secrets.
+#
+# NOTE: action refs below are version tags, not commit SHAs. SHA pinning is
+# pending network approval to verify revisions via the GitHub API; once
+# approved, replace each tag with the reviewed immutable SHA + version comment.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # linux x64 is required, not incidental: the headless Compose UI tests
+    # depend on skiko-awt-runtime-linux-x64 (gradle/libs.versions.toml).
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # Installs cmdline-tools/platform-tools and accepts SDK licenses so AGP
+      # can auto-provision the compileSdk platform/build-tools on first build.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Run the 7-gate verification suite
+        shell: bash
+        run: |
+          export ANDROID_HOME="${ANDROID_SDK_ROOT:-$HOME/android-sdk}"
+          ./scripts/verify.sh 2>&1 | tee verify.log
+          status=${PIPESTATUS[0]}
+          # verify.sh reports missing-prerequisite gates as BLOCKED and still
+          # exits 0. CI must exercise ALL gates, so any BLOCKED line fails here.
+          if grep -q '\[verify\] BLOCKED' verify.log; then
+            echo "::error::A verification gate was BLOCKED — CI requires all 7 gates to run."
+            exit 1
+          fi
+          exit "$status"
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-logs
+          path: |
+            verify.log
+            artifacts/logs/
+            shared/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7

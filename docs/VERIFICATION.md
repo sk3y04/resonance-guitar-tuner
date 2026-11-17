@@ -7,7 +7,7 @@ Legend: PASS / FAIL / BLOCKED (id) / NOT RUN. Updated after each run.
 | Dependency metadata verification | PASS | docs/DEPENDENCIES.md (live fetches 2026-11-06) |
 | Gradle 9.7.0 distribution sha256 | PASS | 84fbba45… match (official .sha256) |
 | Scaffold + wrapper | PASS | git history; wrapper sha256 pinned |
-| :shared:jvmTest host suite (final) | PASS | 278/278 (test-unit-20261115T171901Z.log); ./scripts/test-unit.sh exit 0 |
+| :shared:jvmTest host suite (final) | PASS | 447/447 (2026-11-17 run); ./scripts/test-unit.sh exit 0 |
 | Music domain RED→GREEN | PASS | 47/47; TDD_LOG music-domain sections |
 | DSP (YIN + spectral guard) RED→GREEN | PASS | 74/74; yin.detect median 949µs p95 959µs @48k/2048 |
 | State machine + streaming + capture | PASS | 99/99 |
@@ -21,9 +21,9 @@ Legend: PASS / FAIL / BLOCKED (id) / NOT RUN. Updated after each run.
 | Android debug assembly | PASS | :androidApp:assembleDebug; 13 MB debug APK (2026-11-15) |
 | Android lint | PASS | :androidApp:lintDebug (gate 4/7, 2026-11-15) |
 | Compose screenshots / visual inspection | PASS (host) | headless ImageComposeScene PNGs in shared/build/render/; 320/360 dp, 2x, dark/light inspected; NOT device screenshots |
-| Android host tests (Robolectric) | PASS | :shared:testAndroidHostTest 241/241; verify.sh gate 6/7 |
-| Device/emulator tuning (real mic) | BLOCKED (no device) | phone (ASUS Android 15, wireless adb) + API 36 emulator attached; `RealMicSmokeTest` is invalid on both (never calls `poll()`); manual tuning works |
+| Android host tests (Robolectric) | PASS | :shared:testAndroidHostTest 380/380 (2026-11-17); verify.sh gate 6/7 |
+| Device/emulator tuning (real mic) | NOT RUN (automated suite) | suite compile-checked (verify.sh gate 7); opt-in run: ./scripts/test-device.sh. `RealMicSmokeTest` drives `CaptureOrchestrator` (CAPTURING/PCM/RMS asserts). UI verified on an API 36 emulator + Android 15 phone per docs/STATE.md |
 | Offline-by-contract (merged manifest) | PASS | verify.sh gate 3/7: RECORD_AUDIO + the AGP receiver permission only; no INTERNET/cleartext |
 | GPL/competitor code | PASS (static) | YIN is own implementation (TarsosDSP studied as concept only); no third-party assets |
 
-Test counts (nonzero required for PASS): 278 jvm + 241 android-host discovered/passing (2026-11-15).
+Test counts (nonzero required for PASS): 447 jvm + 380 android-host discovered/passing (2026-11-17).
