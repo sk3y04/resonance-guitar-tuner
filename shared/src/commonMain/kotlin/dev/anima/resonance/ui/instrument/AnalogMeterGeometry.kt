@@ -1,7 +1,9 @@
 package dev.anima.resonance.ui.instrument
 
 import dev.anima.resonance.presentation.MainScreenUi
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 
 /**
  * Pure geometry for the analog tuning meter (no Compose imports).
@@ -31,18 +33,39 @@ object AnalogMeterGeometry {
      * Rest position with no reliable reading — just past the flat-side
      * stop (≈ −52¢), like an unpowered analog meter resting against its pin.
      * Never the center (a centered needle would claim "in tune" while nothing
-     * is being measured). The needle is always drawn and animates to here.
+     * is being measured). The needle idles around here.
      */
     const val REST_ANGLE: Double = -(52.0 / FULL_SCALE_CENTS) * HALF_SWEEP
 
+    /** How far the needle wanders around [REST_ANGLE] while no signal is tracked. */
+    const val IDLE_SWAY_DEGREES: Double = 14.0
+
+    /** One full wander of the idle needle. Slow: the instrument is unpowered, not scanning. */
+    const val IDLE_SWAY_PERIOD_MS: Long = 5600
+
     /**
-     * The needle is drawn ONLY while a reliable pitch is tracked. With no
-     * usable measurement it is hidden (the dial shows the scale + hub, never a
-     * needle parked at a scale value that could read as a live flat/sharp/in-tune
-     * measurement). A brief interruption may hold the last reading faded in the
-     * readout, but the needle itself stays deactivated until pitch returns.
+     * The needle is ALWAYS drawn — a moving-coil meter's suspension is never
+     * still. With no reliable pitch it wanders on [idleSwayAngle] around
+     * [REST_ANGLE] instead of freezing at a scale value; a frozen needle is what
+     * would read as a measurement. "Not measuring" is carried by the movement
+     * itself, by the scale side it stays on, and by the readout's own no-signal
+     * copy — never by hiding the needle.
      */
-    fun needleShown(active: Boolean): Boolean = active
+    fun needleShown(active: Boolean): Boolean = true
+
+    /**
+     * Needle angle for the idle wander, from a looping [phase] in 0..1.
+     *
+     * Two integer harmonics (1 and 3) of one period: continuous across the loop
+     * point, with more than two turnarounds per loop so the motion never reads
+     * as a metronome. The sum is bounded by ±1, keeping the needle on the flat
+     * side of the scale (always well left of 0¢).
+     */
+    fun idleSwayAngle(phase: Double): Double {
+        val turn = phase * 2.0 * PI
+        val wander = 0.65 * sin(turn) + 0.35 * sin(3.0 * turn + 0.9)
+        return REST_ANGLE + IDLE_SWAY_DEGREES * wander
+    }
 
     /** Needle angle (degrees from vertical) for a normalized position. */
     fun needleAngle(position: Double): Double =

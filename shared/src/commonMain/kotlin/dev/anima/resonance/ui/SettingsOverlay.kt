@@ -81,6 +81,7 @@ import dev.anima.resonance.ui.instrument.PrimaryButton
 import dev.anima.resonance.ui.instrument.RecessedPanel
 import dev.anima.resonance.ui.instrument.SegmentTrack
 import dev.anima.resonance.ui.instrument.SpellingKeys
+import dev.anima.resonance.ui.instrument.animationLayer
 import dev.anima.resonance.ui.instrument.TextAction
 import dev.anima.resonance.ui.instrument.TonalButton
 import kotlinx.coroutines.CancellationException
@@ -191,6 +192,10 @@ fun TuningsOverlay(
             Box(
                 Modifier
                     .matchParentSize()
+                    // The scrim's alpha is driven by the sheet's own
+                    // animation value — inside a layer it re-records a black
+                    // rect per frame instead of the whole window.
+                    .animationLayer()
                     .drawBehind {
                         val alpha = 0.55f * (1f - slide.value) * (1f - backProgress)
                         drawRect(Color.Black.copy(alpha = alpha))
@@ -538,6 +543,9 @@ private fun TuningRow(
         },
         modifier = Modifier
             .fillMaxWidth()
+            // The selected wash settles on a tween; Surface paints that
+            // fill before its clip, so it needs a layer to stay local.
+            .animationLayer()
             .testTag("resonance.sheet.row.${row.id}")
             .semantics {
                 contentDescription = "Tuning ${row.name}" +

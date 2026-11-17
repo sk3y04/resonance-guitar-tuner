@@ -1820,3 +1820,47 @@ Tuning/Calibration/Manage destinations.
   emulator (plain Back + handler wiring verified); no recomposition-count
   probe (slicing is structural); real phone/mic/screen reader remains the real-device gate.
   Emulator display/settings restored to native after the battery.
+
+## SMOOTHNESS — layered animation + idle needle wander (COMPLETE)
+- Symptoms (from the phone): every animation — button press, mode switch,
+  settings open/close, needle motion — looked like a low-frame-rate slideshow.
+- Instrumentation: `dumpsys gfxinfo <pkg> framestats` (per-frame UI / RenderThread
+  / GPU split) plus `atrace view gfx` with `trace_marker` phase markers written
+  from `adb shell`, so each interaction's frames could be isolated. Baseline:
+  `Record View#draw()` 4.04 ms/frame with the needle moving, 3.18 ms with only a
+  7 dp dot pulsing, 62% of frames over the 8.35 ms budget at 120 Hz; a fixed
+  tap/settings script measured 6.7 ms median UI work and 42% of frames over
+  budget (legacy jank 54-58%).
+- Cause: Compose invalidates the NEAREST render layer above a drawing node. No
+  animated node had one, so every animated frame re-recorded the entire window —
+  including the dial's face gradient, 11 numerals and 60+ ticks.
+- Tests written first: `MeterRenderTest` pins the dial's rendered result (needle
+  angle ±27° at ±0.6 position, ivory face, brass escutcheon, ink scale,
+  byte-identical repeat renders) so the two-layer split could not silently blank
+  or move anything; it also pins "the needle is on the dial without signal".
+  `AnalogMeterGeometryTest` gained the idle-wander contract (amplitude bound,
+  continuity, seamless loop point, more turnarounds than a sine, never 0¢ at
+  any phase). `SignalPresentationTest`'s hidden-needle assertion was reversed
+  deliberately with its reason in the test.
+- Mutation check (the new tests have teeth): `IDLE_SWAY_DEGREES` 14.0 → 3.0
+  made `theIdleNeedleWandersOnTheFlatSideWithoutEverClaimingAReading` FAIL;
+  restored to 14.0.
+- Implementation: static dial layer + needle layer, each with its own render
+  layer; shared `animationLayer()` on the remaining animated paints (key caps,
+  jewel lamps, readout, pulsing dot, sheet scrim, row wash); dial geometry,
+  brushes, paths and text layouts built once per size/palette. The idle wander
+  is driven by `withInfiniteAnimationFrameNanos` (NOT `withFrameNanos`: a plain
+  frame loop makes the headless render harness wait for it forever — that hung
+  the first full test run, and the fix is the infinite-animation frame source
+  Compose's own transitions use).
+- Result on device (same script, two runs each): needle frame draw 4.04 → 0.58 ms
+  (7x); interaction UI median 6.7 → 1.6 ms; frames over budget 42% → 10%; legacy
+  jank 55% → 20%. Idle with the wander running: 1.7 ms UI/frame, 107 fps, 9% over
+  budget. Device check of the wander: two screencaps 2 s apart differ by 8675
+  pixels inside the dial band, all left of center (x 15-506) — the needle moved
+  on the flat side, as specified.
+- Remaining, measured and not fixed: opening the settings sheet still costs one
+  long frame (baseline trace: 74 ms = 48 ms measure + 10 ms layout + 7.6 ms draw,
+  because the sheet's first composition runs inside the overlay's
+  `BoxWithConstraints` measure pass). The layering removed the draw/traversal
+  share; the composition of ~40 freshly laid-out texts remains a one-off hitch.

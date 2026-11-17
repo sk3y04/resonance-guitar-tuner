@@ -1,6 +1,7 @@
 package dev.anima.resonance.ui.instrument
 
 import dev.anima.resonance.presentation.MainScreenUi
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -120,8 +121,74 @@ class AnalogMeterGeometryTest {
 
     @Test
     fun needleIsLiveOnlyWithAReliablePitch() {
-        // No-signal hides the needle (never a fake reading at a scale stop).
-        assertFalse(AnalogMeterGeometry.needleShown(active = false))
+        // Reversed deliberately: the needle is NEVER hidden. A physical
+        // moving-coil meter's needle is always there; with no signal it wanders
+        // (idleSwayAngle) rather than freezing at a scale value, because a
+        // frozen needle is what would read as a live measurement.
+        assertTrue(AnalogMeterGeometry.needleShown(active = false))
         assertTrue(AnalogMeterGeometry.needleShown(active = true))
+    }
+
+    @Test
+    fun theIdleNeedleWandersOnTheFlatSideWithoutEverClaimingAReading() {
+        var min = Double.MAX_VALUE
+        var max = -Double.MAX_VALUE
+        val steps = 4000
+        for (i in 0..steps) {
+            val angle = AnalogMeterGeometry.idleSwayAngle(i.toDouble() / steps)
+            min = minOf(min, angle)
+            max = maxOf(max, angle)
+            assertTrue(
+                angle <= AnalogMeterGeometry.REST_ANGLE + AnalogMeterGeometry.IDLE_SWAY_DEGREES + 1e-9,
+                "idle sway must stay within its amplitude (got $angle)",
+            )
+            assertTrue(
+                angle >= AnalogMeterGeometry.REST_ANGLE - AnalogMeterGeometry.IDLE_SWAY_DEGREES - 1e-9,
+                "idle sway must stay within its amplitude (got $angle)",
+            )
+            assertTrue(angle < -15.0, "the idle needle never reads as 0¢/in-tune (got $angle)")
+        }
+        assertTrue(
+            max - min > 12.0,
+            "the idle wander must be visible, not a twitch (travel ${max - min}°)",
+        )
+    }
+
+    @Test
+    fun theIdleSwayLoopsSeamlesslyAndNeverJumps() {
+        val steps = 2000
+        var previous = AnalogMeterGeometry.idleSwayAngle(0.0)
+        for (i in 1..steps) {
+            val angle = AnalogMeterGeometry.idleSwayAngle(i.toDouble() / steps)
+            val jump = abs(angle - previous)
+            assertTrue(jump < 1.0, "idle sway must be continuous (Δ${jump}° at step $i)")
+            previous = angle
+        }
+        assertEquals(
+            AnalogMeterGeometry.idleSwayAngle(0.0),
+            AnalogMeterGeometry.idleSwayAngle(1.0),
+            1e-9,
+            "phase 1.0 must equal phase 0.0 — the loop point is seamless",
+        )
+    }
+
+    @Test
+    fun theIdleSwayIsNotAMetronome() {
+        // A single sine turns around exactly twice per loop and reads as a
+        // pulsing metronome. The real wander is two harmonics: more turnarounds.
+        val steps = 720
+        var turnarounds = 0
+        var previousSlope = 0
+        var previous = AnalogMeterGeometry.idleSwayAngle(0.0)
+        for (i in 1..steps) {
+            val angle = AnalogMeterGeometry.idleSwayAngle(i.toDouble() / steps)
+            val slope = (angle - previous).compareTo(0.0)
+            if (slope != 0) {
+                if (previousSlope != 0 && slope != previousSlope) turnarounds++
+                previousSlope = slope
+            }
+            previous = angle
+        }
+        assertTrue(turnarounds >= 4, "idle sway needs more than a sine's two turnarounds (got $turnarounds)")
     }
 }

@@ -102,6 +102,9 @@ fun NoteReadout(
         modifier = modifier
             .fillMaxWidth()
             .then(if (fillHeight) Modifier.fillMaxSize() else Modifier)
+            // The readout repaints per pitch tick (text + ambient wash +
+            // settled colours). Its own layer keeps that off the window root.
+            .animationLayer()
             .drawBehind {
                 // Warm radial backlight (illuminated display depth).
                 drawRect(
@@ -301,6 +304,13 @@ private fun GuidanceLine(state: MainScreenUiState, alpha: Float) {
             modifier = Modifier
                 .size(7.dp)
                 .clearAndSetSemantics {}
+                // The pulse is an INFINITE per-frame animation. Without its own
+                // render layer the alpha change invalidates the nearest layer —
+                // the window root — so the whole screen is re-recorded 120x/s
+                // (measured: 3.2 ms/frame at 1080x2400, gone once layered). The
+                // enclosing readout layer would cover it, but the dot keeps its
+                // own so the pulse never re-records the readout's text either.
+                .animationLayer()
                 .drawBehind {
                     drawCircle(p.lampAmber.copy(alpha = pulse * alpha), radius = size.minDimension / 2f)
                 },

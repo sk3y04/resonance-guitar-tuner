@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 /**
  * The explicit signal presentation phase + the bounded, honest hold.
  * Pins: waiting vs tracking vs lost vs mic states; one coherent header status;
- * the needle is live ONLY with a reliable pitch; a brief interruption holds the
+ * the needle is always drawn (idle wander without a pitch); a brief interruption holds the
  * last reading faded (never live, never "in tune") and then invalidates it.
  */
 class SignalPresentationTest {
@@ -100,9 +100,12 @@ class SignalPresentationTest {
 
     // ── Needle visibility ─────────────────────────────────────────────────
     @Test
-    fun needleIsLiveOnlyWithReliablePitch() {
+    fun theNeedleIsAlwaysOnTheDial() {
+        // The needle is never hidden. Without a reliable pitch it wanders on the
+        // idle sway around the flat-side rest — motion, not a frozen scale value,
+        // is what keeps it from reading as a measurement.
         assertTrue(dev.anima.resonance.ui.instrument.AnalogMeterGeometry.needleShown(active = true))
-        assertFalse(dev.anima.resonance.ui.instrument.AnalogMeterGeometry.needleShown(active = false))
+        assertTrue(dev.anima.resonance.ui.instrument.AnalogMeterGeometry.needleShown(active = false))
     }
 
     // ── Bounded hold ──────────────────────────────────────────────────────

@@ -1,5 +1,40 @@
 # STATE — Resonance
 
+- SMOOTHNESS — frame-cost pass + idle needle wander (2026-11-17). UI only:
+  palette, materials, layout, copy, DSP, tracking and thresholds untouched.
+  (1) ROOT CAUSE, measured on the phone (ASUS AI2302, 1080x2400, 120 Hz):
+  every animated frame re-recorded the ENTIRE window. Compose invalidates the
+  nearest render layer; the animated nodes had none, so the invalidation reached
+  the window root. `atrace`: `Record View#draw()` 4.04 ms/frame while the needle
+  moved and 3.18 ms while a 7dp dot pulsed; 62% of needle frames missed the
+  8.35 ms budget, and a fixed tap/settings script showed 6.7 ms median UI time
+  with 42% of frames over budget.
+  (2) FIX — LAYERS, not timings (MotionTokens durations unchanged): the dial
+  paints in TWO render layers (static glass/frame/scale/numerals recorded once
+  per size; live zone arc + needle + escutcheon), and every other animated paint
+  gets its own layer through `animationLayer()` — instrument key caps, jewel
+  lamps, the readout, its pulsing dot, the settings scrim and the tuning-row
+  wash. Dial geometry, brushes, paths and text layouts are built once per
+  size/palette instead of per record.
+  Result (same script, two runs each): needle frame draw 4.04 → 0.58 ms (7x);
+  interaction UI median 6.7 → 1.6 ms; frames over budget 42% → 10%; legacy jank
+  55% → 20%. Idle with the sway running: 1.7 ms UI/frame, 107 fps, 9% over
+  budget.
+  (3) IDLE NEEDLE: with no signal the needle is no longer hidden — it wanders
+  slowly around the flat-side rest (two harmonics of one 5.6 s loop, ±14°,
+  seamless at the loop point, always left of −15°), written one frame at a time
+  into the needle layer so it costs no recomposition, and it hands off to the
+  same critically-damped spring when a reading starts (no teleport). Reduced
+  motion parks it at rest. This deliberately reverses the earlier hidden-needle
+  contract: motion plus the flat-side position plus the readout's own no-signal
+  copy keep it from reading as a measurement — a FROZEN needle is the thing that
+  would.
+  Tests: AnalogMeterGeometryTest (amplitude bound, continuity, seamless loop,
+  more turnarounds than a sine, never 0¢), MeterRenderTest (needle present
+  without signal; needle angle ±27° at ±0.6; ivory face; brass escutcheon;
+  byte-identical repeat renders), SignalPresentationTest (needle always shown).
+  Gate counts and the device installation check: see docs/TDD_LOG.md (SMOOTHNESS).
+
 - POLISH — production interaction pass + matte faceplate (2026-11-17).
   Approved design preserved (palette, meter/needle, composition, settings IA,
   straight seam); no DSP/tracking/threshold change. UI + Android shell only.

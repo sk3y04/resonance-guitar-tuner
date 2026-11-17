@@ -139,7 +139,10 @@ fun InstrumentKey(
     )
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        // The cap tone animates on press/release; Surface paints its
+        // background OUTSIDE its clip, so without a layer of our own every
+        // frame of that 100 ms dip re-records the entire window.
+        modifier = modifier.animationLayer(),
         enabled = enabled,
         shape = shape,
         color = capColor,
@@ -209,6 +212,9 @@ fun JewelLamp(
     androidx.compose.foundation.Canvas(
         modifier = modifier
             .size(size)
+            // The jewel colour animates between phases — keep that redraw
+            // inside its own layer instead of re-recording the window.
+            .animationLayer()
             .clearAndSetSemantics {},
     ) {
         val c = center

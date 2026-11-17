@@ -39,6 +39,23 @@ import dev.anima.resonance.ui.instrument.FaceplateGrain as Grain
  */
 
 /**
+ * Confines a node's paint to its own render layer.
+ *
+ * Compose invalidates the NEAREST render layer above a drawing node. Material's
+ * `Surface` draws its background BEFORE its clip (shadow → border → background
+ * → clip), so an animated fill colour there invalidates the window root and the
+ * whole screen is re-recorded every frame of the animation — measured at 3.2 ms
+ * per frame at 1080x2400, plus the meter's dial on top of it. Anything that
+ * paints an ANIMATED value (press dip, selection wash, lamp colour, pulsing dot,
+ * scrim alpha) belongs inside a layer of its own.
+ *
+ * Note: `Modifier.clip(shape)` already creates one, so a full-bleed row built as
+ * `.clip(shape).background(animated)` is covered; an M3 `Surface(color=…)` is
+ * not.
+ */
+fun Modifier.animationLayer(): Modifier = this.graphicsLayer()
+
+/**
  * The animated press-state fill for rows and keys that draw their own state
  * layer. Transparent at rest; [pressedColor] while the finger is down. The
  * tween retargets on every press/release — repeated taps never queue, and a
