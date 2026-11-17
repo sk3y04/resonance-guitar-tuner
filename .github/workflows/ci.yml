@@ -37,10 +37,25 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      # Installs cmdline-tools/platform-tools and accepts SDK licenses so AGP
-      # can auto-provision the compileSdk platform/build-tools on first build.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The runner image already ships the Android SDK (ANDROID_HOME /
+      # ANDROID_SDK_ROOT). android-actions/setup-android@v3 is deliberately NOT
+      # used: it shells out to `sdkmanager tools`, which fails against the
+      # current SDK repository ("Failed to find package 'tools'"), failing the
+      # job before the build starts. Accept licences and pre-install the compile
+      # SDK/build-tools if the image lacks them; AGP provisions the rest.
+      - name: Android SDK components
+        shell: bash
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          sdkmanager="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          if [ -n "$sdkmanager" ]; then
+            yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
+          fi
+          echo "platforms: $(ls "$SDK/platforms" 2>/dev/null | tr '\n' ' ')"
+          echo "build-tools: $(ls "$SDK/build-tools" 2>/dev/null | tr '\n' ' ')"
 
       - name: Run the 7-gate verification suite
         shell: bash
