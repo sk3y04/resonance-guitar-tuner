@@ -4,7 +4,7 @@
 set -u
 cd "$(dirname "$0")/.."
 LOG_DIR="artifacts/logs"
-mkdir -p "$LOG_DIR" "$artifacts"
+mkdir -p "$LOG_DIR" "artifacts"
 
 if ! ./gradlew -q projects --console=plain 2>/dev/null | grep -q ':androidApp'; then
   echo "[build-debug] BLOCKED: :androidApp not configured (no Android SDK platform)"
