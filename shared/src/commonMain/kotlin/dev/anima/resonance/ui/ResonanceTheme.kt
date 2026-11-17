@@ -89,9 +89,22 @@ fun ResonanceTheme(
     // The wooden instrument materials are constant across system
     // light/dark (a physical instrument keeps its finish); the Material
     // scheme still adapts for dialogs, text fields and legacy surfaces.
+    // The platform's reduced-motion preference is read once here and
+    // carried by LocalReducedMotion; every motion token honours it.
     androidx.compose.runtime.CompositionLocalProvider(
         dev.anima.resonance.ui.instrument.LocalInstrumentPalette provides
             dev.anima.resonance.ui.instrument.InstrumentPalette,
+        dev.anima.resonance.ui.instrument.LocalReducedMotion provides
+            dev.anima.resonance.ui.instrument.systemReducedMotion(),
+        // One warm state layer for every standard indication (text
+        // buttons, switch rows, dialog actions). The default Material ripple
+        // would derive its colour from the petrol fallback scheme and flash
+        // teal on the brown instrument; parchment buttons override this with
+        // their dark ink at the call site.
+        androidx.compose.foundation.LocalIndication provides
+            androidx.compose.material3.ripple(
+                color = dev.anima.resonance.ui.instrument.InstrumentPalette.textPrimary,
+            ),
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) resonanceDarkScheme() else resonanceLightScheme(),

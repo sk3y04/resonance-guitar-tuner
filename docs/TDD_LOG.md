@@ -1554,3 +1554,269 @@ the suite is green as listed.
 
 Remaining: real-device verification (mic/screen reader) and the live-guitar G3 check.
 Synthetic evidence cannot substitute for a recorded real-guitar fixture.
+
+# Warm wooden control deck + section-focused configuration (2026-11-16)
+
+UI-only slice; the pitch-tracking DSP code was not touched (verified with
+`git status`/`git diff`: only `ui/**`, two small `presentation/` helpers and tests).
+
+## Slices
+
+| Slice | Tests written first | RED evidence | GREEN |
+| --- | --- | --- | --- |
+| Selection mapping | `StringSelectionUiTest` (7) | `:shared:compileTestKotlinJvm` → exit 1, `Unresolved reference 'StringSelectionUi'` | mapping implemented; 7/7 |
+| Overlay focus | `SheetSectionTest` (5) | compile RED, `Unresolved reference 'SheetSection'/'SheetFocus'` | 5/5 |
+| Deck geometry | `ControlDeckLayoutTest` (14) | compile RED (`heightDp`, `railRows`, `cellWidthDp` absent); first GREEN attempt failed with OVERLOAD_RESOLUTION_AMBIGUITY between `cellWidthDp(Float,Int)` twice → renamed the string-count variant `stringCellWidthDp` | 14/14 |
+| Composables | new `TunerScreenUiTest` contracts (toggle state, gear/tuning entries, real + long preset names, configured A4, chromatic summary, mode stability, 48dp floor, compact phone) + 2 palette-contrast tests + 4 render cases | real failures, see below | all green |
+| Overlay focus UI | `overlayOpensScrolledTo*SectionOnAShortScreen` (2) | 5 overlay tests failed | green after fixes |
+
+## Failure → cause → fix (composable slice)
+
+| RED failure | Cause | Fix |
+| --- | --- | --- |
+| 5 overlay tests: favourite/step/edit clicks invoked the wrong row | the new `SectionAnchor` used `Box`, which *stacks* the section's children → sections collapsed onto each other | anchor container is a `Column` |
+| `overlay*` chromatic tests scrolled the calibration section away | default `initialSection = TUNINGS` auto-focused the second group on open | `initialSection: SheetSection? = null` (open at top); `SheetFocus.isDefaultTop` skips the scroll when the requested section already renders first |
+| `overlayCoarseStep…` callbacks empty | same default-focus bug (the calibration controls were scrolled out from under the click) | same fix |
+| `theQuietCalibrationLine…` node missing | test state defaulted to CHROMATIC (no instrument-only line) | fixture set to INSTRUMENT — the assertion was correct |
+| `turningAutomaticOnWhileAlreadyAutomaticIsANoOp` | fixture was self-contradictory (`currentlyAuto = true` + expecting a no-op) | fixture corrected to `currentlyAuto = false, lockedIndex = null`; the contract (documented in `StringSelectionUi`) was unchanged |
+
+## Measured geometry (semantics bounds + pixel analysis, not eyeballed)
+
+- 360x800dp instrument: dial 75..315, readout to ~419, mode 453..501, tuning 507..555,
+  gear 48x48, auto 561..609, string cells 619..667 (48dp tall x 50-51dp wide),
+  calibration row 675..723; deck 284dp; bezel 45dp top / 45dp bottom.
+- Mode switch: dial 48..348 and note/cents bounds are IDENTICAL in both modes
+  (1024x768dp rule viewport), deck top identical (445dp) in the 360x800 render.
+- 360x640dp: compact deck (230dp), no `resonance.scroll`, all six strings + readout
+  visible; the quiet calibration row yields (reference still reachable via the gear).
+- Surround: 100% of dark pixels have r-b >= 10 (warm); light/dark renders are
+  byte-identical (theme-constant physical object).
+
+## GREEN
+
+`:shared:jvmTest` **429/429**, `:shared:testAndroidHostTest` **368/368**,
+`run-demo` **5/5**, `scripts/verify.sh` **7/7 PASS** (offline contract, lint,
+assembleDebug, instrumented APK compile). Renders: `shared/build/render/*.png`
+(dark/light, instrument/chromatic, in-tune, clamped, no-signal, locked string,
+long custom preset, A4 442, small phone, large text, overlay states).
+
+Remaining: real-device/emulator visual + screen-reader pass; the
+`RealMicSmokeTest` device-suite defect is unchanged and out of scope here.
+
+# Lower control deck + settings information architecture (2026-11-16)
+
+UI/presentation-only slice. DSP, capture, pitch estimation, confidence and the
+temporal tracker were not modified (verified with `git status`).
+
+## Slices (RED first)
+
+| Slice | Tests written first | RED evidence | GREEN |
+| --- | --- | --- | --- |
+| Destinations | `SheetSectionTest` rewritten (6) | `Unresolved reference 'SheetSection.TUNING'` (enum still TUNINGS/SETTINGS) | 6/6 |
+| Readout copy | `ReadoutCopyTest` (6) | `Unresolved reference 'ReadoutCopy'` | 6/6 |
+| Note sequence | `NoteSequenceTest` (5) | `Unresolved reference 'NoteSequence'` | 5/5 |
+| Deck/settings UI | extended `TunerScreenUiTest`, `MainScreenUiTest`, 4 new render cases | 4 real UI failures + 2 integration failures, see below | all green |
+
+## Failure → cause → fix
+
+| Failure | Cause | Fix |
+| --- | --- | --- |
+| `2 nodes satisfy resonance.openSheet` | chromatic still rendered the instrument tuning row AND the new settings row | chromatic renders the settings entry INSTEAD of the tuning row |
+| string target height 44dp | `SegmentTrack` keys had 2dp vertical padding, shrinking a 48dp key to 44dp | horizontal-only inset; keys keep the full 48dp |
+| `tuningsKeyOpensTheOverlayViaCallback` | chromatic entry called `onOpenSettings` while the test drives `onOpenSheet` | the deck's primary entry always calls `onOpenSheet`; MainScreen routes it by mode |
+| `mainScreenDoesNotClaimListeningBeforeCaptureStarts` | `ReadoutCopy.guidance` replaced the explanatory hint with a terse label | keep the state hint ("Microphone is off.") as the primary copy |
+| `editorCreateFlowPersistsCustomPreset` | "New tuning" moved into the Manage destination | test opens the Manage destination first (contract change) |
+| calibration overlay not scrolled in the render | `LaunchedEffect` read section offsets before first layout | bounded `withFrameNanos` wait + render harness renders 3 frames |
+
+## Deliberate contract changes (documented)
+
+- `SignalPresentation.micStatusText(HOLDING)`: "Listening" → "Reading held".
+  This was the screenshot's contradiction: a retained E4/439.1 Hz/+497¢/"Tune down"
+  reading displayed while the header claimed to be merely listening.
+  `SignalHold` is unchanged (400 ms, faded, needle inactive); only the wording, so
+  the header now agrees with the retained values.
+- Chromatic mode no longer exposes a separate gear (`resonance.openSettings`); it
+  has ONE settings entry. Instrument mode keeps name + gear (distinct destinations).
+- `resonance.sheet.add/import/export` live in the Manage destination instead of a
+  permanent footer (tests open that destination).
+
+## Measured evidence
+
+- Semantics bounds: mode keys 48dp tall/half-width, string cells 48dp, gear 48dp,
+  auto row 48dp; instrument and chromatic keep identical dial bounds
+  (48..348dp at the 1024x768 rule viewport) — asserted in
+  `switchingModesDoesNotMoveOrResizeTheMeterAndReadout`.
+- Real device (ASUS AI2302, 393x873dp): mode active cap luminance 67 vs idle 31 in
+  the same row (pixel-measured) — the selected key is a raised lighter cap, not an
+  underline; switch knob 300.7..314.7dp when Off vs 318.7..332.7dp when On.
+- Device UI text after install: "No signal / Signal lost — play again." (header and
+  readout agree), "Chromatic · Instrument", "Standard", "Automatic string
+  selection On", "E2 A2 D3 G3 B3 E4", "Calibration A4 440 Hz".
+
+## GREEN
+
+`:shared:jvmTest` **441/441**, `:shared:testAndroidHostTest` **380/380**,
+`run-demo` **5/5**, `scripts/verify.sh` **7/7 PASS**. Renders in
+`shared/build/render/` include instrument auto/locked/long-preset/442/held,
+chromatic, clamped, no-signal, small phone, large text, and the overlay on its
+Tuning/Calibration/Manage destinations.
+
+## Petrol control system + destination-based settings (COMPLETE)
+- Tests written/updated first: `ControlDeckLayoutTest` (block height = its rows,
+  48dp floors, one-row six targets, narrow fallback to two rows, compact drops
+  ONLY the reference row), `TunerScreenUiTest` (separate tuning vs configuration
+  entries; chromatic entry opens Calibration; destination exclusivity: tuning rows
+  are absent from Calibration and management actions are absent from Tuning;
+  mode selector and meter bounds identical across modes; touch floors),
+  `MainScreenUiTest` (management flow reached through the Manage destination).
+- RED evidence: `:shared:jvmTest` failed with
+  `No node found that matches TestTag = 'resonance.overlay.scroll' ... concert.value`
+  (the old overlay was one long page: the calibration controls only existed below
+  the tuning list) and with
+  `Expected exactly '1' node but could not find any node that satisfies:
+  (TestTag = 'resonance.preset')` after the tuning row became a real button
+  (tag lives in the merged child node → tests now use `useUnmergedTree = true`).
+- REFACTOR: `TuningsOverlay.kt` → `SettingsOverlay.kt` (mutually exclusive
+  destinations, one viewport each, 92% stable sheet); `ControlDeck.kt`,
+  `InstrumentStringSelector.kt`, `CalibrationControls.kt` deleted in favour of
+  `Controls.kt` (primary/tonal/text/stepper/switch), `ControlSurface.kt`
+  (`InstrumentBody` + row components), `StringTargets.kt`, `CalibrationPanel.kt`.
+- Contract changes (intentional, documented):
+  (a) the instrument screen has NO gear; the tuning row opens Tuning
+  (`resonance.openSheet`) and the reference row opens Calibration
+  (`resonance.openReference`). In Chromatic mode the single configuration row
+  (`resonance.openSheet`) opens Calibration, because that is the only destination
+  that applies there.
+  (b) `resonance.preset` / `resonance.concert` / `resonance.spelling` are read-only
+  texts inside those rows, so tests read them from the unmerged tree.
+  (c) `ControlDeckLayout` no longer reserves a chromatic-sized panel: the block is
+  as tall as its rows, so Chromatic is shorter instead of pretending to be full.
+- Measured evidence (360x800dp, density 1, bounds in root):
+  status 26..42, dial 54..277, note 287..360, mode 407..455, tuning 467..523,
+  auto 535..583, strings 599..647 (all six in ONE row, cells 48dp), reference
+  659..707 — one gutter (left=24dp) for every row, 27dp bottom margin, no chin.
+  Overlay panel: identical 732dp height for Tuning/Calibration/Manage renders.
+- GREEN: `:shared:jvmTest` **437/437**, `:shared:testAndroidHostTest`
+  **375/375**, `./scripts/verify.sh` **7/7 PASS** (host unit, demo 5/5, offline
+  contract, lint, assembleDebug, Android host tests, instrumented APK compile;
+  device tests NOT RUN). Renders regenerated in `shared/build/render/`.
+
+## Warm palette restored + full-bleed instrument (COMPLETE)
+- Cause: the petrol/mint direction contradicted the user's intent. Correction:
+  keep the control-deck STRUCTURE (one deck, destination-based settings, 48dp targets,
+  one-row string targets) but restore the vintage warm palette and delete the
+  wooden backdrop so the elements fill the window.
+- Deleted with their subject: `WoodGrainTest` (7 tests) — `WoodGrain`/`WoodenEnclosure`
+  are no longer drawn, so keeping tests for dead geometry would be theatre.
+  Test totals therefore read 430/368 instead of 437/375.
+- RED evidence this pass: `TunerScreenUiTest` hint tests
+  (`clippingStateStillShowsDial`, `listeningStateShowsHintAndDialNotNote`,
+  `readingSurfaceNeverShowsAZeroHzOrCenteredZeroForWeakSignal`) failed with
+  "The component with TestTag = 'resonance.hint' is not displayed" once the meter
+  went full-bleed: on a 1024x768 host window the arc consumed the whole slot and
+  the readout collapsed to 0 height. Fixed by width-limiting the band from the
+  readout's height need rather than from the window width.
+- Contrast: `InstrumentPaletteContrastTest` 6/6 against the new hexes after
+  darkening `inkSoft` (6E6150 -> 5F5343) for dial labels on ivory, and switching the
+  11sp action word from brass to lampAmber for legibility on the readout.
+- GREEN: `:shared:jvmTest` **430/430**, `:shared:testAndroidHostTest` **368/368**,
+  `:shared:jvmTest --tests *InstrumentPaletteContrastTest* --tests *TunerScreenUiTest*`
+  green after the token tweak. Renders regenerated in `shared/build/render/`;
+  the main-screen render was visually reviewed (warm brown/beige/ivory/brass,
+  edge-to-edge, one deck, one-row strings).
+
+## Polish: square seam, settings header, button ink (COMPLETE)
+- RED (new regression test first): `theSettingsHeaderKeepsItsTitleOnOneLineAndDoneContentSized`
+  asserts the sheet title is < 40dp tall (one line), keeps > 60dp of width, and that
+  "Done" is narrower than 45% of the sheet. It failed against the shipped build
+  (`Settings` collapsed to a one-letter column while Done spanned the sheet).
+- Root causes, both in the shared control layer, not in the overlay:
+  (a) `PrimaryButton`/`TonalButton` wrapped content in `Box(Modifier.fillMaxWidth())`,
+  so any Row gave the button the whole remaining width and starved weighted siblings.
+  (b) button labels used `InstrumentType.label`, whose `color = textPrimary` overrode
+  the Surface's `contentColor`, producing cream text on the parchment fill.
+- Fixes: `wrapContentSize()` in both wrappers; explicit label colours; header title
+  `weight(1f)` + `maxLines = 1` + `Ellipsis`; `ControlDeck` square (no `clip`, no lip
+  line) so the deck meets the readout with one continuous edge.
+- Verified on device (ASUS AI2302, 393x873dp): `Settings` bounds [66..783]x[211..282]
+  (one line), `Done` [873..968]x[222..270] (content-sized), tabs at x=154/441/790,
+  `New tuning` label centred on its parchment fill, `Import`/`Export` both 48dp tall
+  at y=717..765. Seam scan: at the first deck row the deck colour (43,31,24) is present
+  at x=0, x=6, x=540 and x=1079 — no rounded cut-out, no background gap.
+- GREEN: `:shared:jvmTest` **431/431**, `:shared:testAndroidHostTest` **368/368**,
+  `./scripts/verify.sh` **7/7 PASS** (host unit, demo 5/5, offline contract, lint,
+  assembleDebug, Android host tests, instrumented APK compile; device tests NOT RUN
+
+## Production interaction polish + matte faceplate (COMPLETE)
+- Scope: interaction/motion/faceplate/system-integration pass on the APPROVED
+  design. No DSP, detection thresholds, tolerance, note-selection rules, or
+  signal-loss behavior touched. Needle spring (damping 1.0 / stiffness 280)
+  preserved as measurement smoothing.
+- RED (slice A, tests first): `MotionTokensTest` (7), `FaceplateGrainTest` (5),
+  `InstrumentPaletteContrastTest.theFaceplateGradientKeepsEveryInformationPairLegible`,
+  `TunerScreenUiTest.deckControlsShareOneContentAlignmentLine`,
+  `FaceplateRenderTest` (2). `:shared:compileTestKotlinJvm` failed with
+  unresolved `MotionTokens`/`FaceplateGrain`/`deckTop`/`deckBottom` (RED).
+  One test-side API correction: TweenSpec exposes `delay`, not `delayMillis`.
+- GREEN (slice A): MotionTokens.kt (+ jvm/android actuals for
+  `systemReducedMotion`), FaceplateGrain.kt, palette deckTop/deckBottom/
+  accentPressed. Contrast pre-computed in Python before writing the test
+  (textPrimary/deckTop 11.91, textSecondary/deckBottom 8.62, accentInk/
+  accentPressed ~10, brass/deckTop 4.77 — all above floors). 20/20 targeted.
+- Implementation slices B–G (one interaction language):
+  Interactions.kt (pressLayerColor, selectionFill, focusHairline,
+  selectedCapEdge, faceplateFinish, rememberFaceplateGrainBrush,
+  FadeInOnChange, animatedLampColor); warm LocalIndication in ResonanceTheme;
+  full-bleed deck rows with gutter-aligned content; recessed mode track
+  (MODE_ROW_DP 48→54, keys keep 48dp — touch-floor test unchanged);
+  StringTargets press feedback (previously NONE) + haptic on deliberate lock;
+  sheet slide+scrim on one Animatable, host AnimatedVisibility exit;
+  destination/mode content fades (outgoing removed immediately — exclusivity
+  tests pass unchanged); common BackHandler/PredictiveBackHandler with
+  editor-first Back; IME-safe sheet insets; select-all exact entry;
+  MainScreen handler stabilization + pitch-free slices + derivedStateOf
+  overlay state; direction liveRegion removed; cents slot width-stable.
+- Dependencies added (first-party CMP, not decorative):
+  org.jetbrains.compose.ui:ui-backhandler:1.12.2 +
+  org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0
+  (the published ui-backhandler variants do not forward the dispatcher seam;
+  @OptIn(ExperimentalComposeUiApi) on TuningsOverlay).
+- DEVICE-FOUND DEFECTS (emulator battery, fixed + re-verified):
+  (a) exact entry appended typing to the prefill ("442.5440.2") → TextFieldValue
+  select-all-on-open; IME Done applies; verified "A4 = 442.5 Hz" + Reset.
+  (b) taps/swipes on EMPTY sheet area fell through to the scrim and dismissed
+  the sheet (probe: tap (270,950) closed it; slow swipe closed it) → sheet
+  surface consumes unhandled gestures via awaitEachGesture (children consume
+  first; no semantics merge). Re-probe: sheet stays open for all three.
+- Device evidence (API-36 emulator; APK sha256 == local build; 1080x2400 then
+  540x1200@240 = 360x800dp; live virtual-mic tracking throughout):
+  * ~59fps frame analysis: press dip immediate (pixel = segmentCap 58.5,41.7,31.7
+    vs released 48.2,35.3,26.0); selection tweens RETARGET under 10 rapid mode
+    taps (native-frame ramps 175→229), final state correct; mode-content fade
+    intermediate luminance 46→58→67; sheet entrance EaseOutCubic slide
+    525→113px over ~290ms with coordinated scrim ramp (24,17,12 → 10,8,4);
+    exit fade ~220ms. An apparent entrance "snap" at 1080p was proven a 250ms
+    software-GL frame stall via ffprobe pts — not a code defect.
+  * press-drag-away on tuning row: press shows, releases, sheet does NOT open.
+  * string lock: "String 3, D3, locked" + parchment pixels + ONE 32ms TOUCH
+    vibration in dumpsys vibrator_manager (performHapticFeedback, app uid).
+  * Back chain: IME dismiss → editor cancel (sheet stays, Manage visible) →
+    sheet close. Delete dialog: Cancel keeps, BACK dismisses, Confirm deletes.
+  * rapid open/close ×4: clean final state, no stacking.
+  * font_scale 2.0: scroll fallback, all controls reachable (restored 1.0).
+  * animator_duration_scale 0 (read-back confirmed): sheet at rest and
+    pixel-static by 200ms — no slide ramp (restored 1).
+  * persistence across restart: Drop D + A4 440.2 + Instrument restored.
+- Headless render evidence: FaceplateRenderTest pins top-light direction, seam
+  contact shadow, warm family, grain std 0.3..8 (measured 1.51), and
+  byte-identical re-renders. Main-render seam profile 45.7→53.2→46.3→35.0,
+  identical seam row in Instrument/Chromatic, deck full-bleed to bottom edge.
+  Smoke renders extended to settle entrance animations (650ms) before capture.
+- GREEN (final, AFTER the two device fixes): `:shared:jvmTest` **447/447**,
+  `:shared:testAndroidHostTest` **380/380** (fresh XML verified),
+  `./scripts/verify.sh` **7/7 PASS**.
+- NOT verified / limitations: vision-model review rate-limited (429) — pixel
+  analysis substituted; predictive-back GESTURE progress not driven on the
+  emulator (plain Back + handler wiring verified); no recomposition-count
+  probe (slicing is structural); real phone/mic/screen reader remains the real-device gate.
+  Emulator display/settings restored to native after the battery.

@@ -26,6 +26,11 @@ activityCompose = "1.13.0"
 
 [libraries]
 compose-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref = "compose" }
+# Common (predictive) back handling for the settings overlay. First-party
+# CMP artifact; the navigationevent dispatcher seam is declared explicitly
+# because the published ui-backhandler variants do not forward it.
+compose-ui-backhandler = { group = "org.jetbrains.compose.ui", name = "ui-backhandler", version.ref = "compose" }
+navigationevent-compose = { group = "org.jetbrains.androidx.navigationevent", name = "navigationevent-compose", version = "1.1.0" }
 compose-ui-test-junit4 = { group = "org.jetbrains.compose.ui", name = "ui-test-junit4", version.ref = "compose" }
 # Native skiko runtime for headless JVM Compose UI tests. Version MUST track
 # the skiko resolved by CMP 1.12.2 (verified 2026-11-06: 0.150.2).

@@ -6,12 +6,19 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
@@ -29,6 +36,7 @@ import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.presentation.TunerSnapshot
 import dev.anima.resonance.presentation.TunerStatus
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -78,6 +86,8 @@ class TunerScreenUiTest {
         onRequestPermission: () -> Unit = {},
         onRetryCapture: () -> Unit = {},
         onOpenSheet: () -> Unit = {},
+        onOpenSettings: () -> Unit = {},
+        onAutoSelectionChange: (Boolean) -> Unit = {},
     ) {
         rule.setContent {
             ResonanceTheme {
@@ -89,6 +99,8 @@ class TunerScreenUiTest {
                     onRequestPermission = onRequestPermission,
                     onRetryCapture = onRetryCapture,
                     onOpenSheet = onOpenSheet,
+                    onOpenSettings = onOpenSettings,
+                    onAutoSelectionChange = onAutoSelectionChange,
                 )
             }
         }
@@ -112,6 +124,7 @@ class TunerScreenUiTest {
         onEditorAddString: () -> Unit = {},
         onEditorSave: () -> Unit = {},
         onEditorCancel: () -> Unit = {},
+        initialSection: dev.anima.resonance.presentation.SheetSection? = null,
     ) {
         rule.setContent {
             ResonanceTheme {
@@ -132,6 +145,7 @@ class TunerScreenUiTest {
                     onEditorAddString = onEditorAddString,
                     onEditorSave = onEditorSave,
                     onEditorCancel = onEditorCancel,
+                    initialSection = initialSection,
                 )
             }
         }
@@ -214,17 +228,38 @@ class TunerScreenUiTest {
         rule.onNodeWithTag("resonance.openTunings").assertDoesNotExist()
         rule.onNodeWithTag("resonance.settings").assertDoesNotExist()
         rule.onNodeWithTag("resonance.openSheet").assertIsDisplayed()
-        rule.onNodeWithTag("resonance.preset").assertIsDisplayed()
-        rule.onNodeWithTag("resonance.concert").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.preset", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag("resonance.concert", useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithTag("resonance.micStatus").assertIsDisplayed()
     }
 
     @Test
-    fun tuningsKeyOpensTheOverlayViaCallback() {
+    fun theTuningNameOpensThePresetListInInstrumentMode() {
         var opened = 0
-        show(state(status = TunerStatus.LISTENING), onOpenSheet = { opened++ })
+        show(
+            state = state(
+                status = TunerStatus.LISTENING,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+            ),
+            onOpenSheet = { opened++ },
+        )
         rule.onNodeWithTag("resonance.openSheet").performClick()
         assertEquals(1, opened)
+    }
+
+    @Test
+    fun theChromaticSettingsEntryOpensTheCalibrationDestination() {
+        var settings = 0
+        var presets = 0
+        show(
+            state = state(status = TunerStatus.LISTENING),
+            onOpenSheet = { presets++ },
+            onOpenSettings = { settings++ },
+        )
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        assertEquals(1, settings, "the chromatic entry is the calibration entry")
+        assertEquals(0, presets)
     }
 
     @Test
@@ -266,6 +301,253 @@ class TunerScreenUiTest {
             .assertContentDescriptionEquals("String 1, E2, detected")
         // AUTO is an observation, not a user selection.
         rule.onNodeWithTag("resonance.string.0").assertIsNotSelected()
+    }
+
+    // ── Control deck entry points, selection affordance, mode stability ──
+
+    @Test
+    fun automaticSelectionToggleReflectsAndInvertsTheRealSelectionState() {
+        val changes = mutableListOf<Boolean>()
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+                selected = null,
+            ),
+            onAutoSelectionChange = { changes += it },
+        )
+        // No manual lock → the engine IS automatic.
+        rule.onNodeWithTag("resonance.autoSelection").assertIsOn()
+        rule.onNodeWithTag("resonance.autoSelection").performClick()
+        assertEquals(listOf(false), changes, "turning automatic off must be requested")
+
+        changes.clear()
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+                selected = 2,
+            ),
+            onAutoSelectionChange = { changes += it },
+        )
+        rule.onNodeWithTag("resonance.autoSelection").assertIsOff()
+        rule.onNodeWithTag("resonance.autoSelection").performClick()
+        assertEquals(listOf(true), changes, "turning automatic on must be requested")
+    }
+
+    @Test
+    fun theConfigurationRowAndTheTuningNameHaveSeparateEntries() {
+        var presets = 0
+        var settings = 0
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+            ),
+            onOpenSheet = { presets++ },
+            onOpenSettings = { settings++ },
+        )
+        rule.onNodeWithTag("resonance.openReference").performClick()
+        assertEquals(1, settings, "the configuration row opens the calibration destination")
+        assertEquals(0, presets)
+        rule.onNodeWithTag("resonance.openSheet").performClick()
+        assertEquals(1, presets, "the tuning name opens the preset list")
+    }
+
+    @Test
+    fun theTuningNameShowsTheActualPresetNotAHardcodedStandard() {
+        val custom = custom("custom-long", "DADGAD Low", "D2", "A2", "D3", "G3", "A3", "D4")
+        show(
+            state = state(
+                status = TunerStatus.LISTENING,
+                mode = TunerMode.INSTRUMENT,
+                preset = custom,
+            ),
+        )
+        rule.onNodeWithTag("resonance.preset", useUnmergedTree = true).assertTextEquals("DADGAD Low")
+        rule.onNodeWithTag("resonance.openReference").assertIsDisplayed()
+    }
+
+    @Test
+    fun aLongCustomPresetNameDoesNotPushTheSettingsKeyOffScreen() {
+        val long = custom(
+            "custom-very-long",
+            "Open D Modal Slip-Jig Tuning For Twelve String",
+            "D2", "A2", "D3", "F#3", "A3", "D4",
+        )
+        show(
+            state = state(
+                status = TunerStatus.LISTENING,
+                mode = TunerMode.INSTRUMENT,
+                preset = long,
+            ),
+        )
+        rule.onNodeWithTag("resonance.preset", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag("resonance.openReference").assertIsDisplayed()
+    }
+
+    @Test
+    fun theQuietCalibrationLineShowsTheConfiguredReferencePitchAndOpensIt() {
+        var settings = 0
+        show(
+            state = state(
+                status = TunerStatus.LISTENING,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+            ).copy(concertPitchHz = 442.0),
+            onOpenSettings = { settings++ },
+        )
+        // The actual configured value, never a hardcoded "A4 440 Hz".
+        rule.onNodeWithTag("resonance.concert", useUnmergedTree = true).assertTextEquals("A4 = 442 Hz")
+        rule.onNodeWithTag("resonance.openReference").performClick()
+        assertEquals(1, settings, "the calibration line opens the reference-pitch section")
+    }
+
+    @Test
+    fun chromaticModeKeepsTheMeterAndReplacesGuitarControlsWithASummary() {
+        val ui = state(status = TunerStatus.MEASURED, note = Note.fromLabel("E2"), cents = -3)
+            .copy(concertPitchHz = 440.0, accidentalSpelling = dev.anima.resonance.music.Spelling.FLAT)
+        show(ui)
+        // Instrument-only controls are hidden, not shown disabled.
+        rule.onNodeWithTag("resonance.autoSelection").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.string.0").assertDoesNotExist()
+        // ONE settings entry (no duplicate gear in this mode) plus the
+        // read-only calibration plate.
+        rule.onNodeWithTag("resonance.openSheet").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.openReference").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.concert", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag("resonance.concert", useUnmergedTree = true).assertTextEquals("A4 = 440 Hz")
+        rule.onNodeWithTag("resonance.spelling", useUnmergedTree = true).assertTextEquals("Flats ♭")
+    }
+
+    @Test
+    fun switchingModesDoesNotMoveOrResizeTheMeterAndReadout() {
+        val instrument = state(
+            status = TunerStatus.MEASURED,
+            note = Note.fromLabel("E2"),
+            cents = -3,
+            mode = TunerMode.INSTRUMENT,
+            preset = BuiltInTunings.standard,
+        )
+        show(instrument)
+        val dialIn = rule.onNodeWithTag("resonance.dial").getUnclippedBoundsInRoot()
+        val noteIn = rule.onNodeWithTag("resonance.note").getUnclippedBoundsInRoot()
+
+        show(instrument.copy(mode = TunerMode.CHROMATIC, presetName = null, targetLabels = emptyList()))
+        val dialCh = rule.onNodeWithTag("resonance.dial").getUnclippedBoundsInRoot()
+        val noteCh = rule.onNodeWithTag("resonance.note").getUnclippedBoundsInRoot()
+
+        assertEquals(dialIn.top.value, dialCh.top.value, "dial top must not move between modes")
+        assertEquals(dialIn.bottom.value, dialCh.bottom.value, "dial height must not change between modes")
+        assertEquals(noteIn.top.value, noteCh.top.value, "readout must not move between modes")
+        assertEquals(noteIn.bottom.value, noteCh.bottom.value, "readout must not resize between modes")
+
+        // The mode selector is the anchor the user switches with: it must stay
+        // exactly where it is, and the chromatic block must be visibly shorter
+        // than the instrument block instead of a reserved empty panel.
+        show(instrument)
+        val modeIn = rule.onNodeWithTag("resonance.mode").getUnclippedBoundsInRoot()
+        val referenceIn = rule.onNodeWithTag("resonance.openReference").getUnclippedBoundsInRoot()
+        show(instrument.copy(mode = TunerMode.CHROMATIC, presetName = null, targetLabels = emptyList()))
+        val modeCh = rule.onNodeWithTag("resonance.mode").getUnclippedBoundsInRoot()
+        assertEquals(modeIn.top.value, modeCh.top.value, "mode selector must not move between modes")
+        assertEquals(modeIn.bottom.value, modeCh.bottom.value, "mode selector must not resize between modes")
+        rule.onNodeWithTag("resonance.autoSelection").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.openReference").assertDoesNotExist()
+        assertTrue(
+            referenceIn.bottom.value > modeCh.bottom.value,
+            "instrument mode keeps the reference row inside its taller block",
+        )
+    }
+
+    @Test
+    fun deckControlsShareOneContentAlignmentLine() {
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+            ),
+        )
+        // Press layers may run full-bleed inside the deck, but every
+        // control's CONTENT still sits on the one shared gutter line — mode
+        // track, tuning name and the first string cell must left-align.
+        val mode = rule.onNodeWithTag("resonance.mode").getUnclippedBoundsInRoot()
+        val preset = rule.onNodeWithTag("resonance.preset", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        val string0 = rule.onNodeWithTag("resonance.string.0").getUnclippedBoundsInRoot()
+        assertEquals(mode.left.value, string0.left.value, "string rail must align with the mode track")
+        assertEquals(mode.left.value, preset.left.value, "tuning name must align with the mode track")
+    }
+
+    @Test
+    fun everyStringTargetMeetsTheTouchFloor() {
+        show(
+            state = state(
+                status = TunerStatus.MEASURED,
+                note = Note.fromLabel("E2"),
+                cents = -3,
+                mode = TunerMode.INSTRUMENT,
+                preset = BuiltInTunings.standard,
+            ),
+        )
+        (0 until 6).forEach { i ->
+            rule.onNodeWithTag("resonance.string.$i")
+                .assertHeightIsAtLeast(48.dp)
+                .assertWidthIsAtLeast(48.dp)
+        }
+        rule.onNodeWithTag("resonance.openReference").assertWidthIsAtLeast(48.dp)
+        rule.onNodeWithTag("resonance.openReference").assertHeightIsAtLeast(48.dp)
+        rule.onNodeWithTag("resonance.autoSelection").assertHeightIsAtLeast(48.dp)
+        rule.onNodeWithTag("resonance.mode.instrument").assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test
+    fun aCompactPhoneKeepsTheFixedLayoutAndAllSixStringsOnScreen() {
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1f)) {
+                ResonanceTheme {
+                    Box(Modifier.size(width = 360.dp, height = 640.dp)) {
+                        TunerScreen(
+                            state = state(
+                                status = TunerStatus.MEASURED,
+                                note = Note.fromLabel("E2"),
+                                cents = -3,
+                                mode = TunerMode.INSTRUMENT,
+                                preset = BuiltInTunings.standard,
+                            ),
+                            onModeSelect = {},
+                            onStringSelect = {},
+                            onPermissionCta = {},
+                            onRetryCapture = {},
+                        )
+                    }
+                }
+            }
+        }
+        // Still the fixed instrument (no scrolling fallback at normal text size).
+        rule.onNodeWithTag("resonance.scroll").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.dial").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.note").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.cents").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.mode.instrument").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.string.0").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.string.5").assertIsDisplayed()
+        // The quiet calibration line yields its row rather than crushing the
+        // meter; the settings key and the reference remain reachable.
+        rule.onNodeWithTag("resonance.openReference").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.openSheet").assertIsDisplayed()
     }
 
     @Test
@@ -407,14 +689,85 @@ class TunerScreenUiTest {
             favoritePresetIds = setOf("standard"),
             selectedPresetId = "custom-1",
         )
+        // Destination 1 shows ONLY tunings …
         showOverlay(state)
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concertError"))
-        rule.onNodeWithTag("resonance.sheet.concertError").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.title").assertExists()
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.row.standard"))
         rule.onNodeWithTag("resonance.sheet.row.standard").assertIsDisplayed()
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1").assertIsDisplayed()
-        rule.onNodeWithTag("resonance.sheet.title").assertExists()
+        rule.onNodeWithTag("resonance.sheet.concertError").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.sheet.concert.value").assertDoesNotExist()
+        // … and destination 2 shows ONLY calibration.
+        showOverlay(state, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
+        rule.onNodeWithTag("resonance.sheet.concertError").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.sheet.row.custom-1").assertDoesNotExist()
+    }
+
+    @Test
+    fun overlayOpensScrolledToTheSettingsSectionOnAShortScreen() {
+        val ui = state(status = TunerStatus.LISTENING, mode = TunerMode.INSTRUMENT).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                androidx.compose.foundation.layout.Box(Modifier.size(width = 360.dp, height = 560.dp)) {
+                    TuningsOverlay(
+                        state = ui,
+                        onClose = {},
+                        initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION,
+                    )
+                }
+            }
+        }
+        // No manual scrolling: the entry point lands directly on the calibration
+        // destination (its reference pitch is in view; the rest scrolls).
+        rule.onNodeWithTag("resonance.sheet.concert.value").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertDoesNotExist()
+    }
+
+    @Test
+    fun overlayOpensScrolledToTheTuningsSectionOnAShortScreen() {
+        val ui = state(status = TunerStatus.LISTENING, mode = TunerMode.CHROMATIC).copy(
+            presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
+        )
+        rule.setContent {
+            ResonanceTheme {
+                androidx.compose.foundation.layout.Box(Modifier.size(width = 360.dp, height = 560.dp)) {
+                    TuningsOverlay(
+                        state = ui,
+                        onClose = {},
+                        initialSection = dev.anima.resonance.presentation.SheetSection.TUNING,
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("resonance.sheet.row.standard").assertIsDisplayed()
+    }
+
+    @Test
+    fun theSettingsHeaderKeepsItsTitleOnOneLineAndDoneContentSized() {
+        showOverlay(
+            state = state(status = TunerStatus.LISTENING),
+            initialSection = dev.anima.resonance.presentation.SheetSection.MANAGE,
+        )
+        val sheet = rule.onNodeWithTag("resonance.overlay").getUnclippedBoundsInRoot()
+        val title = rule.onNodeWithTag("resonance.sheet.title").getUnclippedBoundsInRoot()
+        val done = rule.onNodeWithTag("resonance.overlay.close").getUnclippedBoundsInRoot()
+        // Regression: the header used to collapse the title into a one-letter-wide
+        // column while "Done" expanded across the sheet.
+        val titleH = (title.bottom - title.top).value
+        val titleW = (title.right - title.left).value
+        val doneW = (done.right - done.left).value
+        val sheetW = (sheet.right - sheet.left).value
+        assertTrue(titleH < 40f, "title must stay on one line (was $titleH dp tall)")
+        assertTrue(titleW > 60f, "title must keep a real width (was $titleW dp)")
+        assertTrue(doneW < sheetW * 0.45f, "Done must be content-sized (was $doneW of $sheetW dp)")
+        val centreDelta = kotlin.math.abs(
+            ((done.top + done.bottom) - (title.top + title.bottom)).value / 2f,
+        )
+        assertTrue(centreDelta < 12f, "title and Done must be vertically centred in one row")
     }
 
     @Test
@@ -433,7 +786,7 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             concertLabel = "A4 = 440 Hz",
         )
-        showOverlay(ui, onConcertStep = { calls.add(it) })
+        showOverlay(ui, onConcertStep = { calls.add(it) }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.plus"))
         rule.onNodeWithTag("resonance.sheet.concert.minus").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.plus").performClick()
@@ -448,7 +801,7 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             concertLabel = "A4 = 440 Hz",
         )
-        showOverlay(ui, onConcertStepCoarse = { calls += it })
+        showOverlay(ui, onConcertStepCoarse = { calls += it }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.step.coarse"))
         // Select the 1 Hz step, then the shared −/+ keys route to it.
         rule.onNodeWithTag("resonance.sheet.concert.step.coarse").performClick()
@@ -464,7 +817,7 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             concertPitchHz = 442.0,
         )
-        showOverlay(ui, onConcertSet = { sets += it })
+        showOverlay(ui, onConcertSet = { sets += it }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.reset"))
         rule.onNodeWithTag("resonance.sheet.concert.reset").performClick()
         assertEquals(listOf(440.0), sets)
@@ -476,8 +829,8 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             concertPitchHz = 440.0,
         )
-        showOverlay(ui)
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
+        showOverlay(ui, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
+        rule.onNodeWithTag("resonance.sheet.concert.value").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.concert.reset").assertDoesNotExist()
     }
 
@@ -487,7 +840,7 @@ class TunerScreenUiTest {
         val ui = state(status = TunerStatus.LISTENING).copy(
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
         )
-        showOverlay(ui, onConcertSet = { sets += it })
+        showOverlay(ui, onConcertSet = { sets += it }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
         rule.onNodeWithTag("resonance.sheet.concert.value").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.input").performTextClearance()
@@ -502,7 +855,7 @@ class TunerScreenUiTest {
         val ui = state(status = TunerStatus.LISTENING).copy(
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
         )
-        showOverlay(ui, onConcertSet = { sets += it })
+        showOverlay(ui, onConcertSet = { sets += it }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.concert.value"))
         rule.onNodeWithTag("resonance.sheet.concert.value").performClick()
         rule.onNodeWithTag("resonance.sheet.concert.input").performTextClearance()
@@ -594,14 +947,21 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all + customPreset, setOf("standard"), "standard"),
         )
         showOverlay(ui)
-        // Footer actions are fixed (always visible), not in the scroll body.
+        // Creation/import/export live in the "Manage" destination, not in a
+        // permanent footer competing with calibration.
+        rule.onNodeWithTag("resonance.sheet.dest.manage").performClick()
         rule.onNodeWithTag("resonance.sheet.add").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.import").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.export").assertIsDisplayed()
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
         rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.row.custom-1.delete").assertIsDisplayed()
         rule.onNodeWithTag("resonance.sheet.row.standard.edit").assertDoesNotExist() // built-ins are read-only
+        // The Tuning destination selects tunings; it never shows management.
+        rule.onNodeWithTag("resonance.sheet.dest.tuning").performClick()
+        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.row.custom-1"))
+        rule.onNodeWithTag("resonance.sheet.row.custom-1").assertIsDisplayed()
+        rule.onNodeWithTag("resonance.sheet.row.custom-1.edit").assertDoesNotExist()
+        rule.onNodeWithTag("resonance.sheet.add").assertDoesNotExist()
     }
 
     @Test
@@ -610,7 +970,7 @@ class TunerScreenUiTest {
         val ui = state(status = TunerStatus.LISTENING).copy(
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
         )
-        showOverlay(ui, onSpellingSelect = { calls.add(it) })
+        showOverlay(ui, onSpellingSelect = { calls.add(it) }, initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION)
         overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.spelling.sharp"))
         rule.onNodeWithTag("resonance.sheet.spelling.sharp").performClick()
         rule.onNodeWithTag("resonance.sheet.spelling.flat").performClick()
@@ -626,8 +986,7 @@ class TunerScreenUiTest {
             presetRows = PresetSheetUi.toRows(BuiltInTunings.all, setOf("standard"), "standard"),
             importResultText = "Imported 2 tunings",
         )
-        showOverlay(ui)
-        overlayScroll().performScrollToNode(hasTestTag("resonance.sheet.importResult"))
+        showOverlay(ui, initialSection = dev.anima.resonance.presentation.SheetSection.MANAGE)
         rule.onNodeWithTag("resonance.sheet.importResult").assertIsDisplayed()
     }
 

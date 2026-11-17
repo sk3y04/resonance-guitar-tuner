@@ -36,30 +36,29 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anima.resonance.presentation.MainScreenUiState
+import dev.anima.resonance.presentation.ReadoutCopy
 import dev.anima.resonance.presentation.SignalPhase
 import dev.anima.resonance.presentation.TunerMode
 import dev.anima.resonance.ui.tabularNumerals
 import kotlin.math.abs
 
 /**
- * The digital note readout — a compact display mounted behind the same
- * instrument glass as the dial. One coherent type hierarchy (no tiny tracked
- * micro-labels), tabular numerals for changing values, and stable positions
- * across signal states.
+ * The digital readout, re-hierarchised.
  *
- * Three columns: detected/target note (+ accidental + octave) | frequency |
- * signed cents + a single direction/in-tune badge. The direction badge is the
- * ONE direction indicator (the needle also shows it); a redundant reticle was
- * removed.
+ * Reading order on screen: the NOTE (dominant) with its octave; the signed CENTS
+ * error in a stable tabular column; the ACTION ("Tune up" / "In tune"); and the
+ * measured FREQUENCY as quiet secondary information under the note. A "target"
+ * caption appears only when the note is a manual lock (the cents are then
+ * relative to that target, which the old screen never said).
  *
  * Signal honesty: values render only while a reading is present — live
- * ([SignalPhase.TRACKING]) or briefly held after an interruption
- * ([SignalPhase.HOLDING], visibly faded, never announced as live). With no
- * usable pitch the SAME grid shows dimmed placeholders + one calm prompt, so
- * the container height never jumps. The semantic tag contract is preserved.
+ * ([SignalPhase.TRACKING]) or briefly held ([SignalPhase.HOLDING], faded, with a
+ * "held" caption). With no usable reading the same grid shows dimmed placeholders
+ * and ONE guidance line, and "off scale" marks a reading beyond the dial.
  */
 @Composable
 fun NoteReadout(
@@ -85,14 +84,17 @@ fun NoteReadout(
         else ->
             "${abs(state.centsText.toIntOrNull() ?: 0)} cents sharp, tune down"
     }
+    val reduced = LocalReducedMotion.current
+    // State colours settle on the shared tokens; the DIGITS themselves are
+    // never crossfaded — a measurement must read instantly and truthfully.
     val noteColor by animateColorAsState(
         targetValue = if (live && state.inTune) p.emeraldGlow else p.noteIvory,
-        animationSpec = tween(280),
+        animationSpec = MotionTokens.selection(reduced),
         label = "readout-note-color",
     )
     val ambient by animateColorAsState(
         targetValue = if (live && state.inTune) p.bandGreen.copy(alpha = 0.12f) else Color.Transparent,
-        animationSpec = tween(320),
+        animationSpec = MotionTokens.content(reduced),
         label = "readout-ambient",
     )
 
@@ -129,15 +131,34 @@ fun NoteReadout(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NoteColumn(state, noteSize, noteColor, showing, live, alpha)
-            Spacer(Modifier.size(10.dp))
-            CenterColumn(state, showing, alpha, onRetryCapture, Modifier.weight(1f))
-            Spacer(Modifier.size(10.dp))
-            CentsColumn(state, centsSize, showing, live, alpha, centsDescription)
+            NoteColumn(
+                state = state,
+                noteSize = noteSize,
+                noteColor = noteColor,
+                showing = showing,
+                live = live,
+                alpha = alpha,
+                onRetryCapture = onRetryCapture,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.size(12.dp))
+            CentsColumn(
+                state = state,
+                centsSize = centsSize,
+                showing = showing,
+                holding = holding,
+                alpha = alpha,
+                centsDescription = centsDescription,
+            )
         }
     }
 }
 
+/**
+ * Note (dominant) + octave, with the measured frequency and the note's role as
+ * secondary lines. When there is no reading, the same slot carries the guidance
+ * line so nothing jumps.
+ */
 @Composable
 private fun NoteColumn(
     state: MainScreenUiState,
@@ -146,10 +167,12 @@ private fun NoteColumn(
     showing: Boolean,
     live: Boolean,
     alpha: Float,
+    onRetryCapture: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val p = InstrumentTheme.palette
     Column(
-        modifier = Modifier.widthIn(min = 72.dp),
+        modifier = modifier,
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -207,8 +230,32 @@ private fun NoteColumn(
                     }
                 }
             }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ReadoutCopy.noteRole(state.mode, state.stringLocked)?.let { role ->
+                    Text(
+                        text = role,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = p.lampAmber),
+                        maxLines = 1,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
+                    Spacer(Modifier.size(8.dp))
+                }
+                state.frequencyText?.let {
+                    Text(
+                        text = it,
+                        style = TextStyle(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = p.freqCream.copy(alpha = alpha),
+                        ).tabularNumerals,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("resonance.frequency"),
+                    )
+                }
+            }
         } else {
-            // Ghosted note placeholder — same grid, no fake glyph, no note tag.
+            // Same grid, no fake glyph, no note tag.
             Text(
                 text = "–",
                 style = TextStyle(
@@ -219,88 +266,79 @@ private fun NoteColumn(
                 maxLines = 1,
                 modifier = Modifier.clearAndSetSemantics {},
             )
-        }
-    }
-}
-
-@Composable
-private fun CenterColumn(
-    state: MainScreenUiState,
-    showing: Boolean,
-    alpha: Float,
-    onRetryCapture: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val p = InstrumentTheme.palette
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (showing) {
-            state.frequencyText?.let {
-                Text(
-                    text = it,
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = p.freqCream.copy(alpha = alpha),
-                    ).tabularNumerals,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .testTag("resonance.frequency"),
-                )
-            }
-        } else {
-            // One calm prompt with a subtle pulsing dot (waiting / no signal).
-            val pulse by rememberInfiniteTransition(label = "readout-pulse").animateFloat(
-                initialValue = 0.35f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-                label = "pulse-alpha",
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clearAndSetSemantics {}
-                        .drawBehind {
-                            drawCircle(p.lampAmber.copy(alpha = pulse), radius = size.minDimension / 2f)
-                        },
-                )
-                Spacer(Modifier.size(7.dp))
-                Text(
-                    text = state.statusHint ?: "Play a string",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = p.noteIvory),
-                    maxLines = 2,
-                    modifier = Modifier
-                        .testTag("resonance.hint")
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            }
+            Spacer(Modifier.height(4.dp))
+            GuidanceLine(state = state, alpha = alpha)
             if (!state.captureActive) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 InstrumentKey(
                     onClick = onRetryCapture,
                     modifier = Modifier
-                        .heightIn(min = 40.dp)
+                        .heightIn(min = 36.dp)
                         .testTag("resonance.start"),
-                ) { Text("Start listening", style = InstrumentType.keyLabel) }
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 6.dp,
+                    ),
+                ) { Text("Start listening", style = InstrumentType.keyLabel.copy(fontSize = 13.sp)) }
             }
         }
     }
 }
 
+/** One calm prompt with a subtle pulsing dot (waiting / lost / held). */
+@Composable
+private fun GuidanceLine(state: MainScreenUiState, alpha: Float) {
+    val p = InstrumentTheme.palette
+    val reduced = LocalReducedMotion.current
+    val pulse by rememberInfiniteTransition(label = "readout-pulse").animateFloat(
+        initialValue = if (reduced) 0.7f else 0.35f,
+        targetValue = if (reduced) 0.7f else 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "pulse-alpha",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clearAndSetSemantics {}
+                .drawBehind {
+                    drawCircle(p.lampAmber.copy(alpha = pulse * alpha), radius = size.minDimension / 2f)
+                },
+        )
+        Spacer(Modifier.size(7.dp))
+        Text(
+            text = ReadoutCopy.guidance(state.signalPhase, state.statusHint),
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = p.noteIvory),
+            maxLines = 2,
+            modifier = Modifier
+                .testTag("resonance.hint")
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
+}
+
+/** Signed cents (stable tabular column), the action, then the qualifiers. */
 @Composable
 private fun CentsColumn(
     state: MainScreenUiState,
     centsSize: androidx.compose.ui.unit.TextUnit,
     showing: Boolean,
-    live: Boolean,
+    holding: Boolean,
     alpha: Float,
     centsDescription: String,
 ) {
     val p = InstrumentTheme.palette
+    val reduced = LocalReducedMotion.current
+    val badgeTarget = when {
+        state.inTune -> p.emeraldGlow
+        state.directionText == "Tune up" -> p.lampAmber
+        else -> p.terracotta
+    }
+    val badgeColor by animateColorAsState(
+        targetValue = badgeTarget,
+        animationSpec = MotionTokens.selection(reduced),
+        label = "readout-badge",
+    )
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.Center,
@@ -314,7 +352,11 @@ private fun CentsColumn(
                     color = if (showing) p.noteIvory.copy(alpha = alpha) else p.noteIvory.copy(alpha = 0.35f),
                 ).tabularNumerals,
                 maxLines = 1,
+                // A stable right-anchored slot sized for sign + 3 digits,
+                // so "-3" → "+12" → "0" never shifts the readout layout.
+                textAlign = TextAlign.End,
                 modifier = Modifier
+                    .widthIn(min = (centsSize.value * 2.3f).dp)
                     .testTag("resonance.cents")
                     .semantics { contentDescription = centsDescription },
             )
@@ -330,12 +372,10 @@ private fun CentsColumn(
         }
         if (showing) {
             Spacer(Modifier.height(5.dp))
-            val badge: String
-            val badgeColor: Color
-            when {
-                state.inTune -> { badge = "✓"; badgeColor = p.emeraldGlow }
-                state.directionText == "Tune up" -> { badge = "▲"; badgeColor = p.lampAmber }
-                else -> { badge = "▼"; badgeColor = p.terracotta }
+            val badge: String = when {
+                state.inTune -> "✓"
+                state.directionText == "Tune up" -> "▲"
+                else -> "▼"
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -347,11 +387,25 @@ private fun CentsColumn(
                 Spacer(Modifier.size(4.dp))
                 Text(
                     text = state.directionText ?: "—",
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = badgeColor.copy(alpha = alpha)),
+                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = badgeColor.copy(alpha = alpha)),
+                    maxLines = 1,
+                    // No live region here — direction flaps near the
+                    // in-tune boundary and would announce repeatedly. The
+                    // cents description carries the same state on focus.
+                    modifier = Modifier.testTag("resonance.direction"),
+                )
+            }
+            val qualifier = ReadoutCopy.retentionCaption(state.signalPhase)
+                ?: ReadoutCopy.scaleCaption(state.meterClamped)
+            qualifier?.let {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = it,
+                    style = TextStyle(fontSize = 11.sp, color = if (holding) p.lampAmber else p.taupe),
                     maxLines = 1,
                     modifier = Modifier
-                        .testTag("resonance.direction")
-                        .semantics { if (live) liveRegion = LiveRegionMode.Polite },
+                        .testTag("resonance.readoutQualifier")
+                        .clearAndSetSemantics {},
                 )
             }
         }

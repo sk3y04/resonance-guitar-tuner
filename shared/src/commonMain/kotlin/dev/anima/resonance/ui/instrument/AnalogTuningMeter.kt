@@ -2,8 +2,8 @@ package dev.anima.resonance.ui.instrument
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -62,26 +62,29 @@ fun AnalogTuningMeter(
     embedded: Boolean = false,
 ) {
     val p = InstrumentTheme.palette
+    val reduced = LocalReducedMotion.current
     // The needle is live ONLY while a reliable pitch is tracked. With no
     // signal it fades out (never parked at a scale value as a fake reading).
-    // Critically damped spring: responsive settle, no decorative bounce.
+    // The critically-damped spring is MEASUREMENT smoothing (no added lag,
+    // no decorative overshoot) and is preserved exactly; reduced motion snaps
+    // it. Fade/zone colours move onto the shared motion tokens.
     val targetAngle = (
         if (active) AnalogMeterGeometry.needleAngle(position.coerceIn(-1.0, 1.0))
         else AnalogMeterGeometry.REST_ANGLE
         ).toFloat()
     val needleAngle = animateFloatAsState(
         targetValue = targetAngle,
-        animationSpec = spring(dampingRatio = 1f, stiffness = 280f),
+        animationSpec = if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 280f),
         label = "meter-needle",
     )
     val needleAlpha = animateFloatAsState(
         targetValue = if (AnalogMeterGeometry.needleShown(active)) 1f else 0f,
-        animationSpec = tween(durationMillis = 180),
+        animationSpec = MotionTokens.content(reduced),
         label = "meter-needle-alpha",
     )
     val zoneColor = animateColorAsState(
         targetValue = if (inTune) p.bandGreen else p.zoneOff,
-        animationSpec = tween(durationMillis = 260),
+        animationSpec = MotionTokens.content(reduced),
         label = "meter-zone",
     )
     val measurer = rememberTextMeasurer()
@@ -177,10 +180,13 @@ fun AnalogTuningMeter(
                 )
             }
             val sideStyle = TextStyle(
-                fontSize = 12.dp.toSp(),
+                fontSize = 13.dp.toSp(),
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.dp.toSp(),
-                color = p.ink.copy(alpha = 0.30f),
+                letterSpacing = 0.8.dp.toSp(),
+                // The FLAT/SHARP markers were drawn at 30% ink and were
+                // effectively invisible on the ivory face. They are orientation
+                // information, so they clear the secondary-ink contrast floor.
+                color = p.inkSoft,
             )
             val flatText = "FLAT ♭"
             val sharpText = "♯ SHARP"

@@ -46,7 +46,9 @@ object SignalPresentation {
     fun micStatusText(phase: SignalPhase): String = when (phase) {
         SignalPhase.TRACKING -> "Tracking"
         SignalPhase.WAITING -> "Listening"
-        SignalPhase.HOLDING -> "Listening"
+        // A retained reading is its own state. Claiming "Listening" beside
+        // a visible note/Hz/cents/"Tune down" was the screen's contradiction.
+        SignalPhase.HOLDING -> "Reading held"
         SignalPhase.LOST -> "No signal"
         SignalPhase.MIC_OFF -> "Microphone off"
         SignalPhase.MIC_ERROR -> "Microphone unavailable"

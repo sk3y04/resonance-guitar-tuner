@@ -65,6 +65,8 @@ kotlin {
             implementation(libs.serialization.json)
             implementation(libs.lifecycle.viewmodel)
             implementation(libs.compose.ui)
+            implementation(libs.compose.ui.backhandler)
+            implementation(libs.navigationevent.compose)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.datastore)

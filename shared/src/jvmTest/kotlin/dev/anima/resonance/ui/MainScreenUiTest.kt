@@ -134,7 +134,8 @@ class MainScreenUiTest {
             rule.onAllNodes(hasTestTag("resonance.sheet"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        // The footer actions are fixed (outside the scroll body).
+        // Creation lives in the "Manage" destination of the settings sheet.
+        rule.onNodeWithTag("resonance.sheet.dest.manage").performClick()
         rule.onNodeWithTag("resonance.sheet.add").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.editor.name"))
@@ -176,6 +177,7 @@ class MainScreenUiTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.onNodeWithTag("resonance.sheet.dest.manage").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.delete"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
@@ -222,6 +224,7 @@ class MainScreenUiTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.onNodeWithTag("resonance.sheet.dest.manage").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.row.custom-1.edit"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
@@ -278,6 +281,7 @@ class MainScreenUiTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         rule.onNodeWithTag("resonance.openSheet").performClick()
+        rule.onNodeWithTag("resonance.sheet.dest.manage").performClick()
         rule.waitUntil(timeoutMillis = 5000) {
             rule.onAllNodes(hasTestTag("resonance.sheet.importResult"))
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
@@ -322,7 +326,8 @@ class MainScreenUiTest {
         }
         assertEquals(
             "Drop D",
-            rule.onNodeWithTag("resonance.preset").fetchSemanticsNode().config[SemanticsProperties.Text]
+            rule.onNodeWithTag("resonance.preset", useUnmergedTree = true)
+                .fetchSemanticsNode().config[SemanticsProperties.Text]
                 ?.joinToString("") { it.text },
         )
     }

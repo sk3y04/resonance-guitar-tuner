@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -46,20 +47,37 @@ import androidx.compose.ui.unit.dp
  * directional inner lip (shadow at the upper-left wall, faint light on
  * the lower-right lip). No outer border — the edge IS the material
  * transition.
+ *
+ * [faceplate] switches the fill to the shared top-lit deck gradient (the
+ * settings sheet's quieter variant — no grain, no seam shadow) while keeping
+ * the same lip language. The lip radius follows the panel's own shape.
  */
 @Composable
 fun RecessedPanel(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(8.dp),
+    color: Color? = null,
+    faceplate: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val p = InstrumentTheme.palette
+    val fillModifier = if (faceplate) {
+        Modifier
+            .clip(shape)
+            .faceplateFinish(grain = false, seamShadow = false)
+    } else {
+        Modifier.background(color ?: p.recess, shape)
+    }
     Box(
         modifier = modifier
-            .background(p.recess, shape)
+            .then(fillModifier)
             .drawBehind {
                 val inset = 0.75.dp.toPx()
-                val r = 6.dp.toPx()
+                val r = if (shape is RoundedCornerShape) {
+                    shape.topStart.toPx(size, this)
+                } else {
+                    6.dp.toPx()
+                }
                 // Inner lip lit from the upper left: dark shadow along the
                 // top/left walls, a faint catch-light on the bottom/right.
                 drawRoundRect(
@@ -105,7 +123,7 @@ fun InstrumentKey(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val raised = (selected || accentBorder) && !pressed
-    val capColor = when {
+    val capTarget = when {
         !enabled -> p.walnut.copy(alpha = 0.55f)
         pressed -> p.walnutDeep
         accentBorder -> p.walnutLight
@@ -113,6 +131,12 @@ fun InstrumentKey(
         highlighted -> p.walnut
         else -> p.recess
     }
+    // The cap tone settles at press speed instead of snapping.
+    val capColor by androidx.compose.animation.animateColorAsState(
+        targetValue = capTarget,
+        animationSpec = MotionTokens.press(LocalReducedMotion.current),
+        label = "instrument-key-cap",
+    )
     Surface(
         onClick = onClick,
         modifier = modifier,

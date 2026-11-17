@@ -76,7 +76,15 @@ class ResonanceApp : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // The instrument is ALWAYS dark (its materials do not follow the
+        // system theme), so the system bars must always use light icons —
+        // the default auto style would draw dark icons on the dark espresso
+        // status area whenever the phone is in light mode. Transparent scrims
+        // keep the full-bleed deck running to the edges.
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         setContent {
             ResonanceTheme {
                 MainScreen(

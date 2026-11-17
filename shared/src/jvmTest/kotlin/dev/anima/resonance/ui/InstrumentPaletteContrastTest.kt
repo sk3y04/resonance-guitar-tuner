@@ -61,10 +61,52 @@ class InstrumentPaletteContrastTest {
     }
 
     @Test
+    fun theWoodenControlDeckCarriesItsControlsAndLabels() {
+        val p = InstrumentPalette
+        // The deck is wood, not a dark card — its information still has to
+        // clear the same floors as the enclosure.
+        assertText("ivory text/control deck", p.ivory, p.deck)
+        assertText("muted text/control deck", p.textMuted, p.deck)
+        assertText("ivory text/deck shadow side", p.ivory, p.deckDeep)
+        assertText("muted text/deck shadow side", p.textMuted, p.deckDeep)
+        assertGraphic("brass underline/control deck", p.brass, p.deck)
+    }
+
+    @Test
+    fun theStringRailPositionsAndTheirSelectedStatesAreLegible() {
+        val p = InstrumentPalette
+        assertText("ivory position/rail", p.ivory, p.rail)
+        assertText("muted octave/rail", p.textMuted, p.rail)
+        // A locked position is the one ivory control surface: dark ink on ivory.
+        assertText("locked ink/ivory position", p.ink, p.ivory)
+        assertText("locked octave ink/ivory position", p.inkSoft, p.ivory)
+        assertGraphic("brass detected marker/rail", p.brass, p.rail)
+    }
+
+    @Test
     fun statusLampsAreVisibleOnTheRecessedPanel() {
         val p = InstrumentPalette
         assertGraphic("in-tune lamp/recess", p.lampGreen, p.recess)
         assertGraphic("caution lamp/recess", p.lampAmber, p.recess)
         assertGraphic("error lamp/recess", p.lampRed, p.recess)
+    }
+
+    @Test
+    fun theFaceplateGradientKeepsEveryInformationPairLegible() {
+        val p = InstrumentPalette
+        // The deck is no longer one flat hex — it shades from a slightly
+        // lighter top to a deeper bottom. BOTH ends (and the pressed layer)
+        // must carry the same text/graphics floors as the anchor colour.
+        assertText("primary text/deck top light", p.textPrimary, p.deckTop)
+        assertText("secondary text/deck top light", p.textSecondary, p.deckTop)
+        assertText("primary text/deck bottom shade", p.textPrimary, p.deckBottom)
+        assertText("secondary text/deck bottom shade", p.textSecondary, p.deckBottom)
+        assertText("primary text/pressed layer", p.textPrimary, p.segmentCap)
+        assertText("secondary text/pressed layer", p.textSecondary, p.segmentCap)
+        assertGraphic("brass marker/deck top light", p.brass, p.deckTop)
+        assertGraphic("brass marker/deck bottom shade", p.brass, p.deckBottom)
+        // The selected parchment key carries dark ink — never colour alone.
+        assertText("selected ink/parchment key", p.accentInk, p.accent)
+        assertText("selected ink/pressed parchment key", p.accentInk, p.accentPressed)
     }
 }

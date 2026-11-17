@@ -51,6 +51,8 @@ fun MeterAssembly(
     availableHeightDp: Float = 4096f,
     readoutCapDp: Float = MeterAssemblyLayout.MAX_READOUT_DP,
     minGaugeAspect: Float = MeterAssemblyLayout.MIN_GAUGE_ASPECT,
+    /** 0 = full-bleed (edge to edge); the default rounds it into a panel. */
+    cornerRadiusDp: Float = 14f,
 ) {
     val p = InstrumentTheme.palette
     val fontScale = LocalDensity.current.fontScale
@@ -69,14 +71,14 @@ fun MeterAssembly(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(cornerRadiusDp.dp))
                 .background(p.recess)
                 .drawBehind {
                     // One restrained recessed glass edge — a crisp dark
-                    // inner inset + a faint top catch-light where the faceplate
+                    // inner inset + a faint top catch-light where the deck
                     // overhangs the glass. No heavy brass rim (brass is reserved
                     // for the needle pivot and a few meaningful accents).
-                    val r = InstrumentTokens.cornerLg.toPx()
+                    val r = cornerRadiusDp.dp.toPx()
                     drawRoundRect(
                         color = p.recessEdge,
                         cornerRadius = CornerRadius(r),
@@ -84,7 +86,7 @@ fun MeterAssembly(
                     )
                     drawRoundRect(
                         brush = Brush.verticalGradient(
-                            0f to p.faceplateLip.copy(alpha = 0.45f),
+                            0f to p.deckEdge.copy(alpha = 0.45f),
                             0.3f to Color.Transparent,
                         ),
                         cornerRadius = CornerRadius(r),

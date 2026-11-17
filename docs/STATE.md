@@ -1,6 +1,236 @@
 # STATE — Resonance
 
-- Phase: 19 COMPLETE — stable pitch tracking + smooth presentation (2026-11-16).
+- POLISH — production interaction pass + matte faceplate (2026-11-17).
+  Approved design preserved (palette, meter/needle, composition, settings IA,
+  straight seam); no DSP/tracking/threshold change. UI + Android shell only.
+  (1) SHARED MOTION SYSTEM: `MotionTokens` (press 100 / selection 170 / content
+  220 / sheet 300 ms; FastOutSlowIn controls, EaseOutCubic sheet; every spec snaps
+  under reduced motion). `LocalReducedMotion` ← expect/actual
+  `systemReducedMotion()` (Android animator-duration-scale; JVM false), provided
+  by ResonanceTheme. All ad-hoc tweens replaced; needle spring (1.0/280) kept as
+  measurement smoothing, snaps under reduced motion.
+  (2) TOUCH: one warm cream `LocalIndication` ripple theme-wide (was petrol
+  fallback flashing teal); parchment PrimaryButton scopes dark-ink ripple;
+  shared `pressLayerColor`/`selectionFill`/`focusHairline`/`selectedCapEdge` in
+  `Interactions.kt`. String targets had NO press feedback (unused interaction
+  source) — fixed. Deck rows run full-bleed press layers with content on the one
+  gutter line (deck no longer pads horizontally; alignment regression test).
+  (3) TRANSITIONS: mode body + settings destination fade-in on change
+  (`FadeInOnChange`: outgoing removed immediately, first composition full
+  opacity); sheet slide + scrim share ONE animation value (300 ms in / 220 ms
+  out via host AnimatedVisibility, interruptible); selection/favorite/lamp/
+  readout colors on tokens. Detected-string marker stays immediate.
+  (4) FACEPLATE: `faceplateFinish` = gentle top-lit gradient (deckTop 36281C →
+  deck 2B1F18 @45% → deckBottom 221812) + deterministic static grain
+  (`FaceplateGrain`, fixed seed, alpha ≤ 12/255, warm-only, uploaded once) + 7dp
+  seam contact shadow. Pixel profile 45.7→53.2→46.3→35.0, identical in both
+  modes, byte-identical across renders (`FaceplateRenderTest`). Mode selector in
+  a shallow milled track (MODE_ROW_DP 54, keys keep 48dp); selected caps get the
+  shared edge light; sheet shares the gradient family, no grain.
+  (5) SYSTEM/BACK: common BackHandler/PredictiveBackHandler (ui-backhandler +
+  navigationevent-compose deps) — Back cancels the editor before closing the
+  sheet; predictive progress drives sheet offset/scrim; platformBack kept as
+  no-dispatcher fallback; manifest enableOnBackInvokedCallback. Edge-to-edge bars
+  forced dark-style (light icons) — app materials are theme-constant.
+  (6) KEYBOARD: exact entry selects the whole prefill (TextFieldValue — typing
+  appended "442.5440.2" before), autofocus, IME Done applies, keyboard hides on
+  apply/cancel, warm OutlinedTextField colors; sheet insets applied BEFORE
+  height measurement (IME can't push it off-screen); editor name IME Done
+  clears focus.
+  (7) DEVICE-FOUND FIXES: sheet empty-area touches fell through to the scrim and
+  dismissed it — sheet surface now consumes unhandled gestures (no semantics
+  merge). Verified: taps/swipes on empty area keep the sheet; children unaffected.
+  (8) PERF: MainScreen handlers remembered against controller; ControlBlock/
+  StatusStrip take pitch-free slices; overlay gets a derivedStateOf-normalized
+  state slice — 20 Hz ticks no longer invalidate deck/overlay.
+  (9) A11Y/HAPTICS: direction liveRegion removed (flaps near boundary); cents
+  slot width-stable (right-anchored tnum); one system-gated LongPress haptic on
+  deliberate string lock / preset select / favorite (vibrator log confirmed);
+  no auto-note-change or in-tune haptics. Contrast floors extended to gradient
+  ends + pressed parchment (all ≥ 4.5:1 text / 3:1 graphics).
+  Gates: `:shared:jvmTest` 447/447, `:shared:testAndroidHostTest` 380/380
+  (re-run AFTER the final two fixes), `./scripts/verify.sh` 7/7 PASS.
+  Device: API-36 emulator, APK sha256-verified; frame analysis at ~59fps proved
+  press dip, retargeting selection tweens under 10 rapid taps, mode fade,
+  sheet slide 525→113px/290ms + coordinated scrim, exit fade; press-drag-cancel,
+  Back chain (IME→editor→sheet), delete dialog Cancel/Back/Confirm, keyboard
+  apply, font_scale 2.0 scroll fallback, reduced-motion snap — all verified.
+  Vision review rate-limited (pixel analysis substituted). Predictive-back
+  GESTURE not driven (plain Back verified). Real-device verification (phone/mic/screen reader)
+  still open. Details: docs/TDD_LOG.md (production interaction polish).
+
+- POLISH — approved design kept, three defects fixed (2026-11-17). UI only.
+  (1) SEAM: the control deck's top corner radii are gone (`ControlDeck` = square
+  top edge, no clip), and its brass lip line was removed so the readout's own
+  bottom edge is the only divider — one continuous horizontal seam, nothing doubled.
+  (2) SETTINGS HEADER root cause: the shared `PrimaryButton`/`TonalButton` wrappers
+  put a `fillMaxWidth()` Box INSIDE the Surface, so in a Row the button expanded to
+  the remaining width and the weighted title was squeezed to ~0 (one letter per
+  line). Both wrappers are now `wrapContentSize()` + padding (callers add
+  `fillMaxWidth()` when they actually want a full-width action), the header title is
+  `weight(1f)` + `maxLines = 1` + ellipsis, and Done stays content-sized (min 76dp).
+  (3) BUTTON CONTRAST root cause: button labels inherited `InstrumentType.label`,
+  which hard-codes `textPrimary` (cream) — invisible on the parchment primary fill.
+  Labels now state their ink explicitly (`accentInk` on parchment, `textPrimary` on
+  tonal, caller colour on text actions), so "New tuning" is dark-on-parchment and
+  Import/Export stay cream-on-brown at equal height.
+  Unchanged: palette, meter, readout, mode selector, tuning row, switch, string row,
+  reference row, density, destination model, and all tracking/DSP code.
+  Gates: `:shared:jvmTest` 431/431, `:shared:testAndroidHostTest` 368/368,
+  `./scripts/verify.sh` 7/7 PASS (device tests NOT RUN). Regression test
+  `theSettingsHeaderKeepsItsTitleOnOneLineAndDoneContentSized` covers the header.
+
+- CORRECTION — back to the vintage palette, wood wallpaper removed, elements
+  fill the window (2026-11-17). UI-only; no DSP/capture/estimation/tracking change.
+  (1) PALETTE REVERTED to warm vintage: espresso `background 1B1310`, `deck 2B1F18`,
+  raised `segmentCap 3B2A20`, hairline `deckEdge 5B4433`, recess `170F0C`, ivory
+  `F1E7CF`, cream type `F4EAD6`, beige `C6B49B`, parchment SELECTED key `E8D9BC`
+  (ink `2A2016`), brass `AD925B` for small indicators only (deck seam, switch track,
+  detected marker, meter hardware). No petrol/mint/blue anywhere. Contrast floors
+  re-verified (`InstrumentPaletteContrastTest` 6/6).
+  (2) WOODEN BACKDROP DELETED: `WoodenInstrumentPanel.kt` (WoodenEnclosure),
+  `WoodGrain.kt` and `WoodGrainTest.kt` are gone. Nothing draws grain or a wallpaper.
+  (3) FULL-BLEED COMPOSITION: the app background is the enclosure colour; the
+  acquisition status line sits on it; the ivory meter + readout band spans the full
+  width (`cornerRadiusDp = 0`); the espresso control deck runs edge to edge with a
+  rounded top shelf, a brass-dark hairline seam, and continues to the bottom of the
+  display. Only `WindowInsets.safeDrawing` is applied, as content padding. No outer
+  inset, no frame, no floating card.
+  (4) Meter sizing: the band is full-bleed on phones, and on wide/short windows it is
+  width-limited from the height the readout needs ((avail - 112dp) x 1.6), so an
+  over-wide arc can never starve the readout. Same adaptive gauge aspect rule as the control deck.
+  (5) Unchanged: reading order (mode → tuning → auto-select → one row of six 48dp
+  string targets → reference pitch), one overlay with three mutually exclusive
+  destinations, selection semantics, compact/scroll fallbacks, meter/needle/cents
+  mapping.
+  Gates: `:shared:jvmTest` 430/430, `:shared:testAndroidHostTest` 368/368
+  (7 fewer tests: `WoodGrainTest` deleted with its subject). Device shots NOT
+  captured — the phone was locked/dozing during this pass.
+
+- COMPLETE — contemporary precision instrument: petrol control surfaces,
+  ivory meter preserved, settings rebuilt as real destinations (2026-11-17).
+  UI-only; no DSP/capture/estimator/tracker/smoothing change (pitch tracking untouched).
+  (1) DIRECTION FLIP: the brown/wood control system is gone. `InstrumentPalette`
+  now defines walnut (enclosure only), deep desaturated petrol surfaces
+  (`deck 172E32`, `deckDeep 10242A`, `segmentCap 234147`, `deckEdge 2E4A50`),
+  warm off-white type (`F2EFE5` / `B8C8C7`), ONE mint selection accent (`A6D9C8`,
+  ink `10242A`) and brass only on meter hardware (`AD925B`). `InstrumentTokens`
+  owns the whole scale (4/8/12/16/24/32, one gutter 16, corner family 8/12/20/28,
+  48dp touch floor, `contentMaxWidth 420dp`); `InstrumentType` is the full type
+  scale. Nothing is styled ad hoc any more.
+  (2) COMPOSITION: one walnut case (8dp) around ONE petrol instrument body
+  (`InstrumentBody`, 18dp gutter, 420dp cap, one hairline edge). On that single
+  surface, aligned to one gutter: acquisition status → ivory meter + readout →
+  control block. No card stacks, no nested padding, no charcoal slab.
+  (3) CONTROL BLOCK (rows, not cards): mode (two even keys, mint fill on the
+  chosen one, 48dp) → active tuning (small label + preset name + chevron, the
+  WHOLE row opens the Tuning destination) → "Auto-select string" switch →
+  six equal 48dp string targets in ONE row (mint fill = chosen/locked, mint label
+  + foot marker = merely detected) → quiet "Reference pitch  A4 = 440 Hz ›" row
+  that opens the Calibration destination. The gear is gone; there is exactly one
+  entry per destination.
+  (4) SETTINGS IA: `SettingsOverlay.kt` replaces the scrolling anchor page with
+  three MUTUALLY EXCLUSIVE destinations (Tuning / Calibration / Manage) in a
+  stable near-full-height sheet (92%), one viewport, one scroll position per
+  destination, no section bleed (a tuning row can no longer sit above Calibration).
+  Tuning rows = name + note sequence + single check + separate favourite key;
+  Calibration = reference pitch with −/+ steppers (tap the value for exact entry),
+  labelled "Adjustment step" and Naturals/Sharps/Flats; Manage = New tuning,
+  Import/Export, custom rows with edit/delete, empty state.
+  (5) METER PRESERVED: same dial geometry, ticks, needle, pivot, cents mapping and
+  hierarchy. The only change is adaptive assembly sizing: the arc keeps its deep
+  aspect when the slot can also hold the full readout, and flattens to 1.85 when
+  it cannot, so the readout's hint line is never crushed. Meter/readout and the
+  mode row have identical bounds in both modes (asserted).
+  (6) Responsive/a11y: full block → compact block (drops ONLY the reference row)
+  → scrollable fallback (`resonance.scroll`) instead of clipping; large text
+  falls back immediately; every interactive row keeps 48dp; selection never
+  relies on colour alone (`selected`/`toggleable` semantics, fill + weight).
+  (7) Deleted obsolete implementations: `ControlDeck.kt`,
+  `InstrumentStringSelector.kt`, `CalibrationControls.kt`, `TuningsOverlay.kt`
+  (superseded), plus the chromatic/isCompact/balanced helpers of the old deck
+  maths. New: `Controls.kt`, `ControlSurface.kt`, `StringTargets.kt`,
+  `CalibrationPanel.kt`, `SettingsOverlay.kt`.
+  Gates: `:shared:jvmTest` 437/437, `:shared:testAndroidHostTest` 375/375,
+  `./scripts/verify.sh` 7/7 PASS (device/emulator tests NOT RUN).
+
+- COMPLETE — lower control deck + settings information architecture
+  (2026-11-16). UI-only; no DSP/capture/tracking change (pitch tracking untouched).
+  (1) Deck recomposed with an unmistakable mode control: two keys in ONE recessed
+  track, the active key a raised lighter-walnut cap with a brass indicator bar and
+  a bold label (`SegmentControl.kt`; `selected` semantics, keyboard focus ring,
+  >=48dp). The old faint underline is gone.
+  (2) Reading order fixed with real hierarchy: mode → tuning name (+ gear) →
+  explicit "Automatic string selection" On/Off (state word now names the locked
+  string: "Off · D3") → one shallow string rail (locked = ivory inset, detected =
+  ivory wash + brass underline) → quiet calibration line that looks interactive
+  ("Calibration  A4 440 Hz  ›").
+  (3) Chromatic mode no longer reserves a guitar panel: ONE settings entry
+  ("Calibration & note names ›") plus a read-only configuration plate (reference
+  pitch, note names) and one explanatory line. Still the same deck height, so the
+  meter/readout do not move when switching modes.
+  (4) Settings IA rebuilt: ONE panel with three task destinations (Tuning ·
+  Calibration · Manage) in a header destination strip; deep links from the deck
+  land on the right destination (one-shot snap scroll via `withFrameNanos`, no
+  animation). Creation/import/export moved into "Custom tunings" (no permanent
+  footer competing with calibration).
+  (5) Tuning picker rows: name (16sp) → string sequence with subscript octaves →
+  selected treatment (filled surface + brass edge + "Selected" badge) with a
+  separate 48dp favourite key; restrained dividers instead of nested gold boxes.
+  (6) Calibration: "A4 = 440.0 Hz" as one value with explicit − / + (52dp), a
+  labelled "Adjust by" precision selector (1 Hz / 0.1 Hz) with helper text, exact
+  entry on tapping the value, reset only when != 440. Note names is now a
+  three-way explicit choice (Naturals / Sharps ♯ / Flats ♭) matching the state
+  model — previously NATURAL left both keys unselected.
+  (7) Readout re-hierarchised: note (dominant) with octave and a "target" caption
+  when a manual lock is active, signed cents in a tabular column, the action badge,
+  then frequency as quiet secondary text. Out-of-range shows "off scale"; a
+  retained reading shows "held"; FLAT/SHARP dial markers now use the secondary-ink
+  contrast role (they were 30% ink and effectively invisible).
+  (8) State contradiction fixed at the source: `SignalPresentation.micStatusText`
+  reported "Listening" for HOLDING — a retained E4/439.1 Hz/+497¢/"Tune down" could
+  therefore appear under a "Listening" header. HOLDING now reads "Reading held",
+  and `ReadoutCopy` derives every caption from the same `SignalPhase` (tested).
+  (9) Composition: top margin reduced to 14dp (the old 44dp balanced band above the
+  meter), residual at the bottom of the enclosure.
+  Gates: see the verification block below (jvmTest/androidHostTest/verify.sh).
+
+- Prior: milestone COMPLETE — warm wooden control deck + section-focused configuration
+  (2026-11-16). UI-only; no DSP/capture/tracking change (pitch tracking untouched).
+  (1) Charcoal faceplate GONE: `InstrumentFaceplate` deleted. The meter/readout are
+  mounted straight into the walnut enclosure and the lower controls sit on ONE
+  shared wooden deck (`ControlDeck`: same walnut, sanded a shade lighter, low-contrast
+  deterministic horizontal figure, drawn once per size). Dark warm brown survives only
+  in real recesses (string rail, readout, milled slots); brass only as accent (tab
+  underline, switch knob, chevron, detected-string marker); ivory = dial + the single
+  locked string position (dark ink on it).
+  (2) Deck recomposed in reading order: mode tabs (brass underline + `selected`
+  semantics, no tray, no lamp dots) → tuning name + gear (one 48dp row; the NAME is the
+  hit target, long/custom names ellipsize) → explicit "Automatic string selection"
+  On/Off switch → ONE shallow rail of six 48x48dp positions (letter main, octave
+  secondary; locked = ivory inset, detected = ivory wash + brass underline) → quiet
+  "A4 <value> Hz" line. The old mode tray, the framed string cards and the full-width
+  bottom config card are removed, as is the duplicated note summary.
+  (3) Mode stability by construction: `ControlDeckLayout` sizes the deck from its
+  taller instrument composition and holds that height in BOTH modes (the preset's
+  string count is reserved in chromatic), so the meter/readout do not move or resize
+  (`switchingModesDoesNotMoveOrResizeTheMeterAndReadout`). Chromatic composes its own
+  content (settings summary, reference, spelling) inside that height instead of a
+  blank guitar panel.
+  (4) One overlay, three entry points: tuning name → preset list; gear → settings;
+  calibration line → reference pitch. `SheetSection`/`SheetFocus` + a one-shot snap
+  scroll (`initialSection`; null = open at top, the old behaviour).
+  (5) Automatic-vs-manual maps onto the EXISTING engine semantics — no new state
+  model, no controller API change: `StringSelectionUi.intent` turns On/Off into the
+  engine's lock/unlock call and the switch state is derived from `stringLocked`.
+  (6) Short screens (<700dp inner height) drop the quiet calibration row instead of
+  crushing the meter (`isCompact`); surplus height becomes a balanced, capped bezel
+  (measured 45dp top/bottom at 360x800). Touch floor asserted for every string target,
+  gear, auto row and mode tab.
+  Gates: jvmTest 429/429 (was 390), testAndroidHostTest 368/368, run-demo 5/5,
+  verify.sh 7/7 PASS.
+
+- Prior: milestone COMPLETE — stable pitch tracking + smooth presentation (2026-11-16).
   DSP/tracking only (the UI is untouched).
   Root causes (measured with a new offline harness, not assumed):
   (a) aperiodic sympathetic mixes biased the pitch estimate — a 4:3 G3/D3 mix is

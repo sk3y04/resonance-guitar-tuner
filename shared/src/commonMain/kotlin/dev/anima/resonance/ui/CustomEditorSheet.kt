@@ -57,6 +57,8 @@ fun CustomEditorSheet(
 ) {
     val p = InstrumentTheme.palette
     val largeText = LocalDensity.current.fontScale > 1.3f
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     RecessedPanel(
         modifier = modifier
             .fillMaxWidth()
@@ -73,6 +75,17 @@ fun CustomEditorSheet(
                 onValueChange = onNameChange,
                 label = { Text("Name") },
                 singleLine = true,
+                // Done dismisses the keyboard instead of leaving it over
+                // the form's actions; the name field is the only text input.
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                    },
+                ),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = p.walnutDeep,
                     unfocusedContainerColor = p.walnutDeep,

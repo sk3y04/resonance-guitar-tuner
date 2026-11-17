@@ -86,10 +86,43 @@ class TunerScreenRenderSmokeTest {
                 "dark-permission-denied", 1080, 2400, 3f, dark = true,
                 state = listening(permission = MicPermissionState.DENIED_PERMANENT),
             ),
+            // Brief signal dropout: the last reading is retained, visibly held.
+            RenderCase(
+                "dark-instrument-held", 1080, 2400, 3f, dark = true,
+                state = dev.anima.resonance.presentation.SignalHold.apply(
+                    current = measured("E2", -3, TunerMode.INSTRUMENT).copy(meterActive = false),
+                    lastReliable = measured("E2", -3, TunerMode.INSTRUMENT),
+                    elapsedMs = 120,
+                ),
+            ),
             // Small supported phone (360x640dp) — must stay fixed, unclipped.
             RenderCase(
                 "dark-small-phone", 1080, 1920, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT),
+            ),
+            // Manual string lock (ivory position) and a long custom preset name.
+            RenderCase(
+                "dark-instrument-locked", 1080, 2400, 3f, dark = true,
+                state = measured("D3", 4, TunerMode.INSTRUMENT, selected = 2),
+            ),
+            RenderCase(
+                "dark-instrument-long-preset", 1080, 2400, 3f, dark = true,
+                state = measured(
+                    "D2", -2, TunerMode.INSTRUMENT,
+                    preset = dev.anima.resonance.music.TuningPreset(
+                        id = "custom-long",
+                        name = "Open D Modal Slip-Jig Tuning",
+                        builtIn = false,
+                        strings = listOf("D2", "A2", "D3", "F#3", "A3", "D4").mapIndexed { i, label ->
+                            dev.anima.resonance.music.TuningString("cl-s$i", Note.fromLabel(label))
+                        },
+                    ),
+                ),
+            ),
+            // Non-default reference pitch (quiet calibration line).
+            RenderCase(
+                "dark-instrument-442", 1080, 2400, 3f, dark = true,
+                state = measured("E2", -3, TunerMode.INSTRUMENT).copy(concertPitchHz = 442.0),
             ),
             // Large accessibility font — explicit scrollable fallback.
             RenderCase(
@@ -132,6 +165,18 @@ class TunerScreenRenderSmokeTest {
                 ),
             ),
             RenderCase(
+                "dark-overlay-calibration", 1080, 2400, 3f, dark = true,
+                state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
+                initialSection = dev.anima.resonance.presentation.SheetSection.CALIBRATION,
+            ),
+            RenderCase(
+                "dark-overlay-manage", 1080, 2400, 3f, dark = true,
+                state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
+                overlay = true,
+                initialSection = dev.anima.resonance.presentation.SheetSection.MANAGE,
+            ),
+            RenderCase(
                 "dark-overlay-large-text", 960, 2400, 3f, dark = true,
                 state = measured("E2", -3, TunerMode.INSTRUMENT, withSheet = true),
                 overlay = true,
@@ -170,12 +215,21 @@ class TunerScreenRenderSmokeTest {
                         state = case.state,
                         onClose = {},
                         editor = case.editor,
+                        initialSection = case.initialSection,
                     )
                 }
             }
         }
         try {
-            val image = scene.render(0L)
+            // Render a few frames: post-layout effects (e.g. the settings
+            // deep-link scroll) need more than the very first frame, and the
+            // Entrance animations (sheet slide, content fades) must be
+            // SETTLED before the artifact is written — a QA render caught
+            // mid-fade would misrepresent the shipped surface.
+            var image = scene.render(0L)
+            for (t in longArrayOf(16_000_000L, 32_000_000L, 100_000_000L, 200_000_000L, 400_000_000L, 650_000_000L)) {
+                image = scene.render(t)
+            }
             val data = image.encodeToData(EncodedImageFormat.PNG)
             requireNotNull(data) { "${case.name}: PNG encoding failed" }
             file.writeBytes(data.bytes)
@@ -207,6 +261,8 @@ class TunerScreenRenderSmokeTest {
         mode: TunerMode,
         inTune: Boolean = false,
         withSheet: Boolean = false,
+        preset: dev.anima.resonance.music.TuningPreset? = null,
+        selected: Int? = null,
     ) =
         MainScreenUi.toUiState(
             snapshot = dev.anima.resonance.presentation.TunerSnapshot(
@@ -227,8 +283,8 @@ class TunerScreenRenderSmokeTest {
             ),
             permission = MicPermissionState.GRANTED,
             mode = mode,
-            preset = if (mode == TunerMode.INSTRUMENT) BuiltInTunings.standard else null,
-            selectedStringIndex = null,
+            preset = if (mode == TunerMode.INSTRUMENT) (preset ?: BuiltInTunings.standard) else null,
+            selectedStringIndex = selected,
             presets = if (withSheet) BuiltInTunings.all else emptyList(),
             favoritePresetIds = if (withSheet) setOf("standard") else emptySet(),
             selectedPresetId = "standard",
@@ -246,6 +302,7 @@ class TunerScreenRenderSmokeTest {
         val fontScale: Float = 1f,
         val overlay: Boolean = false,
         val editor: CustomEditorUiState? = null,
+        val initialSection: dev.anima.resonance.presentation.SheetSection? = null,
     )
 
     private fun customPreset() = dev.anima.resonance.music.TuningPreset(
