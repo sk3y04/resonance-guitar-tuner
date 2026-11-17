@@ -1859,6 +1859,8 @@ Tuning/Calibration/Manage destinations.
   budget. Device check of the wander: two screencaps 2 s apart differ by 8675
   pixels inside the dial band, all left of center (x 15-506) — the needle moved
   on the flat side, as specified.
+- Gates: `:shared:jvmTest` 454/454, `:shared:testAndroidHostTest` 383/383,
+  `./scripts/verify.sh` 7/7 PASS (device/emulator suite not run by the script).
 - Remaining, measured and not fixed: opening the settings sheet still costs one
   long frame (baseline trace: 74 ms = 48 ms measure + 10 ms layout + 7.6 ms draw,
   because the sheet's first composition runs inside the overlay's
