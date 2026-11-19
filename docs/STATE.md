@@ -1,5 +1,20 @@
 # STATE — Resonance
 
+- RELEASE — v1.0.0 PUBLISHED (2026-11-19). GitHub release `v1.0.0` on
+  sk3y04/resonance-guitar-tuner; annotated tag → commit 2e4f1e5 (exact APK
+  source). Assets: resonance-1.0.0-debug.apk (13,723,879 bytes; sha256 in
+  artifacts/LATEST_BUILD.txt and the release notes — public download re-hashed
+  and matched) + LICENSE. DEBUG-SIGNED: no release signing config exists
+  (docs/development.md release process); future release-signed builds need a
+  fresh install. Gates at release: verify.sh 7/7 no BLOCKED (jvmTest 454/454,
+  android host 383/383, demo 5/5, 2026-11-19); CI green on the release commit.
+  Launcher icon: adaptive (anydpi-v26) + legacy/round mipmaps generated from
+  docs/assets/resonance_logo.jpg — background #2A1D15 sampled from the logo
+  corners, mark centered inside the 64dp safe zone; manifest icon/roundIcon
+  wired (had none before). README: banner + clickable demo poster/webm +
+  Download section; media in docs/assets/. NOT run: automated real-mic device
+  suite and on-device launcher icon check (no device attached at release time;
+  phone wireless-adb undiscoverable).
 - SMOOTHNESS — frame-cost pass + idle needle wander (2026-11-17). UI only:
   palette, materials, layout, copy, DSP, tracking and thresholds untouched.
   (1) ROOT CAUSE, measured on the phone (ASUS AI2302, 1080x2400, 120 Hz):
