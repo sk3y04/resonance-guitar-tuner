@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sampled from docs/assets/resonance_logo.jpg background corners. -->
+    <color name="ic_launcher_background">#2A1D15</color>
+</resources>
